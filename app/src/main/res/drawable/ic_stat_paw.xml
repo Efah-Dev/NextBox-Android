@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- NextBox paw (same geometry as internal/icon in the Windows app). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100"
+    android:tint="?android:attr/colorControlNormal">
+    <group
+        android:pivotX="50"
+        android:pivotY="50"
+        android:rotation="45"
+        android:scaleX="0.94"
+        android:scaleY="0.94">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M31,70a19,19 0,1 0,38 0a19,19 0,1 0,-38 0ZM24,64a14.5,14.5 0,1 0,29 0a14.5,14.5 0,1 0,-29 0ZM47,64a14.5,14.5 0,1 0,29 0a14.5,14.5 0,1 0,-29 0ZM25,67.5a25,17 0,1 0,50 0a25,17 0,1 0,-50 0Z" />
+        <group android:pivotX="20" android:pivotY="40.5" android:rotation="-28">
+            <path android:fillColor="#FFFFFFFF" android:pathData="M11.5,40.5a8.5,11.5 0,1 0,17 0a8.5,11.5 0,1 0,-17 0Z" />
+        </group>
+        <group android:pivotX="37.5" android:pivotY="23" android:rotation="-10">
+            <path android:fillColor="#FFFFFFFF" android:pathData="M28.3,23a9.2,12.5 0,1 0,18.4 0a9.2,12.5 0,1 0,-18.4 0Z" />
+        </group>
+        <group android:pivotX="62.5" android:pivotY="23" android:rotation="10">
+            <path android:fillColor="#FFFFFFFF" android:pathData="M53.3,23a9.2,12.5 0,1 0,18.4 0a9.2,12.5 0,1 0,-18.4 0Z" />
+        </group>
+        <group android:pivotX="80" android:pivotY="40.5" android:rotation="28">
+            <path android:fillColor="#FFFFFFFF" android:pathData="M71.5,40.5a8.5,11.5 0,1 0,17 0a8.5,11.5 0,1 0,-17 0Z" />
+        </group>
+    </group>
+</vector>
