@@ -38,13 +38,14 @@
 - 🧭 **Routing**: Global / selected apps / all direct; a "bypass mainland China" switch for the first two (bundled China domain and IP rules, no download); custom direct / proxy / block rules; ad blocking
 - ⚡ **Latency test**: URL test (real request) and TCP test; UDP protocols such as Hysteria2 and TUIC always use the URL test; configurable URL, timeout and concurrency
 - 🔔 **Notification**: Ongoing notification with live speed and session / today / month usage; disconnect, switch node or toggle the China bypass from it
+- 🎛️ **Quick settings tile**: Connect / disconnect with one tap; shows "NextBox not connected" while off and the node's name while connected
 - 📊 **Usage**: Today, this month (with a billing day), the last 30 days, and the proxied traffic of each node
 - 📜 **Activity**: Live connections and the core log
 - 🛡️ **Modes**: VPN, or proxy-only (a local HTTP + SOCKS5 port)
 - 🎨 **Appearance**: Light / dark / system, accent colors; glass effects (blur on Android 12+, refraction on 13+, can be turned off)
 - 🌐 **Languages**: 简体中文, 繁體中文, English
 - 💾 **Backup**: Export / restore, optionally password encrypted; the NextBox desktop app's `profiles.json` can be imported directly
-- 🔄 **Updates**: Compares itself with the latest GitHub release when the app opens and tells you about a new version; can also be checked by hand
+- 🔄 **Updates**: Check by hand in About (compares with the latest GitHub release), or turn on the automatic check (off by default) to be told about a new version
 
 ## 🪶 Lightweight
 
@@ -111,7 +112,7 @@ core/             binds sing-box libbox, nbcore and nbtest into one AAR
                   store, share-link parser, subscription fetcher and sing-box config builder
   nbtest/         URL latency test (a temporary in-process sing-box instance), proxied traffic counters
 app/src/main/java/dev/efah/nextbox/
-  bg/             VPN / proxy services, platform interface, notification
+  bg/             VPN / proxy services, platform interface, notification, tile
   data/           repository (wraps nbcore), local preferences, backup encryption, update check
   ui/             Jetpack Compose screens, glass effects, languages
 docs/render/      source of the README preview image

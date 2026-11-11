@@ -151,9 +151,9 @@ object Prefs {
         sp.edit().putInt(subHours.key, v).apply()
     }
 
-    private val autoUpdatePref = Pref("auto_update", true)
+    private val autoUpdatePref = Pref("auto_update", false)
 
-    /** Look for a newer release on GitHub when the app starts. */
+    /** Look for a newer release on GitHub when the app starts (off unless the user turns it on). */
     val autoUpdate: StateFlow<Boolean> = autoUpdatePref.flow.asStateFlow()
 
     fun setAutoUpdate(v: Boolean) {

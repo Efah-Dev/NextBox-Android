@@ -16,7 +16,7 @@ data class Speed(val up: Long = 0, val down: Long = 0)
 
 /**
  * Process-wide state of the proxy core, shared by the services, the
- * notification and the UI (everything runs in one
+ * notification, the quick settings tile and the UI (everything runs in one
  * process, which keeps memory use low).
  */
 object Box {
