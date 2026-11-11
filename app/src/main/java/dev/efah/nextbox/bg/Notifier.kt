@@ -1,5 +1,6 @@
 package dev.efah.nextbox.bg
 
+import dev.efah.nextbox.ui.T
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -55,9 +56,9 @@ class Notifier(private val service: Service, private val isVpn: Boolean) {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(openApp(null, 1))
-            .addAction(0, "断开", pending(ActionReceiver.STOP, 2))
-            .addAction(0, "切换节点", openApp("nodes", 3))
-            .addAction(0, if (bypass) "关闭绕过大陆" else "绕过大陆", pending(ActionReceiver.TOGGLE_ROUTE, 4))
+            .addAction(0, T("断开"), pending(ActionReceiver.STOP, 2))
+            .addAction(0, T("切换节点"), openApp("nodes", 3))
+            .addAction(0, if (bypass) T("关闭绕过大陆") else T("绕过大陆"), pending(ActionReceiver.TOGGLE_ROUTE, 4))
     }
 
     fun startForeground(node: String, text: String) {
@@ -79,15 +80,15 @@ class Notifier(private val service: Service, private val isVpn: Boolean) {
         lastUpdate = now
         val showSpeed = Prefs.notifySpeed.value
         val showStats = Prefs.notifyStats.value
-        val title = (node.ifEmpty { "NextBox" }) + " · 已连接"
+        val title = T("%s · 已连接", node.ifEmpty { "NextBox" })
         val speedLine = "↑ ${fmtSpeed(speed.up)}   ↓ ${fmtSpeed(speed.down)}"
-        val periodLabel = if (Prefs.billingDay.value == 1) "本月" else "本期"
-        val statsLine = "本次 ${fmtBytes(session.up + session.down)} · 今日 ${fmtBytes(usage.today.total)} · $periodLabel ${fmtBytes(usage.period.total)}"
+        val periodLabel = if (Prefs.billingDay.value == 1) T("本月") else T("本期")
+        val statsLine = T("本次 %s · 今日 %s · %s %s", fmtBytes(session.up + session.down), fmtBytes(usage.today.total), periodLabel, fmtBytes(usage.period.total))
         val text = when {
-            showSpeed && showStats -> "↓ ${fmtSpeed(speed.down)}  ↑ ${fmtSpeed(speed.up)} · 今日 ${fmtBytes(usage.today.total)}"
+            showSpeed && showStats -> T("↓ %s  ↑ %s · 今日 %s", fmtSpeed(speed.down), fmtSpeed(speed.up), fmtBytes(usage.today.total))
             showSpeed -> speedLine
             showStats -> statsLine
-            else -> if (isVpn) "VPN 已开启" else "本地代理已开启"
+            else -> if (isVpn) T("VPN 已开启") else T("本地代理已开启")
         }
         val big = when {
             showSpeed && showStats -> "$speedLine\n$statsLine"
@@ -106,8 +107,8 @@ class Notifier(private val service: Service, private val isVpn: Boolean) {
         private const val ID = 1
 
         fun createChannel(context: Context) {
-            val ch = NotificationChannel(CHANNEL, "连接状态", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "常驻通知：实时网速、流量统计和快捷操作"
+            val ch = NotificationChannel(CHANNEL, T("连接状态"), NotificationManager.IMPORTANCE_LOW).apply {
+                description = T("常驻通知：实时网速、流量统计和快捷操作")
                 setShowBadge(false)
             }
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(ch)

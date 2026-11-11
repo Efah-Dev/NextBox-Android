@@ -78,17 +78,15 @@ func (u *usage) save() error {
 	return nil
 }
 
-// AddTraffic records bytes moved since the last call: to the day total and,
-// when nodeID is not 0, to that node. Call Flush to persist.
-func AddTraffic(nodeID, up, down int64) {
-	if up <= 0 && down <= 0 {
-		return
+// AddTraffic records bytes moved since the last call. dayUp / dayDown (all
+// traffic through NextBox) go to the day total; nodeUp / nodeDown (traffic
+// that actually went through the proxy) go to the node. Call Flush to persist.
+func AddTraffic(nodeID, nodeUp, nodeDown, dayUp, dayDown int64) {
+	if s, err := current(); err == nil && nodeID != 0 && (nodeUp > 0 || nodeDown > 0) {
+		s.AddTraffic(nodeID, nodeUp, nodeDown)
 	}
-	if s, err := current(); err == nil && nodeID != 0 {
-		s.AddTraffic(nodeID, up, down)
-	}
-	if usageBook != nil {
-		usageBook.add(time.Now().Format(time.DateOnly), up, down)
+	if usageBook != nil && (dayUp > 0 || dayDown > 0) {
+		usageBook.add(time.Now().Format(time.DateOnly), dayUp, dayDown)
 	}
 }
 

@@ -20,7 +20,8 @@ NextBox is an independent project and is **not affiliated with or endorsed by** 
 
 | Component | License |
 |---|---|
-| Jetpack Compose, AndroidX (activity, lifecycle, core) | Apache-2.0 |
+| Jetpack Compose, AndroidX (activity, lifecycle, core, CameraX) | Apache-2.0 |
+| ZXing core (QR code scanning and generation) | Apache-2.0 |
 | Kotlin standard library, kotlinx.coroutines, kotlinx.serialization | Apache-2.0 |
 
 Parts of the Android platform integration (`bg/Network.kt`, `bg/Platform.kt`, `bg/Services.kt`) are adapted

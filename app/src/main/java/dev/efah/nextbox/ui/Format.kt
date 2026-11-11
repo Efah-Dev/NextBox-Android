@@ -24,13 +24,13 @@ fun fmtDuration(seconds: Long): String {
 }
 
 fun fmtAgo(unixSeconds: Long): String {
-    if (unixSeconds <= 0) return "从未更新"
+    if (unixSeconds <= 0) return T("从未更新")
     val d = System.currentTimeMillis() / 1000 - unixSeconds
     return when {
-        d < 60 -> "刚刚更新"
-        d < 3600 -> "${d / 60} 分钟前更新"
-        d < 86400 -> "${d / 3600} 小时前更新"
-        else -> "${d / 86400} 天前更新"
+        d < 60 -> T("刚刚更新")
+        d < 3600 -> T("%d 分钟前更新", d / 60)
+        d < 86400 -> T("%d 小时前更新", d / 3600)
+        else -> T("%d 天前更新", d / 86400)
     }
 }
 

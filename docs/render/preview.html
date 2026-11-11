@@ -1,0 +1,248 @@
+<!doctype html>
+<!--
+  Source of docs/preview.png and docs/preview-en.png (the README hero image).
+  Render with a headless browser at 1800x1040, see docs/render/render.ps1.
+  Add ?lang=en for the English version. All data shown is made up.
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>NextBox preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1800px; height: 1040px; overflow: hidden; }
+  body {
+    font-family: "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+    background:
+      radial-gradient(900px 700px at 78% 30%, rgba(244,114,182,.30), transparent 65%),
+      radial-gradient(800px 700px at 100% 100%, rgba(124,155,255,.30), transparent 60%),
+      radial-gradient(700px 600px at 0% 0%, rgba(255,196,107,.20), transparent 60%),
+      linear-gradient(135deg, #fdf5fa 0%, #f3f0fb 55%, #eaf0ff 100%);
+    color: #1d2a3b;
+    position: relative;
+  }
+  .copy { position: absolute; left: 110px; top: 215px; width: 700px; }
+  .brand { display: flex; align-items: center; gap: 20px; margin-bottom: 34px; }
+  .brand .mark { width: 84px; height: 84px; border-radius: 26px; background: #fff; display: grid; place-items: center;
+    box-shadow: 0 14px 40px rgba(244,114,182,.35), inset 0 0 0 1px rgba(19,60,130,.06); }
+  .brand span { font-size: 30px; font-weight: 700; letter-spacing: .2px; color: #5b6678; }
+  h1 { font-size: 84px; line-height: 1.06; font-weight: 800; letter-spacing: -1.5px; }
+  h1 em { font-style: normal; background: linear-gradient(90deg, #f472b6, #8b8cf8); -webkit-background-clip: text; color: transparent; }
+  .tag { margin-top: 26px; font-size: 30px; line-height: 1.5; color: #5b6678; max-width: 640px; }
+  .chips { margin-top: 44px; display: flex; flex-wrap: wrap; gap: 14px; max-width: 660px; }
+  .chip { padding: 12px 22px; border-radius: 999px; font-size: 22px; font-weight: 600; color: #8a3f66;
+    background: rgba(255,255,255,.62); border: 1px solid rgba(255,255,255,.9);
+    box-shadow: 0 6px 20px rgba(120,90,160,.10); backdrop-filter: blur(12px); }
+
+  .phone { position: absolute; width: 360px; height: 780px; border-radius: 52px; padding: 9px; transform-origin: top left;
+    background: linear-gradient(145deg, #2b2f3a, #0d0f14);
+    box-shadow: 0 60px 120px rgba(60,40,100,.35), 0 20px 40px rgba(60,40,100,.20), inset 0 0 0 1.5px rgba(255,255,255,.18); }
+  .p1 { left: 880px; top: 70px; transform: scale(1.14) rotate(-4deg); z-index: 2; }
+  .p2 { left: 1385px; top: 160px; transform: scale(1.0) rotate(5deg); }
+  .screen { width: 100%; height: 100%; border-radius: 44px; overflow: hidden; position: relative; background: var(--bg); color: var(--text); }
+  .light { --bg:#f6f3f8; --card:rgba(255,255,255,.82); --border:rgba(19,60,130,.07); --text:#1d2a3b; --muted:#5b6678; --soft:#fde8f3; --ink:#864066; --line:#efe8f2; --good:#0f7a43; --glass:rgba(255,255,255,.66); }
+  .dark  { --bg:#121722; --card:rgba(27,34,48,.82); --border:rgba(255,255,255,.06); --text:#e3e9f3; --muted:#9aa6b8; --soft:#4b334e; --ink:#f9b6da; --line:#2a3344; --good:#4ade80; --glass:rgba(34,42,60,.62); }
+  .glow { position: absolute; inset: 0; }
+  .light .glow { background:
+      radial-gradient(260px 240px at 50% 30%, rgba(244,114,182,.42), transparent 70%),
+      radial-gradient(220px 220px at 95% 45%, rgba(124,155,255,.28), transparent 70%),
+      radial-gradient(240px 200px at 0% 8%, rgba(244,114,182,.30), transparent 70%); }
+  .dark .glow { background:
+      radial-gradient(260px 240px at 50% 30%, rgba(244,114,182,.26), transparent 70%),
+      radial-gradient(220px 220px at 95% 45%, rgba(124,155,255,.18), transparent 70%); }
+  .cam { position: absolute; top: 10px; left: 50%; width: 11px; height: 11px; margin-left: -5.5px; border-radius: 50%; background: #0b0d12; z-index: 5; }
+  .status { position: relative; height: 34px; padding: 9px 24px 0; display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 700; }
+  .status .r { display: flex; gap: 6px; align-items: center; }
+  .bat { width: 22px; height: 11px; border-radius: 3.5px; border: 1.4px solid currentColor; position: relative; opacity: .9; }
+  .bat::after { content: ""; position: absolute; left: 1.2px; top: 1.2px; bottom: 1.2px; width: 72%; border-radius: 1.5px; background: currentColor; }
+  .top { position: relative; display: flex; align-items: center; gap: 9px; padding: 20px 22px 0; font-size: 21px; font-weight: 700; }
+  .top svg:last-child { margin-left: auto; }
+  .btnwrap { position: relative; height: 196px; display: grid; place-items: center; margin-top: 6px; }
+  .halo { position: absolute; width: 190px; height: 190px; border-radius: 50%;
+    background: conic-gradient(from 40deg, rgba(244,114,182,.75), rgba(124,155,255,.6), rgba(255,196,107,.6), rgba(244,114,182,.75)); filter: blur(26px); opacity: .75; }
+  .btn { position: relative; width: 128px; height: 128px; border-radius: 50%; display: grid; place-items: center;
+    box-shadow: 0 14px 34px rgba(244,114,182,.38), inset 0 1.5px 0 rgba(255,255,255,.75), inset 0 -8px 18px rgba(255,255,255,.14); }
+  .btn.on { background: linear-gradient(150deg, rgba(249,150,200,.92), rgba(240,98,170,.86)); border: 1px solid rgba(255,255,255,.55); }
+  .btn.off { background: var(--glass); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 12px 30px rgba(0,0,0,.35), inset 0 1.5px 0 rgba(255,255,255,.16); }
+  .state { position: relative; text-align: center; margin-top: 2px; }
+  .state b { display: block; font-size: 21px; font-weight: 700; }
+  .state span { font-size: 12px; color: var(--muted); }
+  .card { position: relative; margin: 10px 16px 0; background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+    box-shadow: 0 4px 16px rgba(60,40,100,.05); }
+  .node { margin-top: 14px; padding: 11px 13px; display: flex; align-items: center; gap: 11px; }
+  .ava { width: 42px; height: 42px; border-radius: 13px; background: var(--soft); color: var(--ink); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+  .node .n { flex: 1; min-width: 0; }
+  .node .n b { display: block; font-size: 15px; font-weight: 600; }
+  .node .n span { font-size: 11.5px; color: var(--muted); }
+  .ms { font-size: 12.5px; font-weight: 700; color: var(--good); }
+  .seg { padding: 4px; display: flex; }
+  .seg div { flex: 1; text-align: center; padding: 10px 0; font-size: 13px; border-radius: 16px; color: var(--muted); }
+  .seg div.sel { background: var(--soft); color: var(--ink); font-weight: 700; }
+  .sw { padding: 10px 13px; display: flex; align-items: center; }
+  .sw .t { flex: 1; }
+  .sw b { display: block; font-size: 14px; font-weight: 500; }
+  .sw span { font-size: 11px; color: var(--muted); }
+  .toggle { width: 50px; height: 30px; border-radius: 15px; background: #a8477a; position: relative;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.2); }
+  .toggle::after { content: ""; position: absolute; right: 3px; top: 3px; width: 24px; height: 24px; border-radius: 50%;
+    background: linear-gradient(#fff, #f3eef6); box-shadow: 0 2px 5px rgba(0,0,0,.25); }
+  .toggle.off { background: var(--line); }
+  .toggle.off::after { right: auto; left: 3px; }
+  .speed { padding: 11px 14px 10px; }
+  .speed .row { display: flex; }
+  .speed .row div { flex: 1; }
+  .speed small { display: block; font-size: 11px; color: var(--muted); }
+  .speed .row b { font-size: 18px; font-weight: 700; }
+  .speed svg { display: block; width: 100%; height: 54px; margin-top: 4px; }
+  .speed .foot { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .nav { position: absolute; left: 12px; right: 12px; bottom: 16px; height: 56px; border-radius: 28px; display: flex; padding: 4px;
+    background: var(--glass); border: 1px solid rgba(255,255,255,.55); backdrop-filter: blur(18px) saturate(1.4);
+    box-shadow: 0 10px 28px rgba(40,30,70,.20), inset 0 1.5px 0 rgba(255,255,255,.6); }
+  .dark .nav { border-color: rgba(255,255,255,.10); box-shadow: 0 10px 28px rgba(0,0,0,.45), inset 0 1.5px 0 rgba(255,255,255,.12); }
+  .nav div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 9.5px; color: var(--muted); border-radius: 24px; }
+  .nav div.sel { background: var(--soft); color: var(--text); font-weight: 700; }
+  .nav div.sel svg { color: var(--ink); }
+  .home { position: absolute; bottom: 5px; left: 50%; width: 110px; height: 4px; margin-left: -55px; border-radius: 2px; background: var(--muted); opacity: .55; }
+  svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <g id="paw" transform="rotate(45 50 50) translate(3 3) scale(.94)">
+      <path d="M31,70a19,19 0,1 0,38 0a19,19 0,1 0,-38 0ZM24,64a14.5,14.5 0,1 0,29 0a14.5,14.5 0,1 0,-29 0ZM47,64a14.5,14.5 0,1 0,29 0a14.5,14.5 0,1 0,-29 0ZM25,67.5a25,17 0,1 0,50 0a25,17 0,1 0,-50 0Z"/>
+      <ellipse cx="20" cy="40.5" rx="8.5" ry="11.5" transform="rotate(-28 20 40.5)"/>
+      <ellipse cx="37.5" cy="23" rx="9.2" ry="12.5" transform="rotate(-10 37.5 23)"/>
+      <ellipse cx="62.5" cy="23" rx="9.2" ry="12.5" transform="rotate(10 62.5 23)"/>
+      <ellipse cx="80" cy="40.5" rx="8.5" ry="11.5" transform="rotate(28 80 40.5)"/>
+    </g>
+  </defs>
+</svg>
+
+<div class="copy">
+  <div class="brand">
+    <div class="mark"><svg viewBox="0 0 100 100" width="58" height="58" fill="#f472b6"><use href="#paw"/></svg></div>
+    <span>NextBox</span>
+  </div>
+  <h1>NextBox<br><em>for Android</em></h1>
+  <p class="tag" data-t="tag">基于 sing-box 内核的轻量 Android 代理客户端</p>
+  <div class="chips">
+    <span class="chip" data-t="c1">玻璃质感界面</span>
+    <span class="chip" data-t="c2">通知栏实时网速</span>
+    <span class="chip" data-t="c3">节点流量统计</span>
+    <span class="chip" data-t="c4">一键绕过中国大陆</span>
+    <span class="chip" data-t="c5">扫码导入</span>
+    <span class="chip" data-t="c6">安装包约 22 MB</span>
+  </div>
+</div>
+
+<template id="phone">
+  <div class="screen">
+    <div class="glow"></div>
+    <div class="cam"></div>
+    <div class="status"><span>9:41</span><span class="r"><span>5G</span><span class="bat"></span></span></div>
+    <div class="top">
+      <svg viewBox="0 0 100 100" width="26" height="26" fill="#f472b6"><use href="#paw"/></svg>
+      <span>NextBox</span>
+      <svg class="i" viewBox="0 0 24 24"><path d="M8 4.5H6.5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-12a2 2 0 0 0-2-2H16"/><path d="M9 3.5h6v3H9z"/></svg>
+    </div>
+    <div class="btnwrap">
+      <div class="halo"></div>
+      <div class="btn"><svg viewBox="0 0 100 100" width="62" height="62"><use href="#paw"/></svg></div>
+    </div>
+    <div class="state"><b data-t="state"></b><span data-t="sub"></span></div>
+    <div class="card node">
+      <div class="ava"></div>
+      <div class="n"><b class="name"></b><span class="proto"></span></div>
+      <span class="ms"></span>
+      <svg class="i" viewBox="0 0 24 24" style="color:var(--muted);width:16px;height:16px"><path d="m9 6 6 6-6 6"/></svg>
+    </div>
+    <div class="card seg"><div class="sel" data-t="global">全局代理</div><div data-t="apps">指定应用</div><div data-t="direct">全部直连</div></div>
+    <div class="card sw"><div class="t"><b data-t="bypass">绕过中国大陆</b><span data-t="bypassSub">国内网站和 IP 直连，其余走代理</span></div><div class="toggle"></div></div>
+    <div class="card speed">
+      <div class="row"><div><small data-t="up">上传</small><b class="u"></b></div><div><small data-t="down">下载</small><b class="d"></b></div></div>
+      <svg viewBox="0 0 300 54" preserveAspectRatio="none">
+        <defs><linearGradient id="fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f472b6" stop-opacity=".34"/><stop offset="1" stop-color="#f472b6" stop-opacity="0"/></linearGradient></defs>
+        <path class="area" fill="url(#fill)"/><path class="curve" fill="none" stroke="#f472b6" stroke-width="2"/>
+      </svg>
+      <div class="foot"><span class="session"></span><span class="total"></span></div>
+    </div>
+    <div class="nav">
+      <div class="sel"><svg class="i" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg><span data-t="home">首页</span></div>
+      <div><svg class="i" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17a8.5 8.5 0 1 0 0-17M3.5 12h17M12 3.5c2.5 2.6 3.6 5.4 3.6 8.5s-1.1 5.9-3.6 8.5M12 3.5C9.5 6.1 8.4 8.9 8.4 12s1.1 5.9 3.6 8.5"/></svg><span data-t="nodes">节点</span></div>
+      <div><svg class="i" viewBox="0 0 24 24" style="stroke-width:2.2"><path d="M5 20v-8M10 20V5M15 20v-6M20 20V9"/></svg><span data-t="usage">用量</span></div>
+      <div><svg class="i" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span data-t="activity">活动</span></div>
+      <div><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1M17 7a2 2 0 1 1-4 0a2 2 0 1 1 4 0M11 12a2 2 0 1 1-4 0a2 2 0 1 1 4 0M19 17a2 2 0 1 1-4 0a2 2 0 1 1 4 0"/></svg><span data-t="settings">设置</span></div>
+    </div>
+    <div class="home"></div>
+  </div>
+</template>
+
+<div class="phone p1 light" data-on="1"></div>
+<div class="phone p2 dark" data-on="0"></div>
+
+<script>
+const en = new URLSearchParams(location.search).get("lang") === "en";
+const zh = {
+  on: "已连接", onSub: "00:42:18 · 点击断开", off: "未连接", offSub: "点击连接",
+  session: "本次 286 MB", total: "今日 1.9 GB · 本月 23.4 GB", session0: "本次 0 B",
+};
+const dict = {
+  tag: "A lightweight Android proxy client powered by sing-box",
+  c1: "Glass interface", c2: "Live speed in the notification", c3: "Usage per node",
+  c4: "Bypass mainland China", c5: "QR code import", c6: "About 22 MB per APK",
+  global: "Global", apps: "Selected apps", direct: "All direct",
+  bypass: "Bypass mainland China", bypassSub: "Chinese sites and IPs go direct",
+  up: "Upload", down: "Download", home: "Home", nodes: "Nodes", usage: "Usage", activity: "Activity", settings: "Settings",
+  on: "Connected", onSub: "00:42:18 · tap to disconnect", off: "Not connected", offSub: "Tap to connect",
+  session: "Session 286 MB", total: "Today 1.9 GB · month 23.4 GB", session0: "Session 0 B",
+};
+const t = k => (en ? dict[k] : zh[k]);
+if (en) document.documentElement.lang = "en";
+
+function curve(seed, flat) {
+  const pts = [];
+  let v = 30;
+  for (let i = 0; i <= 30; i++) {
+    seed = (seed * 9301 + 49297) % 233280;
+    v = flat ? 52 : Math.max(8, Math.min(46, v + (seed / 233280 - 0.5) * 22));
+    pts.push([i * 10, v]);
+  }
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+    d += ` C${x0 + 5},${y0} ${x1 - 5},${y1} ${x1},${y1}`;
+  }
+  return d;
+}
+
+document.querySelectorAll(".phone").forEach((p, i) => {
+  p.appendChild(document.getElementById("phone").content.cloneNode(true));
+  const on = p.dataset.on === "1";
+  const q = s => p.querySelector(s);
+  const btn = q(".btn");
+  btn.classList.add(on ? "on" : "off");
+  btn.querySelector("svg").setAttribute("fill", on ? "#fff" : "#f472b6");
+  if (!on) q(".halo").style.opacity = ".38";
+  q("[data-t=state]").textContent = t(on ? "on" : "off");
+  q("[data-t=sub]").textContent = t(on ? "onSub" : "offSub");
+  q(".ava").textContent = on ? "TY" : "SG";
+  q(".name").textContent = on ? "Tokyo 01" : "Singapore 02";
+  q(".proto").textContent = on ? "VLESS · Reality" : "Hysteria2";
+  q(".ms").textContent = on ? "48 ms" : "76 ms";
+  q(".u").textContent = on ? "182 KB/s" : "0 B/s";
+  q(".d").textContent = on ? "6.4 MB/s" : "0 B/s";
+  q(".session").textContent = t(on ? "session" : "session0");
+  q(".total").textContent = t("total");
+  if (!on) q(".toggle").classList.add("off");
+  const d = curve(7 + i * 13, !on);
+  q(".curve").setAttribute("d", d);
+  q(".area").setAttribute("d", d + " L300,54 L0,54 Z");
+  // unique gradient ids per phone
+  const g = q("linearGradient"); g.id = "fill" + i; q(".area").setAttribute("fill", `url(#fill${i})`);
+});
+document.querySelectorAll("[data-t]").forEach(el => { if (en && dict[el.dataset.t]) el.textContent = dict[el.dataset.t]; });
+</script>
+</body>
+</html>

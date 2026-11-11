@@ -1,5 +1,6 @@
 package dev.efah.nextbox.ui.screens
 
+import dev.efah.nextbox.ui.T
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -16,7 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
+import dev.efah.nextbox.ui.NbAlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -45,6 +46,7 @@ import dev.efah.nextbox.data.UsageReport
 import dev.efah.nextbox.data.protocolName
 import dev.efah.nextbox.ui.BarIcon
 import dev.efah.nextbox.ui.EmptyHint
+import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.SectionTitle
@@ -73,45 +75,45 @@ fun UsageScreen() {
             delay(if (status == Status.Started) 5000 else 60000)
         }
     }
-
-    Column(Modifier.fillMaxSize()) {
-        TopBar("用量") {
+    GlassScreen(header = {
+        TopBar(T("用量")) {
             Box {
-                BarIcon(NbIcons.More, "更多", { menu = true })
+                BarIcon(NbIcons.More, T("更多"), { menu = true })
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("清空用量统计", color = c.bad) }, onClick = { menu = false; confirmReset = true })
+                    DropdownMenuItem(text = { Text(T("清空用量统计"), color = c.bad) }, onClick = { menu = false; confirmReset = true })
                 }
             }
         }
+    }) { pad ->
         LazyColumn(
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = pad.calculateBottomPadding() + 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             item(key = "totals") {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TotalCard("今日", report.today.total, report.today.up, report.today.down, Modifier.weight(1f))
-                    val periodLabel = if (billingDay == 1) "本月" else "本期（${report.periodFrom.drop(5)} 起）"
+                    TotalCard(T("今日"), report.today.total, report.today.up, report.today.down, Modifier.weight(1f))
+                    val periodLabel = if (billingDay == 1) T("本月") else T("本期（%s 起）", report.periodFrom.drop(5))
                     TotalCard(periodLabel, report.period.total, report.period.up, report.period.down, Modifier.weight(1f))
                 }
             }
             item(key = "chart") {
                 NbCard {
-                    Text("最近 30 天", style = NbType.section, color = c.muted)
+                    Text(T("最近 30 天"), style = NbType.section, color = c.muted)
                     Spacer(Modifier.height(12.dp))
                     DayBars(report, Modifier.fillMaxWidth().height(120.dp))
                     Spacer(Modifier.height(6.dp))
                     Row {
                         Text(report.days.firstOrNull()?.date?.drop(5).orEmpty(), style = NbType.small, color = c.muted, modifier = Modifier.weight(1f))
-                        Text("今天", style = NbType.small, color = c.muted)
+                        Text(T("今天"), style = NbType.small, color = c.muted)
                     }
                 }
             }
             item(key = "nodes-title") {
-                SectionTitle("节点用量", Modifier.padding(top = 4.dp))
+                SectionTitle(T("节点用量"), Modifier.padding(top = 4.dp))
             }
             if (report.nodes.isEmpty()) {
-                item(key = "nodes-empty") { EmptyHint("还没有节点用量", "连接后，这里会显示每个节点用了多少流量") }
+                item(key = "nodes-empty") { EmptyHint(T("还没有节点用量"), T("连接后，这里会显示每个节点用了多少流量")) }
             }
             val max = report.nodes.maxOfOrNull { it.total }?.coerceAtLeast(1) ?: 1
             items(report.nodes, key = { it.id }) { n ->
@@ -119,19 +121,19 @@ fun UsageScreen() {
                     Row {
                         Column(Modifier.weight(1f)) {
                             Text(n.name, style = NbType.bodyBold, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${n.group} · ${protocolName(n.type)}", style = NbType.small, color = c.muted, maxLines = 1)
+                            Text((if (n.group == T("默认分组")) T("默认分组") else n.group) + " · " + protocolName(n.type), style = NbType.small, color = c.muted, maxLines = 1)
                         }
                         Text(fmtBytes(n.total), style = NbType.bodyBold, color = c.text, modifier = Modifier.padding(start = 8.dp))
                     }
                     Spacer(Modifier.height(8.dp))
                     UsageBar(n.total.toFloat() / max)
                     Spacer(Modifier.height(6.dp))
-                    Text("上传 ${fmtBytes(n.up)} · 下载 ${fmtBytes(n.down)}", style = NbType.small, color = c.muted)
+                    Text(T("上传 %s · 下载 %s", fmtBytes(n.up), fmtBytes(n.down)), style = NbType.small, color = c.muted)
                 }
             }
             item(key = "note") {
                 Text(
-                    "统计的是经过 NextBox 的流量。节点用量是连接该节点期间的全部流量，开启「绕过大陆」时也包含直连部分。",
+                    T("统计的是经过 NextBox 的流量。节点用量只计算实际走代理的部分，直连的流量不算在节点上。"),
                     style = NbType.small, color = c.muted, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                 )
             }
@@ -139,17 +141,17 @@ fun UsageScreen() {
     }
 
     if (confirmReset) {
-        AlertDialog(
+        NbAlertDialog(
             onDismissRequest = { confirmReset = false },
-            title = { Text("清空用量统计") },
-            text = { Text("每日统计和所有节点的流量记录都会清零。") },
+            title = { Text(T("清空用量统计")) },
+            text = { Text(T("每日统计和所有节点的流量记录都会清零。")) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmReset = false
                     scope.launch { Repo.resetUsage(); reload++ }
-                }) { Text("清空", color = c.bad) }
+                }) { Text(T("清空"), color = c.bad) }
             },
-            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(T("取消")) } },
         )
     }
 }

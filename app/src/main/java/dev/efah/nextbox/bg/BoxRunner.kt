@@ -1,5 +1,6 @@
 package dev.efah.nextbox.bg
 
+import dev.efah.nextbox.ui.T
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -28,6 +29,7 @@ import dev.efah.nextbox.libbox.PlatformInterface
 import dev.efah.nextbox.libbox.StatusMessage
 import dev.efah.nextbox.libbox.SystemProxyStatus
 import dev.efah.nextbox.nbcore.Nbcore
+import dev.efah.nextbox.nbtest.Nbtest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -64,6 +66,8 @@ class BoxRunner(
     // traffic accounting
     private var lastUp = 0L
     private var lastDown = 0L
+    private var lastProxyUp = 0L
+    private var lastProxyDown = 0L
     private var nodeId = 0L
     private var usage = UsageReport()
 
@@ -88,7 +92,7 @@ class BoxRunner(
         Box.runner = this
         Box._status.value = Status.Starting
         Box._error.value = null
-        notifier.startForeground(Nbcore.selectedNodeName(), "正在连接…")
+        notifier.startForeground(Nbcore.selectedNodeName(), T("正在连接…"))
         scope.launch { start() }
         return Service.START_NOT_STICKY
     }
@@ -102,6 +106,7 @@ class BoxRunner(
             s.start()
             server = s
             s.startOrReloadService(config, overrideOptions())
+            Nbtest.trackProxy(s)
             onStarted()
         } catch (e: Exception) {
             Log.e(TAG, "start", e)
@@ -118,6 +123,8 @@ class BoxRunner(
         Box._history.value = List(60) { Speed() }
         lastUp = 0
         lastDown = 0
+        lastProxyUp = Nbtest.proxyUplink()
+        lastProxyDown = Nbtest.proxyDownlink()
         Box._status.value = Status.Started
         withContext(Dispatchers.Main) { registerReceiver() }
         refreshUsage()
@@ -129,6 +136,7 @@ class BoxRunner(
                 delay(10_000)
                 refreshUsage()
                 if (++ticks % 6 == 0) runCatching { Nbcore.flush() }
+                if (ticks % 60 == 0) Repo.autoUpdateSubscriptions()
             }
         }
     }
@@ -141,6 +149,7 @@ class BoxRunner(
                     val config = Repo.buildConfig()
                     Box.ownerLookup = needsOwner(config)
                     s.startOrReloadService(config, overrideOptions())
+                    Nbtest.trackProxy(s)
                     nodeId = Repo.state.value.selectedId
                     Box._nodeName.value = Nbcore.selectedNodeName()
                     lastUp = 0
@@ -287,8 +296,15 @@ class BoxRunner(
         val dDown = if (down >= lastDown) down - lastDown else down
         lastUp = up
         lastDown = down
-        if (dUp > 0 || dDown > 0) {
-            Nbcore.addTraffic(nodeId, dUp, dDown)
+        // only what went through the proxy counts towards the node
+        val pUp = Nbtest.proxyUplink()
+        val pDown = Nbtest.proxyDownlink()
+        val nUp = (pUp - lastProxyUp).coerceAtLeast(0)
+        val nDown = (pDown - lastProxyDown).coerceAtLeast(0)
+        lastProxyUp = pUp
+        lastProxyDown = pDown
+        if (dUp > 0 || dDown > 0 || nUp > 0 || nDown > 0) {
+            Nbcore.addTraffic(nodeId, nUp, nDown, dUp, dDown)
             usage = usage.copy(
                 today = usage.today.copy(up = usage.today.up + dUp, down = usage.today.down + dDown),
                 period = usage.period.copy(up = usage.period.up + dUp, down = usage.period.down + dDown),

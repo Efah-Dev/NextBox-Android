@@ -16,8 +16,9 @@ android {
         applicationId = "dev.efah.nextbox"
         minSdk = 29
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.0.1-beta"
+        // major.minor.patch -> major * 10000 + minor * 100 + patch
+        versionCode = 10000
+        versionName = "1.0.0"
         base.archivesName.set("NextBox-$versionName")
     }
 
@@ -36,6 +37,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Same key as release when available, so a debug build installs over a release build and keeps its data.
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -94,6 +99,12 @@ dependencies {
     implementation("androidx.core:core-ktx:1.19.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+
+    // QR codes: ZXing decodes and encodes, CameraX feeds the scanner
+    implementation("com.google.zxing:core:3.5.4")
+    implementation("androidx.camera:camera-camera2:1.6.1")
+    implementation("androidx.camera:camera-lifecycle:1.6.1")
+    implementation("androidx.camera:camera-view:1.6.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

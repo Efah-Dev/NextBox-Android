@@ -1,5 +1,6 @@
 package dev.efah.nextbox.ui.screens
 
+import dev.efah.nextbox.ui.T
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import androidx.compose.animation.AnimatedContent
@@ -63,6 +64,7 @@ import dev.efah.nextbox.libbox.OutboundGroupIterator
 import dev.efah.nextbox.libbox.StatusMessage
 import dev.efah.nextbox.libbox.StringIterator
 import dev.efah.nextbox.ui.EmptyHint
+import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.TopBar
@@ -171,41 +173,42 @@ fun ActivityScreen() {
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        TopBar("活动") {
+    GlassScreen(header = {
+        TopBar(T("活动")) {
             if (tab == 0 && conns.isNotEmpty()) {
-                TextButton(onClick = { runCatching { client?.closeConnections() } }) { Text("全部断开", color = c.bad) }
+                TextButton(onClick = { runCatching { client?.closeConnections() } }) { Text(T("全部断开"), color = c.bad) }
             }
         }
         Segmented(
-            listOf("连接 ${if (conns.isEmpty()) "" else conns.size}".trim(), "日志"), tab, { tab = it },
+            listOf(if (conns.isEmpty()) T("连接") else T("连接 %d", conns.size), T("日志")), tab, { tab = it },
             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp), height = 40.dp,
         )
-        AnimatedContent(tab, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "act") { t ->
+    }) { pad ->
+        AnimatedContent(tab, modifier = Modifier.fillMaxSize(), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "act") { t ->
             when {
-                status != Status.Started -> EmptyHint("未连接", "连接后可以在这里查看实时连接和日志")
-                t == 0 -> ConnectionList(conns.values.sortedByDescending { it.createdAt }) { id -> runCatching { client?.closeConnection(id) } }
-                else -> LogList(logs)
+                status != Status.Started -> EmptyHint(modifier = Modifier.padding(pad), title = T("未连接"), sub = T("连接后可以在这里查看实时连接和日志"))
+                t == 0 -> ConnectionList(conns.values.sortedByDescending { it.createdAt }, pad) { id -> runCatching { client?.closeConnection(id) } }
+                else -> LogList(logs, pad)
             }
         }
     }
 }
 
 @Composable
-private fun ConnectionList(list: List<Conn>, onClose: (String) -> Unit) {
+private fun ConnectionList(list: List<Conn>, pad: PaddingValues, onClose: (String) -> Unit) {
     if (list.isEmpty()) {
-        EmptyHint("暂无连接", "有应用联网时会显示在这里")
+        EmptyHint(T("暂无连接"), T("有应用联网时会显示在这里"), Modifier.padding(pad))
         return
     }
     val showApps by dev.efah.nextbox.data.Prefs.showApps.collectAsState()
     LazyColumn(
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = pad.calculateBottomPadding() + 16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (!showApps) {
             item(key = "hint") {
                 Text(
-                    "想看到每个连接来自哪个应用，可以在「设置 → 性能」里打开「显示连接所属应用」。",
+                    T("想看到每个连接来自哪个应用，可以在「设置 → 性能」里打开「显示连接所属应用」。"),
                     style = NbType.small, color = Nb.c.muted, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
                 )
             }
@@ -223,7 +226,7 @@ private fun ConnRow(x: Conn, modifier: Modifier, onClose: (String) -> Unit) {
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     var icon by remember(x.pkg) { mutableStateOf(iconCache[x.pkg]) }
-    var label by remember(x.pkg) { mutableStateOf(labelCache[x.pkg] ?: x.pkg.ifEmpty { "未识别应用" }) }
+    var label by remember(x.pkg) { mutableStateOf(labelCache[x.pkg] ?: x.pkg.ifEmpty { T("未识别应用") }) }
     LaunchedEffect(x.pkg) {
         if (x.pkg.isEmpty() || labelCache.containsKey(x.pkg)) return@LaunchedEffect
         withContext(Dispatchers.IO) {
@@ -257,7 +260,7 @@ private fun ConnRow(x: Conn, modifier: Modifier, onClose: (String) -> Unit) {
                     }
                     Text(x.destination, fontSize = 13.sp, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        (if (x.rule.isNotEmpty()) x.rule + " → " else "") + if (proxied) "代理" else "直连",
+                        (if (x.rule.isNotEmpty()) x.rule + " → " else "") + if (proxied) T("代理") else T("直连"),
                         fontSize = 11.sp, color = if (proxied) c.accentInk else c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -268,16 +271,16 @@ private fun ConnRow(x: Conn, modifier: Modifier, onClose: (String) -> Unit) {
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("断开这个连接") }, onClick = { menu = false; onClose(x.id) })
+            DropdownMenuItem(text = { Text(T("断开这个连接")) }, onClick = { menu = false; onClose(x.id) })
         }
     }
 }
 
 @Composable
-private fun LogList(logs: List<LogLine>) {
+private fun LogList(logs: List<LogLine>, pad: PaddingValues) {
     val c = Nb.c
     if (logs.isEmpty()) {
-        EmptyHint("暂无日志", "这里只显示内核的警告和错误，没有就说明一切正常")
+        EmptyHint(T("暂无日志"), T("这里只显示内核的警告和错误，没有就说明一切正常"), Modifier.padding(pad))
         return
     }
     val state = rememberLazyListState()
@@ -287,7 +290,7 @@ private fun LogList(logs: List<LogLine>) {
     }
     LazyColumn(
         state = state,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = pad.calculateBottomPadding() + 16.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {

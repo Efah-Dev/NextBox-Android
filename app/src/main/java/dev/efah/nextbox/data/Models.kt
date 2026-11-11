@@ -1,5 +1,6 @@
 package dev.efah.nextbox.data
 
+import dev.efah.nextbox.ui.T
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -31,7 +32,7 @@ data class Group(
     val default: Boolean = false,
 ) {
     val isSubscription: Boolean get() = url.isNotEmpty()
-    val displayName: String get() = if (default) "默认分组" else name
+    val displayName: String get() = if (default) T("默认分组") else name
 }
 
 @Serializable

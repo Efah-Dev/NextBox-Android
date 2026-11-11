@@ -10,6 +10,9 @@ import dev.efah.nextbox.data.Prefs
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.libbox.Libbox
 import dev.efah.nextbox.libbox.SetupOptions
+import dev.efah.nextbox.ui.Lang
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 
 class App : Application() {
@@ -18,6 +21,16 @@ class App : Application() {
         app = this
         Prefs.init(this)
         Repo.init(this)
+        Lang.apply(Prefs.language.value)
+        // subscriptions that are due get updated shortly after the app starts
+        Repo.scope.launch {
+            delay(4000)
+            Repo.autoUpdateSubscriptions()
+        }
+        Repo.scope.launch {
+            delay(6000)
+            dev.efah.nextbox.data.Updater.autoCheck()
+        }
         runCatching { setupLibbox() }.onFailure { Log.e("NextBox", "setup libbox", it) }
         Notifier.createChannel(this)
     }

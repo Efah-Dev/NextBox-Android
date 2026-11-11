@@ -319,6 +319,10 @@ func (s *Store) ReplaceGroupProfiles(groupID int64, list []Profile) error {
 		if prev, ok := old[p.Type+"|"+p.Name]; ok {
 			p.ID = prev.ID
 			p.Upload, p.Download = prev.Upload, prev.Download
+			if prev.Server() == p.Server() {
+				// same server: the last latency result is still meaningful
+				p.Latency, p.LatencyError, p.TestedAt = prev.Latency, prev.LatencyError, prev.TestedAt
+			}
 			delete(old, p.Type+"|"+p.Name)
 		} else {
 			p.ID = s.nextIDLocked()

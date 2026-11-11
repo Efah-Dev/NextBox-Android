@@ -1,5 +1,6 @@
 package dev.efah.nextbox.data
 
+import dev.efah.nextbox.ui.T
 import android.content.Context
 import dev.efah.nextbox.bg.Box
 import dev.efah.nextbox.nbcore.LatencyHandler
@@ -130,6 +131,32 @@ object Repo {
     suspend fun updateSubscription(groupId: Long): Result<String> =
         call { Nbcore.updateSubscription(groupId, Box.subscriptionProxy()) }
 
+    private val autoUpdating = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val lastAttempt = HashMap<Long, Long>()
+
+    /**
+     * Updates subscriptions older than the configured interval. Runs when the
+     * app starts and every few minutes while connected; a failed update is
+     * retried at most once an hour.
+     */
+    suspend fun autoUpdateSubscriptions() = withContext(Dispatchers.IO) {
+        val hours = Prefs.subAutoHours.value
+        if (hours <= 0 || !autoUpdating.compareAndSet(false, true)) return@withContext
+        try {
+            val now = System.currentTimeMillis() / 1000
+            val due = _state.value.groups.filter {
+                it.isSubscription && now - it.updatedAt >= hours * 3600L && now - (lastAttempt[it.id] ?: 0) >= 3600
+            }
+            for (g in due) {
+                lastAttempt[g.id] = now
+                runCatching { Nbcore.updateSubscription(g.id, Box.subscriptionProxy()) }
+            }
+            if (due.isNotEmpty()) runCatching { refreshNow() }
+        } finally {
+            autoUpdating.set(false)
+        }
+    }
+
     suspend fun saveProfile(p: Profile): Result<Profile> {
         val r = call { NbJson.decodeFromString<Profile>(Nbcore.saveProfile(NbJson.encodeToString(Profile.serializer(), p))) }
         if (r.isSuccess && r.getOrNull()?.id == _state.value.selectedId) Box.reloadIfRunning()
@@ -185,7 +212,7 @@ object Repo {
                             override fun onStart(id: Long) {}
                             override fun onResult(id: Long, latency: Int, message: String) = onResult(id, latency, message)
                         })
-                    }.onFailure { e -> urlIds.forEach { onResult(it, -1, e.message ?: "测速失败") } }
+                    }.onFailure { e -> urlIds.forEach { onResult(it, -1, e.message ?: T("测速失败")) } }
                 },
             )
             jobs.forEach { it.join() }

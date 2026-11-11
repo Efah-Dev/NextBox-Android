@@ -1,0 +1,76 @@
+# Builds the APKs on GitHub's runners. Started by hand (Actions > Build > Run
+# workflow) until it has been proven there; releases are built and signed
+# locally. With these secrets the APKs are signed with the release key,
+# otherwise with a debug key:
+#
+#   KEYSTORE_BASE64     base64 of release.jks
+#   KEYSTORE_PASSWORD   its store (and key) password
+#   KEY_ALIAS           the key alias
+name: Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: core/go.sum
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install the SDK platform and NDK
+        run: |
+          sdkmanager "platforms;android-37.0" "build-tools;36.0.0" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Test the Go packages
+        working-directory: core/nextbox
+        run: go test ./...
+
+      - name: Build libbox.aar
+        run: |
+          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.12
+          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.12
+          bash core/build-core.sh
+
+      - name: Set up release signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+            printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+              "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEYSTORE_PASSWORD" > keystore.properties
+          fi
+
+      - name: Build the APKs
+        run: ./gradlew assembleRelease --console=plain
+
+      - name: Rename the APKs
+        run: |
+          mkdir dist
+          for f in app/build/outputs/apk/release/*-release.apk; do
+            cp "$f" "dist/$(basename "${f%-release.apk}").apk"
+          done
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: dist/*.apk

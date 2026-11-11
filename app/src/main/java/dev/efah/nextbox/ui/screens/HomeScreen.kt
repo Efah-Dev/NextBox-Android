@@ -2,9 +2,9 @@ package dev.efah.nextbox.ui.screens
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -66,7 +66,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.R
 import dev.efah.nextbox.bg.Box
@@ -77,6 +83,11 @@ import dev.efah.nextbox.data.Profile
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.protocolName
 import dev.efah.nextbox.ui.BarIcon
+import dev.efah.nextbox.ui.LocalBottomInset
+import dev.efah.nextbox.ui.T
+import dev.efah.nextbox.ui.backdropSource
+import dev.efah.nextbox.ui.glass
+import dev.efah.nextbox.ui.rememberBackdrop
 import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.Segmented
@@ -90,9 +101,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val scopes = listOf(
-    Prefs.SCOPE_GLOBAL to "全局代理",
-    Prefs.SCOPE_APPS to "指定应用",
-    Prefs.SCOPE_DIRECT to "全部直连",
+    Prefs.SCOPE_GLOBAL to "全局代理", // i18n:skip
+    Prefs.SCOPE_APPS to "指定应用", // i18n:skip
+    Prefs.SCOPE_DIRECT to "全部直连", // i18n:skip
 )
 
 /** Routing scope + the "bypass mainland China" switch that applies to both proxied scopes. */
@@ -104,7 +115,7 @@ private fun RouteSection(onPickApps: () -> Unit) {
     val bypass by Prefs.bypassCn.collectAsState()
     val apps by Prefs.perAppList.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Segmented(scopes.map { it.second }, scopes.indexOfFirst { it.first == routeScope }, onSelect = { i ->
+        Segmented(scopes.map { T(it.second) }, scopes.indexOfFirst { it.first == routeScope }, onSelect = { i ->
             val target = scopes[i].first
             scope.launch { Repo.setRoute(scope = target) }
             if (target == Prefs.SCOPE_APPS && apps.isEmpty()) onPickApps()
@@ -119,18 +130,18 @@ private fun RouteSection(onPickApps: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("绕过中国大陆", style = NbType.body, color = if (enabled) c.text else c.muted)
+                    Text(T("绕过中国大陆"), style = NbType.body, color = if (enabled) c.text else c.muted)
                     Text(
                         when (routeScope) {
-                            Prefs.SCOPE_APPS -> if (apps.isEmpty()) "还没有选择应用" else "已选 ${apps.size} 个应用 · 国内网站直连"
-                            Prefs.SCOPE_DIRECT -> "全部直连时不需要"
-                            else -> if (bypass) "国内网站和 IP 直连，其余走代理" else "所有流量都走代理"
+                            Prefs.SCOPE_APPS -> if (apps.isEmpty()) T("还没有选择应用") else T("已选 %d 个应用", apps.size) + if (bypass) T(" · 国内网站直连") else ""
+                            Prefs.SCOPE_DIRECT -> T("全部直连时不需要")
+                            else -> if (bypass) T("国内网站和 IP 直连，其余走代理") else T("所有流量都走代理")
                         },
                         style = NbType.small, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (routeScope == Prefs.SCOPE_APPS) {
-                    androidx.compose.material3.TextButton(onClick = onPickApps) { Text("选择应用", color = c.accentInk) }
+                    androidx.compose.material3.TextButton(onClick = onPickApps) { Text(T("选择应用"), color = c.accentInk) }
                 }
                 androidx.compose.material3.Switch(
                     checked = bypass && enabled, enabled = enabled,
@@ -180,12 +191,12 @@ fun HomeScreen(onConnect: () -> Unit, onOpenNodes: () -> Unit, onImport: () -> U
                 )
             },
         ) {
-            BarIcon(NbIcons.Clipboard, "从剪贴板导入", onImport)
+            BarIcon(NbIcons.Clipboard, T("从剪贴板导入"), onImport)
         }
 
         // No scrolling: the connect button takes whatever height is left, so
         // the page fills any screen size exactly.
-        BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
+        BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = LocalBottomInset.current)) {
             val compact = maxHeight < 560.dp
             val gap = if (compact) 8.dp else 12.dp
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
@@ -204,10 +215,10 @@ fun HomeScreen(onConnect: () -> Unit, onOpenNodes: () -> Unit, onImport: () -> U
             ) { st ->
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     val (title, sub) = when (st) {
-                        Status.Started -> "已连接" to "${fmtDuration((now - startedAt).coerceAtLeast(0) / 1000)} · 点击断开"
-                        Status.Starting -> "正在连接…" to "正在启动内核"
-                        Status.Stopping -> "正在断开…" to ""
-                        Status.Stopped -> "未连接" to (error ?: "点击连接")
+                        Status.Started -> T("已连接") to fmtDuration((now - startedAt).coerceAtLeast(0) / 1000) + T(" · 点击断开")
+                        Status.Starting -> T("正在连接…") to T("正在启动内核")
+                        Status.Stopping -> T("正在断开…") to ""
+                        Status.Stopped -> T("未连接") to (error ?: T("点击连接"))
                     }
                     Text(title, style = NbType.title, color = c.text)
                     if (sub.isNotEmpty()) {
@@ -231,63 +242,97 @@ fun HomeScreen(onConnect: () -> Unit, onOpenNodes: () -> Unit, onImport: () -> U
     }
 }
 
+/**
+ * The connect button: a glass disc over colored lights. The lights drift
+ * quickly while the core starts or stops, slowly while connected, and rest
+ * otherwise, so the glass always has something to bend.
+ */
 @Composable
-private fun ConnectButton(status: Status, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+private fun ConnectButton(status: Status, diameter: Dp, onClick: () -> Unit) {
     val c = Nb.c
     val on = status == Status.Started
     val busy = status == Status.Starting || status == Status.Stopping
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.5f), label = "press")
-    val bg by animateColorAsState(if (on) c.accent else c.card, tween(350), label = "bg")
+    val scale by animateFloatAsState(
+        if (pressed) 0.93f else 1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow), label = "press",
+    )
+    val tint by animateColorAsState(
+        if (on) c.accent.copy(alpha = 0.62f) else c.card.copy(alpha = if (c.dark) 0.30f else 0.40f), tween(450), label = "tint",
+    )
+    val solid by animateColorAsState(if (on) c.accent else c.card, tween(350), label = "solid")
     val paw by animateColorAsState(if (on) Color.White else c.accent, tween(350), label = "paw")
-    val halo by animateColorAsState(if (on) c.accentSoft else Color.Transparent, tween(500), label = "halo")
-
-    val pulse = rememberInfiniteTransition(label = "pulse")
-    val ring by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "ring")
-    val breathe by pulse.animateFloat(
-        1f, 1.04f, infiniteRepeatable(tween(2200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "breathe",
+    val energy by animateFloatAsState(
+        when (status) {
+            Status.Started -> 1f
+            Status.Starting, Status.Stopping -> 0.8f
+            Status.Stopped -> 0.4f
+        },
+        tween(600), label = "energy",
     )
 
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(size * 1.24f), contentAlignment = Alignment.Center) {
-            if (busy) {
-                // expanding ring while the core starts or stops
-                Box(
-                    Modifier
-                        .size(size)
-                        .graphicsLayer {
-                            val s = 1f + ring * 0.24f
-                            scaleX = s
-                            scaleY = s
-                            alpha = 1f - ring
-                        }
-                        .border(3.dp, c.accent, CircleShape),
+    var angle by remember { mutableFloatStateOf(0.6f) }
+    LaunchedEffect(status) {
+        val speed = when (status) {
+            Status.Starting, Status.Stopping -> 2.4f
+            Status.Started -> 0.3f
+            Status.Stopped -> 0f
+        }
+        if (speed == 0f) return@LaunchedEffect
+        var last = withFrameNanos { it }
+        while (true) {
+            val now = withFrameNanos { it }
+            angle += (now - last) / 1e9f * speed
+            last = now
+        }
+    }
+
+    val backdrop = rememberBackdrop()
+    val second = lerp(c.accent, Color(0xFF7C9BFF), 0.75f)
+    val third = lerp(c.accent, Color(0xFFFFC46B), 0.6f)
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize().backdropSource(backdrop)) {
+            val r = diameter.toPx() / 2
+            fun light(color: Color, alpha: Float, a: Float, distance: Float, radius: Float) {
+                val p = center + Offset(cos(a) * distance, sin(a) * distance)
+                drawCircle(
+                    Brush.radialGradient(listOf(color.copy(alpha = alpha * energy), Color.Transparent), p, radius),
+                    radius, p,
                 )
             }
+            light(c.accent, 0.85f, angle, r * 0.72f, r * 1.2f)
+            light(second, 0.70f, angle + 2.1f, r * 0.80f, r * 1.05f)
+            light(third, 0.55f, angle + 4.2f, r * 0.70f, r * 0.95f)
+        }
+        if (busy) {
+            // expanding ring while the core starts or stops
+            val pulse = rememberInfiniteTransition(label = "pulse")
+            val ring by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "ring")
             Box(
                 Modifier
-                    .size(size * 1.16f)
-                    .scale(if (on) breathe else 1f)
-                    .clip(CircleShape)
-                    .background(halo),
+                    .size(diameter)
+                    .graphicsLayer {
+                        val s = 1f + ring * 0.24f
+                        scaleX = s
+                        scaleY = s
+                        alpha = 1f - ring
+                    }
+                    .border(3.dp, c.accent, CircleShape),
             )
-            Box(
-                Modifier
-                    .size(size)
-                    .scale(scale)
-                    .clip(CircleShape)
-                    .background(bg)
-                    .border(if (on) 0.dp else 2.dp, if (on) Color.Transparent else c.accentSoft, CircleShape)
-                    .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = if (on) "断开连接" else "连接"
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(painterResource(R.drawable.ic_stat_paw), null, tint = paw, modifier = Modifier.size(size * 0.5f))
-            }
+        }
+        Box(
+            Modifier
+                .size(diameter)
+                .scale(scale)
+                .glass(backdrop, radius = diameter / 2, tint = tint, solid = solid, blur = 12.dp, refraction = 24.dp)
+                .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+                .semantics {
+                    role = Role.Button
+                    contentDescription = if (on) T("断开连接") else T("连接")
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(painterResource(R.drawable.ic_stat_paw), null, tint = paw, modifier = Modifier.size(diameter * 0.5f))
         }
     }
 }
@@ -311,9 +356,9 @@ private fun NodeCard(node: Profile?, onClick: () -> Unit) {
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(node?.name ?: "还没有选择节点", style = NbType.bodyBold.copy(fontSize = 16.sp), color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(node?.name ?: T("还没有选择节点"), style = NbType.bodyBold.copy(fontSize = 16.sp), color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    node?.let { protocolName(it.type) } ?: "到「节点」页导入订阅或分享链接",
+                    node?.let { protocolName(it.type) } ?: T("到「节点」页导入订阅或分享链接"),
                     style = NbType.small.copy(fontSize = 13.sp), color = c.muted, maxLines = 1,
                 )
             }
@@ -328,9 +373,9 @@ private fun NodeCard(node: Profile?, onClick: () -> Unit) {
 /** Two letters for the node badge: a region code if the name has one, else its first characters. */
 fun badge(name: String): String {
     val regions = linkedMapOf(
-        "香港" to "HK", "台湾" to "TW", "日本" to "JP", "东京" to "JP", "大阪" to "JP", "新加坡" to "SG",
-        "美国" to "US", "韩国" to "KR", "首尔" to "KR", "英国" to "UK", "德国" to "DE", "法国" to "FR",
-        "加拿大" to "CA", "澳大利亚" to "AU", "俄罗斯" to "RU", "印度" to "IN", "荷兰" to "NL", "土耳其" to "TR",
+        "香港" to "HK", "台湾" to "TW", "日本" to "JP", "东京" to "JP", "大阪" to "JP", "新加坡" to "SG", // i18n:skip
+        "美国" to "US", "韩国" to "KR", "首尔" to "KR", "英国" to "UK", "德国" to "DE", "法国" to "FR", // i18n:skip
+        "加拿大" to "CA", "澳大利亚" to "AU", "俄罗斯" to "RU", "印度" to "IN", "荷兰" to "NL", "土耳其" to "TR", // i18n:skip
     )
     regions.forEach { (k, v) -> if (name.contains(k)) return v }
     Regex("\\b([A-Z]{2})\\b").find(name)?.let { return it.groupValues[1] }
@@ -341,7 +386,7 @@ fun badge(name: String): String {
 fun LatencyText(latency: Int, modifier: Modifier = Modifier) {
     val c = Nb.c
     val (text, color) = when {
-        latency < 0 -> "超时" to c.bad
+        latency < 0 -> T("超时") to c.bad
         latency == 0 -> "" to c.muted
         latency < 150 -> "$latency ms" to c.good
         latency < 300 -> "$latency ms" to c.mid
@@ -365,15 +410,15 @@ private fun TrafficCard(speed: Speed, session: Speed, history: List<Speed>, on: 
     }
     NbCard(padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)) {
         Row(Modifier.fillMaxWidth()) {
-            SpeedValue("上传", fmtSpeed(speed.up), Modifier.weight(1f))
-            SpeedValue("下载", fmtSpeed(speed.down), Modifier.weight(1f))
+            SpeedValue(T("上传"), fmtSpeed(speed.up), Modifier.weight(1f))
+            SpeedValue(T("下载"), fmtSpeed(speed.down), Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
         Sparkline(history, Modifier.fillMaxWidth().height(sparkHeight))
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth()) {
-            Text("本次 ${fmtBytes(session.up + session.down)}", style = NbType.small, color = c.muted, modifier = Modifier.weight(1f))
-            Text("今日 ${fmtBytes(today)} · 本月 ${fmtBytes(period)}", style = NbType.small, color = c.muted)
+            Text(T("本次 %s", fmtBytes(session.up + session.down)), style = NbType.small, color = c.muted, modifier = Modifier.weight(1f))
+            Text(T("今日 %s · 本月 %s", fmtBytes(today), fmtBytes(period)), style = NbType.small, color = c.muted)
         }
     }
 }

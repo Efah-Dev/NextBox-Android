@@ -34,6 +34,9 @@ object Prefs {
     private val testMode = Pref("test_mode", TEST_URL)
     private val fake = Pref("fake_ip", true)
     private val owner = Pref("show_apps", false)
+    private val glassPref = Pref("glass", true)
+    private val lang = Pref("language", "auto")
+    private val subHours = Pref("sub_auto_hours", 24)
 
     val routeScope: StateFlow<String> = scope.flow.asStateFlow()
     val bypassCn: StateFlow<Boolean> = bypass.flow.asStateFlow()
@@ -44,6 +47,15 @@ object Prefs {
     val latencyMode: StateFlow<String> = testMode.flow.asStateFlow()
     val fakeIp: StateFlow<Boolean> = fake.flow.asStateFlow()
     val showApps: StateFlow<Boolean> = owner.flow.asStateFlow()
+
+    /** Liquid glass effects (blur and refraction) on bars, buttons and dialogs. */
+    val glass: StateFlow<Boolean> = glassPref.flow.asStateFlow()
+
+    /** "auto" (follow the system), "zh-CN", "zh-TW" or "en". */
+    val language: StateFlow<String> = lang.flow.asStateFlow()
+
+    /** Update subscriptions older than this many hours; 0 turns it off. */
+    val subAutoHours: StateFlow<Int> = subHours.flow.asStateFlow()
 
     private var migrated = true
 
@@ -59,6 +71,10 @@ object Prefs {
         testMode.flow.value = sp.getString(testMode.key, testMode.default) ?: testMode.default
         fake.flow.value = sp.getBoolean(fake.key, fake.default)
         owner.flow.value = sp.getBoolean(owner.key, owner.default)
+        glassPref.flow.value = sp.getBoolean(glassPref.key, glassPref.default)
+        lang.flow.value = sp.getString(lang.key, lang.default) ?: lang.default
+        subHours.flow.value = sp.getInt(subHours.key, subHours.default)
+        autoUpdatePref.flow.value = sp.getBoolean(autoUpdatePref.key, autoUpdatePref.default)
     }
 
     /** First start of this version: derive the route scope from the core setting. */
@@ -119,6 +135,41 @@ object Prefs {
         owner.flow.value = v
         sp.edit().putBoolean(owner.key, v).apply()
     }
+
+    fun setGlass(v: Boolean) {
+        glassPref.flow.value = v
+        sp.edit().putBoolean(glassPref.key, v).apply()
+    }
+
+    fun setLanguage(v: String) {
+        lang.flow.value = v
+        sp.edit().putString(lang.key, v).apply()
+    }
+
+    fun setSubAutoHours(v: Int) {
+        subHours.flow.value = v
+        sp.edit().putInt(subHours.key, v).apply()
+    }
+
+    private val autoUpdatePref = Pref("auto_update", true)
+
+    /** Look for a newer release on GitHub when the app starts. */
+    val autoUpdate: StateFlow<Boolean> = autoUpdatePref.flow.asStateFlow()
+
+    fun setAutoUpdate(v: Boolean) {
+        autoUpdatePref.flow.value = v
+        sp.edit().putBoolean(autoUpdatePref.key, v).apply()
+    }
+
+    /** When the last successful update check ran (epoch milliseconds). */
+    var updateChecked: Long
+        get() = sp.getLong("update_checked", 0)
+        set(v) = sp.edit().putLong("update_checked", v).apply()
+
+    /** The release the user answered "later" to; the automatic check stays quiet about it. */
+    var skippedVersion: String
+        get() = sp.getString("update_skipped", "").orEmpty()
+        set(v) = sp.edit().putString("update_skipped", v).apply()
 
     /** One-time hints ("notify_guide" ...). */
     fun shown(key: String): Boolean = sp.getBoolean("shown_$key", false)

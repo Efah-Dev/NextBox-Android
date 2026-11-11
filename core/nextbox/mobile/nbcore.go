@@ -67,7 +67,6 @@ func Open(dir string) error {
 	st = s
 	dataDir = dir
 	usageBook = loadUsage(filepath.Join(dir, "usage.json"))
-	i18n.SetLang(s.Settings().Language)
 	return nil
 }
 
@@ -116,7 +115,6 @@ func SaveSettings(js string) error {
 	if err := s.SaveSettings(set); err != nil {
 		return err
 	}
-	i18n.SetLang(set.Language)
 	return nil
 }
 

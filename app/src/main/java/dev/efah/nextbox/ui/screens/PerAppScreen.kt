@@ -1,5 +1,6 @@
 package dev.efah.nextbox.ui.screens
 
+import dev.efah.nextbox.ui.T
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -85,19 +86,19 @@ fun PerAppScreen(onClose: () -> Unit) {
     DisposableEffect(Unit) { onDispose { Box.reloadIfRunning() } }
 
     Column(Modifier.fillMaxSize()) {
-        TopBar("指定应用 · 已选 ${selected.size}", leading = { BarIcon(NbIcons.Back, "返回", onClose) }) {
-            TextButton(onClick = { showSystem = !showSystem }) { Text(if (showSystem) "隐藏系统应用" else "显示系统应用") }
+        TopBar(T("指定应用 · 已选 %d", selected.size), leading = { BarIcon(NbIcons.Back, T("返回"), onClose) }) {
+            TextButton(onClick = { showSystem = !showSystem }) { Text(if (showSystem) T("隐藏系统应用") else T("显示系统应用")) }
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 if (routeScope == Prefs.SCOPE_APPS) {
-                    "只有勾选的应用经过 VPN，其他应用直接联网。开启「绕过中国大陆」时，这些应用访问国内网站也直连。"
+                    T("只有勾选的应用经过 VPN，其他应用直接联网。开启「绕过中国大陆」时，这些应用访问国内网站也直连。")
                 } else {
-                    "在首页把路由模式切到「指定应用」后，这里勾选的应用才会单独走 VPN。"
+                    T("在首页把路由模式切到「指定应用」后，这里勾选的应用才会单独走 VPN。")
                 },
                 style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp),
             )
-            OutlinedTextField(query, { query = it }, placeholder = { Text("搜索应用") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(query, { query = it }, placeholder = { Text(T("搜索应用")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
         val list = apps
         if (list == null) {
@@ -107,7 +108,7 @@ fun PerAppScreen(onClose: () -> Unit) {
         val q = query.trim().lowercase()
         val shown = list.filter { (showSystem || !it.system || it.pkg in selected) && (q.isEmpty() || it.label.lowercase().contains(q) || it.pkg.contains(q)) }
             .sortedByDescending { it.pkg in selected }
-        LazyColumn(contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 24.dp)) {
+        LazyColumn(contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = dev.efah.nextbox.ui.LocalBottomInset.current + 24.dp)) {
             items(shown, key = { it.pkg }) { a ->
                 val checked = a.pkg in selected
                 val enabled = true

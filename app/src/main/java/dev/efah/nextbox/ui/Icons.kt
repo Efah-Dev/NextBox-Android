@@ -46,6 +46,10 @@ object NbIcons {
         "M19 17a2 2 0 1 1-4 0a2 2 0 1 1 4 0",
     )
     val Bolt = stroke("bolt", "M13 3 5 13.5h6L10 21l8-10.5h-6z")
+    val Search = stroke("search", "M11 4.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13", "M16 16l4 4")
+    val Trash = stroke("trash", "M5 7h14", "M10 11v6M14 11v6", "M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12", "M9 7V4h6v3")
+    val Scan = stroke("scan", "M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10")
+    val Image = stroke("image", "M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z", "M4 16l4.5-4.5 4 4 2.5-2.5 5 5", "M15 9.5h.01")
     val Plus = stroke("plus", "M12 5v14M5 12h14", width = 2.2f)
     val Check = stroke("check", "m5 12.5 4.5 4.5L19 7.5", width = 2.4f)
     val Back = stroke("back", "M19 12H5M11 6l-6 6 6 6", width = 2f)
