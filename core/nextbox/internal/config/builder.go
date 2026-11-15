@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"nextbox/internal/i18n"
 	"os"
@@ -260,6 +261,9 @@ func Build(in Input) (map[string]any, error) {
 			"strict_route":   s.TunStrictRoute,
 			"stack":          s.TunStack,
 		})
+		if excl, _ := ParseCIDRs(s.TunExclude); len(excl) > 0 {
+			inbounds[len(inbounds)-1].(map[string]any)["route_exclude_address"] = excl
+		}
 	}
 
 	// ---- route ----
@@ -272,13 +276,14 @@ func Build(in Input) (map[string]any, error) {
 		routeRules = append(routeRules, map[string]any{"action": "sniff"})
 	}
 	routeRules = append(routeRules, map[string]any{"protocol": "dns", "action": "hijack-dns"})
-	privateDone := false
+	// LAN addresses first, then the excluded ranges (direct as well, for the
+	// system proxy; in TUN mode they do not reach the core at all), then the
+	// steps in the user's order
+	routeRules = append(routeRules, map[string]any{"ip_is_private": true, "outbound": TagDirect})
+	if excl, _ := ParseCIDRs(s.TunExclude); len(excl) > 0 {
+		routeRules = append(routeRules, map[string]any{"ip_cidr": excl, "outbound": TagDirect})
+	}
 	for _, e := range entries {
-		// ad blocking comes before LAN addresses, everything else after
-		if e.Source != "ads" && !privateDone {
-			routeRules = append(routeRules, map[string]any{"ip_is_private": true, "outbound": TagDirect})
-			privateDone = true
-		}
 		r := e.routeRule()
 		if r == nil {
 			continue
@@ -289,9 +294,6 @@ func Build(in Input) (map[string]any, error) {
 			r["outbound"] = ob
 		}
 		routeRules = append(routeRules, r)
-	}
-	if !privateDone {
-		routeRules = append(routeRules, map[string]any{"ip_is_private": true, "outbound": TagDirect})
 	}
 	ruleSets := []any{}
 	for _, name := range RuleSets(entries) {
@@ -329,6 +331,36 @@ func Build(in Input) (map[string]any, error) {
 		},
 	}
 	return cfg, nil
+}
+
+// ParseCIDRs reads a list of IP ranges, one per line ("#" starts a
+// comment); a single address becomes a /32 or /128 range. bad lists the
+// lines that are neither, numbered from 1.
+func ParseCIDRs(text string) (out []string, bad []int) {
+	seen := map[string]bool{}
+	for i, line := range strings.Split(text, "\n") {
+		if c := strings.Index(line, "#"); c >= 0 {
+			line = line[:c]
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var v string
+		if p, err := netip.ParsePrefix(line); err == nil {
+			v = p.Masked().String()
+		} else if a, err := netip.ParseAddr(line); err == nil {
+			v = netip.PrefixFrom(a, a.BitLen()).String()
+		} else {
+			bad = append(bad, i+1)
+			continue
+		}
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out, bad
 }
 
 func fakeIPExclusions(text string) []string {

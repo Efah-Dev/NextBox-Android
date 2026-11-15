@@ -37,6 +37,7 @@ object RuleUi {
         "cidr" -> T("IP 段")
         "geoip" -> T("IP 归属地")
         "package" -> T("应用")
+        "process" -> T("电脑程序")
         else -> kind
     }
 
@@ -128,6 +129,8 @@ object RuleUi {
             for (v in values) {
                 val item = when (r.kind) {
                     "package" -> RuleItem(r.kind, listOf(v), appLabel(v), "", r.target, r.disabled)
+                    // from NextBox for Windows: kept for the way back, never matched here
+                    "process" -> RuleItem(r.kind, listOf(v), v, T("电脑程序，只在 Windows 版生效"), r.target, r.disabled)
                     "geosite" -> {
                         val s = services.firstOrNull { v in it.geosite }
                         RuleItem(r.kind, listOf(v), s?.let { T(it.label) } ?: v, if (s != null) T("常用服务") else T("网站分类"), r.target, r.disabled)
@@ -140,7 +143,7 @@ object RuleUi {
                     else -> RuleItem(r.kind, listOf(v), v, kindLabel(r.kind), r.target, r.disabled)
                 }
                 when (r.kind) {
-                    "package" -> apps += item
+                    "package", "process" -> apps += item
                     "cidr", "geoip" -> ips += item
                     else -> sites += item
                 }
@@ -149,9 +152,15 @@ object RuleUi {
         return Triple(apps, sites, ips)
     }
 
+    /**
+     * Rules the phone checks: not the places of ad blocking and the scenes
+     * that the desktop app keeps among them, nor its program rules.
+     */
+    fun applies(r: Rule): Boolean = r.kind != "ads" && r.kind != "scene" && r.kind != "process"
+
     /** How many values (services counted once) a target has. */
     fun count(rules: List<Rule>, target: (String) -> Boolean): Int =
-        rules.filter { !it.disabled && target(it.target) }.sumOf { r ->
+        rules.filter { !it.disabled && applies(it) && target(it.target) }.sumOf { r ->
             if (r.kind != "cidr") r.values.size else {
                 val grouped = services.filter { it.cidrs.isNotEmpty() && r.values.containsAll(it.cidrs) }
                 r.values.size - grouped.sumOf { it.cidrs.size } + grouped.size

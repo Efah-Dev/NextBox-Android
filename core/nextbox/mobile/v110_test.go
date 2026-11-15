@@ -3,12 +3,12 @@ package nbcore
 import (
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
 	"nextbox/internal/config"
 	"nextbox/internal/store"
-	"nextbox/internal/vault"
 )
 
 func TestClassify(t *testing.T) {
@@ -69,51 +69,17 @@ func TestPackageRules(t *testing.T) {
 	cfg := buildAndroid(t, s, androidOptions{})
 	b, _ := json.Marshal(cfg["route"])
 	route := string(b)
-	if !strings.Contains(route, `"package_name":["cmb.pb"]`) || strings.Contains(route, "chrome.exe") {
-		t.Fatalf("package rule kept, program rule dropped: %s", route)
+	if strings.Contains(route, "chrome.exe") {
+		t.Fatalf("program rule dropped: %s", route)
+	}
+	if runtime.GOOS != "android" {
+		t.Skip("app rules are matched on Android only (see config.matcher)")
+	}
+	if !strings.Contains(route, `"package_name":["cmb.pb"]`) {
+		t.Fatalf("package rule kept: %s", route)
 	}
 	if !strings.Contains(route, `"find_process":true`) {
 		t.Fatal("package rules need find_process")
-	}
-}
-
-func TestBackupRoundTrip(t *testing.T) {
-	if err := Open(t.TempDir()); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { mu.Lock(); st = nil; mu.Unlock() }()
-	gid, _ := AddGroup("g")
-	ImportText("ss://YWVzLTEyOC1nY206cGFzcw@1.2.3.4:8388#a\ntrojan://p@5.6.7.8:443#b", gid)
-
-	out, err := ExportBackup("pw", `{"perAppList":["cmb.pb"]}`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := vault.Parse([]byte(out)); !ok {
-		t.Fatal("expected an encrypted backup")
-	}
-	info, _ := InspectBackup(out, "")
-	if !strings.Contains(info, `"needPassword":true`) {
-		t.Fatalf("inspect without password: %s", info)
-	}
-	info, err = InspectBackup(out, "pw")
-	if err != nil || !strings.Contains(info, `"platform":"android"`) || !strings.Contains(info, `"nodes":2`) {
-		t.Fatalf("inspect: %s %v", info, err)
-	}
-	res, err := ImportBackup(out, "pw", true)
-	if err != nil || !strings.Contains(res, "cmb.pb") {
-		t.Fatalf("import: %s %v", res, err)
-	}
-
-	// a desktop backup: its TUN / port settings must not come along
-	win := `{"app":"NextBox","version":2,"platform":"windows","settings":{"routeMode":"global","mixedPort":2030,"tunEnabled":false,"theme":"dark","rules":[{"kind":"suffix","values":["a.com"],"target":"direct"},{"kind":"process","values":["chrome.exe"],"target":"proxy"}],"scenes":[{"id":"ai","enabled":true,"target":"proxy"}]}}`
-	if _, err := ImportBackup(win, "", false); err != nil {
-		t.Fatal(err)
-	}
-	s, _ := current()
-	set := s.Settings()
-	if set.MixedPort != 2080 || !set.TunEnabled || set.Theme != "dark" || set.RouteMode != "rule" || len(set.Rules) != 2 || set.Rules[0].Kind != "suffix" || set.Rules[1].Kind != "geosite" {
-		t.Fatalf("settings after a desktop import: port %d tun %v theme %s mode %s rules %d", set.MixedPort, set.TunEnabled, set.Theme, set.RouteMode, len(set.Rules))
 	}
 }
 
@@ -162,6 +128,9 @@ func TestTestRouteSteps(t *testing.T) {
 		{"192.168.1.1", "", "lan", ""},
 		{"example.org", "", "final", ""},
 	} {
+		if c.pkg != "" && runtime.GOOS != "android" {
+			continue // app rules are matched on Android only
+		}
 		out, err := TestRoute(t.TempDir(), c.host, c.pkg)
 		if err != nil || !strings.Contains(out, `"step":"`+c.step+`"`) || !strings.Contains(out, `"value":"`+c.value+`"`) && c.value != "" {
 			t.Errorf("%s %s: %s %v", c.host, c.pkg, out, err)

@@ -8,10 +8,16 @@ package nbcore
 //	→ bypass mainland China → everything else (the node, or direct)
 //
 // The rules themselves are stored in the shared model (store.Rule, the same
-// as NextBox for Windows, so backups move between the two); only their order
-// is decided here. Within the rules, a more specific domain wins: with
-// "example.com → direct" and "api.example.com → proxy", api.example.com goes
-// through the proxy although direct rules come first.
+// as NextBox for Windows, so backups move between the two); only the order
+// they are checked in is decided here. Within the rules, a more specific
+// domain wins: with "example.com → direct" and "api.example.com → proxy",
+// api.example.com goes through the proxy although direct rules come first.
+//
+// The stored order is the one NextBox for Windows checks the rules in, with
+// places for ad blocking and the scenes (store.KindAds, store.KindScene).
+// Android keeps it as it is and puts rules added here where the path checks
+// them (settleRules), so a backup that goes through the phone comes back to
+// the computer unchanged.
 
 import (
 	"encoding/json"
@@ -20,6 +26,7 @@ import (
 	"net"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -91,7 +98,7 @@ func moreSpecific(v domainItem, u domainItem) bool {
 func pathOrder(rules []store.Rule) []pathRule {
 	var items []domainItem
 	for i, r := range rules {
-		if r.Disabled || (r.Kind != "domain" && r.Kind != "suffix") {
+		if r.Disabled || r.IsStep() || (r.Kind != "domain" && r.Kind != "suffix") {
 			continue
 		}
 		st := ruleStep(r.Target)
@@ -134,7 +141,8 @@ func pathOrder(rules []store.Rule) []pathRule {
 			out = append(out, pathRule{Rule: store.Rule{Kind: it.kind, Values: []string{it.value}, Target: it.target}, Step: name, Orig: it.orig})
 		}
 		for i, r := range rules {
-			if r.Disabled || r.Kind == "domain" || r.Kind == "suffix" || ruleStep(r.Target) != st {
+			// program rules ("chrome.exe") are the desktop app's; they stay in the data
+			if r.Disabled || r.IsStep() || r.Kind == "process" || r.Kind == "domain" || r.Kind == "suffix" || ruleStep(r.Target) != st {
 				continue
 			}
 			out = append(out, pathRule{Rule: r, Step: name, Orig: i})
@@ -144,28 +152,124 @@ func pathOrder(rules []store.Rule) []pathRule {
 }
 
 // pathSettings returns settings whose rules are in path order, ready for the
-// shared config builder.
+// shared config builder: ad blocking first, then the rules, then the scenes
+// (on Android only bypassing mainland China is ever on). index has one entry
+// per rule of the result; Orig is -1 for the places of ads and the scenes.
 func pathSettings(set store.Settings) (store.Settings, []pathRule) {
-	order := pathOrder(set.Rules)
-	set.Rules = make([]store.Rule, len(order))
-	for i, r := range order {
-		set.Rules[i] = r.Rule
+	ads := store.Rule{Kind: store.KindAds, Values: []string{}}
+	rules := []store.Rule{ads}
+	index := []pathRule{{Rule: ads, Step: stepAds, Orig: -1}}
+	for _, r := range pathOrder(set.Rules) {
+		rules = append(rules, r.Rule)
+		index = append(index, r)
 	}
-	return set, order
+	for _, d := range config.SceneDefs {
+		sc := store.Rule{Kind: store.KindScene, Values: []string{d.ID}}
+		rules = append(rules, sc)
+		index = append(index, pathRule{Rule: sc, Step: stepCN, Orig: -1})
+	}
+	set.Rules = rules
+	return set, index
 }
 
-// sortRules orders the rules grouped by step (block, direct, policy, proxy),
-// the order NextBox for Windows will check them in after a backup is moved
-// there.
-func sortRules(rules []store.Rule) []store.Rule {
-	out := append([]store.Rule(nil), rules...)
-	sort.SliceStable(out, func(a, b int) bool { return ruleStep(out[a].Target) < ruleStep(out[b].Target) })
+// rank is where a stored rule sits on the path: ads 0, the rule steps 1-4,
+// bypassing mainland China 5; -1 for the other scenes, which Android never
+// switches on.
+func rank(r store.Rule) int {
+	switch r.Kind {
+	case store.KindAds:
+		return 0
+	case store.KindScene:
+		if len(r.Values) > 0 && r.Values[0] == "cn" {
+			return len(ruleSteps) + 1
+		}
+		return -1
+	}
+	return 1 + ruleStep(r.Target)
+}
+
+// placeRule inserts r into the stored rules where the path checks it: after
+// the last rule of its step, else after the last thing checked before that
+// step, else before the first thing checked after it.
+func placeRule(rules []store.Rule, r store.Rule) []store.Rule {
+	k := rank(r)
+	at := -1
+	for i, o := range rules {
+		if rank(o) == k {
+			at = i + 1
+		}
+	}
+	if at < 0 {
+		for i, o := range rules {
+			if q := rank(o); q >= 0 && q < k {
+				at = i + 1
+			}
+		}
+	}
+	if at < 0 {
+		at = len(rules)
+		for i, o := range rules {
+			if rank(o) > k {
+				at = i
+				break
+			}
+		}
+	}
+	return slices.Insert(rules, at, r)
+}
+
+// settleRules keeps the stored order when the rules page saves next: rules
+// that were there keep their place, a changed one (same kind and target,
+// other values) takes the place of the one it replaces, and new ones go
+// where the path checks them (placeRule).
+func settleRules(old, next []store.Rule) []store.Rule {
+	key := func(r store.Rule) string { b, _ := json.Marshal(r); return string(b) }
+	free := map[string][]int{}
+	for i, r := range old {
+		free[key(r)] = append(free[key(r)], i)
+	}
+	used := make([]bool, len(old))
+	pos := make([]int, len(next))
+	for i, r := range next {
+		pos[i] = -1
+		if l := free[key(r)]; len(l) > 0 {
+			pos[i], used[l[0]], free[key(r)] = l[0], true, l[1:]
+		}
+	}
+	for i, r := range next {
+		if pos[i] >= 0 || r.IsStep() {
+			continue
+		}
+		for j, o := range old {
+			if !used[j] && !o.IsStep() && o.Kind == r.Kind && o.Target == r.Target && o.Disabled == r.Disabled {
+				pos[i], used[j] = j, true
+				break
+			}
+		}
+	}
+	idx := make([]int, 0, len(next))
+	for i := range next {
+		if pos[i] >= 0 {
+			idx = append(idx, i)
+		}
+	}
+	sort.SliceStable(idx, func(a, b int) bool { return pos[idx[a]] < pos[idx[b]] })
+	out := make([]store.Rule, 0, len(next))
+	for _, i := range idx {
+		out = append(out, next[i])
+	}
+	for i, r := range next {
+		if pos[i] < 0 {
+			out = placeRule(out, r)
+		}
+	}
 	return out
 }
 
 // scenesToRules turns the desktop app's ready-made scenes (other than
 // bypassing mainland China, which is the home page switch) into ordinary
-// rules, which the Android rules page shows and can edit. It reports whether
+// rules, which the Android rules page shows and can edit. The rules take the
+// scene's place, so the computer checks them as before. It reports whether
 // anything changed.
 func scenesToRules(set *store.Settings) bool {
 	changed := false
@@ -186,14 +290,19 @@ func scenesToRules(set *store.Settings) bool {
 				target = store.TargetProxy
 			}
 			if len(values) > 0 {
-				set.Rules = append(set.Rules, store.Rule{Kind: "geosite", Values: values, Target: target})
+				r := store.Rule{Kind: "geosite", Values: values, Target: target}
+				at := slices.IndexFunc(set.Rules, func(m store.Rule) bool {
+					return m.Kind == store.KindScene && len(m.Values) > 0 && m.Values[0] == sc.ID
+				})
+				if at >= 0 {
+					set.Rules = slices.Insert(set.Rules, at, r)
+				} else {
+					set.Rules = placeRule(set.Rules, r)
+				}
 			}
 		}
 		set.Scenes[i].Enabled = false
 		changed = true
-	}
-	if changed {
-		set.Rules = sortRules(set.Rules)
 	}
 	return changed
 }
@@ -230,7 +339,8 @@ func SetRoute(scope string, bypass bool) error {
 	return s.SaveSettings(set)
 }
 
-// SaveRules replaces the rules (JSON list of store.Rule).
+// SaveRules replaces the rules (JSON list of store.Rule as State gives them,
+// the places of ads and the scenes included).
 func SaveRules(js string) error {
 	s, err := current()
 	if err != nil {
@@ -240,8 +350,13 @@ func SaveRules(js string) error {
 	if err := json.Unmarshal([]byte(js), &rules); err != nil {
 		return err
 	}
+	for i := range rules {
+		if rules[i].IsStep() { // a place only: as store.placeSteps writes it
+			rules[i].Target, rules[i].Disabled = "", false
+		}
+	}
 	set := s.Settings()
-	set.Rules = sortRules(rules)
+	set.Rules = settleRules(set.Rules, rules)
 	return s.SaveSettings(set)
 }
 

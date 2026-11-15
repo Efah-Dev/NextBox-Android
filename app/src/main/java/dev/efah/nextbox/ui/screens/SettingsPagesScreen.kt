@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.BuildConfig
 import dev.efah.nextbox.bg.Notifier
 import dev.efah.nextbox.data.BackupInfo
+import dev.efah.nextbox.data.BackupParts
 import dev.efah.nextbox.data.Prefs
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.Updater
@@ -376,9 +377,10 @@ private fun ColumnScope.AboutPage() {
 // ---------------------------------------------------------------- backup
 
 /**
- * Backups move between NextBox for Android and for Windows: everything is
- * exported, sealed with a password; an import shows what the file holds and
- * then adds to or replaces what is here.
+ * Backups move between NextBox for Android and for Windows, with the same
+ * three parts as the desktop app (nodes, routing rules, other settings),
+ * sealed with a password. An import shows what the file holds and takes the
+ * parts the user ticks.
  */
 @Composable
 private fun ColumnScope.BackupPage() {
@@ -386,6 +388,10 @@ private fun ColumnScope.BackupPage() {
     val ctx = LocalContext.current
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
+    val state by Repo.state.collectAsState()
+    var nodes by remember { mutableStateOf(true) }
+    var rules by remember { mutableStateOf(true) }
+    var other by remember { mutableStateOf(true) }
     var password by remember { mutableStateOf("") }
     var again by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -399,7 +405,7 @@ private fun ColumnScope.BackupPage() {
         if (uri == null) return@rememberLauncherForActivityResult
         busy = true
         scope.launch {
-            Repo.exportBackup(password).onSuccess { out ->
+            Repo.exportBackup(BackupParts(nodes, rules, other, password)).onSuccess { out ->
                 runCatching { ctx.contentResolver.openOutputStream(uri)?.use { it.write(out.toByteArray()) } }
                     .onSuccess { toast(T("已导出备份")); password = ""; again = "" }.onFailure { toast(it.message ?: T("导出失败")) }
             }.onFailure { toast(it.message ?: T("导出失败")) }
@@ -427,10 +433,14 @@ private fun ColumnScope.BackupPage() {
         if (text == null) toast(T("读取文件失败")) else inspect(text, "")
     }
 
+    val nothing = !nodes && !rules && !other
     Note(T("备份文件用密码加密。手机版和 NextBox for Windows 导出的备份可以互相导入。"))
     NbCard {
         Text(T("导出备份"), style = NbType.bodyBold, color = c.text)
-        Text(T("节点、订阅、分流规则和设置"), style = NbType.small, color = c.muted)
+        Spacer(Modifier.height(4.dp))
+        PartRow(nodes, T("节点与订阅"), T("含链式代理和策略组")) { nodes = it }
+        PartRow(rules, T("分流规则"), T("%d 条规则", RuleUi.count(state.settings.rules) { true })) { rules = it }
+        PartRow(other, T("其他设置"), T("主题、DNS、指定应用等")) { other = it }
         val pw = androidx.compose.ui.text.input.PasswordVisualTransformation()
         OutlinedTextField(
             password, { password = it }, singleLine = true, label = { Text(T("密码")) },
@@ -444,10 +454,19 @@ private fun ColumnScope.BackupPage() {
         )
         Button(
             onClick = { exportLauncher.launch("NextBox-" + T("备份") + "-" + java.time.LocalDate.now() + ".json") },
-            enabled = !busy && password.isNotEmpty() && password == again,
+            enabled = !busy && !nothing && password.isNotEmpty() && password == again,
             colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
             modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(48.dp),
-        ) { Text(if (busy) T("正在导出…") else T("保存备份文件…"), fontWeight = FontWeight.Bold) }
+        ) {
+            Text(
+                when {
+                    busy -> T("正在导出…")
+                    nothing -> T("请至少选择一项内容")
+                    else -> T("保存备份文件…")
+                },
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
     NbCard {
         Text(T("导入备份"), style = NbType.bodyBold, color = c.text)
@@ -467,24 +486,43 @@ private fun ColumnScope.BackupPage() {
     }
 
     info?.let { i ->
-        ImportSheet(i, onDismiss = { info = null; pending = null }) { replace ->
+        ImportSheet(i, onDismiss = { info = null; pending = null }) { parts ->
             val text = pending ?: return@ImportSheet
             info = null
             pending = null
             scope.launch {
-                Repo.importBackup(text, pendingPassword, replace)
+                Repo.importBackup(text, parts.copy(password = pendingPassword))
                     .onSuccess { toast(it) }.onFailure { toast(it.message ?: T("恢复失败")) }
             }
         }
     }
 }
 
-/** What a backup holds, what a phone leaves out, and add or replace. */
+/** A part of a backup to tick: a title, what it holds, a checkbox. */
 @Composable
-private fun ImportSheet(i: BackupInfo, onDismiss: () -> Unit, onImport: (replace: Boolean) -> Unit) {
+private fun PartRow(checked: Boolean, title: String, sub: String, onChange: (Boolean) -> Unit) {
     val c = Nb.c
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(10.dp)).clickable { onChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked, onChange, colors = CheckboxDefaults.colors(checkedColor = c.accentStrong))
+        Text(title, style = NbType.body, color = c.text, modifier = Modifier.weight(1f))
+        Text(sub, style = NbType.small.copy(fontSize = 12.5.sp), color = c.muted, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+    }
+}
+
+/** What a backup holds, the parts to take, and whether its nodes are added or replace the list. */
+@Composable
+private fun ImportSheet(i: BackupInfo, onDismiss: () -> Unit, onImport: (BackupParts) -> Unit) {
+    val c = Nb.c
+    var nodes by remember { mutableStateOf(i.hasNodes) }
+    var rules by remember { mutableStateOf(i.hasRules) }
+    // as in the desktop app, the other settings are only taken when ticked
+    var other by remember { mutableStateOf(false) }
     var replace by remember { mutableStateOf(false) }
     val fromOther = i.platform != "android"
+    val any = (nodes && i.hasNodes) || (rules && i.hasRules) || (other && i.hasSettings)
     NbSheet(onDismiss) {
         Text(T("导入这份备份？"), style = NbType.big, color = c.text)
         Text(
@@ -492,59 +530,62 @@ private fun ImportSheet(i: BackupInfo, onDismiss: () -> Unit, onImport: (replace
                 "windows" -> T("来自 NextBox for Windows")
                 "android" -> T("来自 NextBox for Android")
                 else -> T("来源未知")
-            },
+            } + if (i.encrypted) " · " + T("已解密") else "",
             color = c.accentInk, fontSize = 12.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 6.dp, bottom = 14.dp).clip(RoundedCornerShape(8.dp)).background(c.accentSoft).padding(horizontal = 8.dp, vertical = 3.dp),
         )
-        Text(T("会导入"), style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
-        Spacer(Modifier.height(8.dp))
-        NbCard(padding = PaddingValues(0.dp)) {
-            val rows = buildList {
-                if (i.hasNodes) {
-                    add(T("节点") to T("%d 个", i.summary.nodes) + if (i.summary.subscriptions > 0) T("（%d 个订阅）", i.summary.subscriptions) else "")
-                    if (i.summary.chains > 0) add(T("链式代理") to T("%d 个", i.summary.chains))
-                    if (i.summary.policies > 0) add(T("策略组") to T("%d 个", i.summary.policies))
-                }
-                if (i.hasSettings) {
-                    add(T("分流规则") to T("%d 条", i.rules))
-                    add(T("其他设置") to if (fromOther) T("测速、DNS、语言、主题等") else T("全部，包括指定应用"))
-                }
+        NbCard(padding = PaddingValues(start = 4.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)) {
+            if (i.hasNodes) {
+                val s = i.summary
+                PartRow(
+                    nodes, T("节点与订阅"),
+                    T("%d 个节点", s.nodes + s.chains) + (if (s.subscriptions > 0) T("，%d 个订阅", s.subscriptions) else "") +
+                        (if (s.policies > 0) T("，%d 个策略组", s.policies) else ""),
+                ) { nodes = it }
             }
-            rows.forEachIndexed { n, (k, v) ->
-                if (n > 0) androidx.compose.material3.HorizontalDivider(color = c.line, thickness = 1.dp)
-                Row(Modifier.fillMaxWidth().heightIn(min = 46.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(k, style = NbType.body, color = c.text, modifier = Modifier.weight(1f))
-                    Text(v, style = NbType.small.copy(fontSize = 13.sp), color = c.muted)
-                }
-            }
+            if (i.hasRules) PartRow(rules, T("分流规则"), T("%d 条，会替换现有规则", i.rules)) { rules = it }
+            if (i.hasSettings) PartRow(other, T("其他设置"), if (fromOther) T("主题、DNS、测速") else T("全部，包括指定应用")) { other = it }
         }
-        if (fromOther && i.hasSettings) {
-            Spacer(Modifier.height(12.dp))
+        val notes = buildList {
+            if (rules && i.desktopRules > 0) add(T("其中 %d 条按电脑程序分流，只在 Windows 版生效，会原样保留，再导出给电脑时不会丢。", i.desktopRules))
+            if (rules && i.scenes.isNotEmpty()) add(T("电脑上打开的场景（%s）会变成对应的规则，放在原来的位置。", i.scenes.joinToString(T("、")) { sceneName(it) }))
+            if (fromOther && ((rules && i.hasRules) || (other && i.hasSettings))) add(T("全部直连的选择、端口、TUN 等这台手机的设置不会被覆盖。"))
+        }
+        if (notes.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
             NbCard(color = c.line.copy(alpha = 0.35f), border = androidx.compose.ui.graphics.Color.Transparent) {
-                Text(T("手机上用不到，会跳过"), style = NbType.bodyBold.copy(fontSize = 13.sp), color = c.text)
-                Text(
-                    (if (i.skipped > 0) T("%d 条按电脑程序名的规则", i.skipped) + "\n" else "") +
-                        T("端口、TUN、开机自启、系统代理（保留这台手机的设置）"),
-                    style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 4.dp),
-                )
+                notes.forEachIndexed { n, t ->
+                    Text(t, style = NbType.small, color = c.muted, modifier = Modifier.padding(top = if (n > 0) 6.dp else 0.dp))
+                }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        Text(T("怎么导入"), style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
-        Spacer(Modifier.height(8.dp))
-        Segmented(listOf(T("合并到现有"), T("全部替换")), if (replace) 1 else 0, onSelect = { replace = it == 1 }, height = 40.dp)
-        Text(
-            if (replace) T("现有的节点和规则会被备份里的替换。") else T("已有的节点和规则都保留，导入的加在后面。"),
-            style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 6.dp),
-        )
+        if (i.hasNodes && nodes) {
+            Spacer(Modifier.height(14.dp))
+            Text(T("节点怎么导入"), style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
+            Spacer(Modifier.height(8.dp))
+            Segmented(listOf(T("合并到现有节点"), T("替换现有节点")), if (replace) 1 else 0, onSelect = { replace = it == 1 }, height = 40.dp)
+            Text(
+                if (replace) T("现有的分组、节点和策略组会被替换。") else T("已有的订阅不会重复添加。"),
+                style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 6.dp),
+            )
+        }
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             TextButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp)) { Text(T("取消")) }
             Button(
-                onClick = { onImport(replace) },
+                onClick = { onImport(BackupParts(nodes = nodes && i.hasNodes, rules = rules && i.hasRules, settings = other && i.hasSettings, replace = replace)) },
+                enabled = any,
                 colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
                 modifier = Modifier.weight(2f).height(48.dp),
             ) { Text(T("导入"), fontWeight = FontWeight.Bold) }
         }
     }
+}
+
+/** The names the desktop app gives its ready-made scenes. */
+private fun sceneName(id: String): String = when (id) {
+    "ai" -> T("AI 服务")
+    "media" -> T("流媒体")
+    "games" -> T("游戏")
+    else -> id
 }

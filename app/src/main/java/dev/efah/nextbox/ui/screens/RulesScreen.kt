@@ -198,7 +198,7 @@ fun RulesScreen(onClose: () -> Unit, onOpenList: (String) -> Unit, onTest: () ->
 
             RouteSteps.all.forEachIndexed { i, step ->
                 val on = RouteSteps.active(step, direct, s.blockAds, s.bypassCn)
-                val rules = s.rules.filter { RouteSteps.matches(step, it.target) }
+                val rules = s.rules.filter { RuleUi.applies(it) && RouteSteps.matches(step, it.target) }
                 val sub = when {
                     !on && step == RouteSteps.ADS -> T("没开，跳过这一步")
                     !on && step == RouteSteps.CN && !direct -> T("没开，跳过这一步")
@@ -481,8 +481,10 @@ private fun TargetLists(
     onEdit: (RuleItem) -> Unit,
 ) {
     val c = Nb.c
-    val (appItems, sites, ips) = RuleUi.items(rules, target, label)
-    if (appItems.isEmpty() && sites.isEmpty() && ips.isEmpty()) {
+    val (all, sites, ips) = RuleUi.items(rules, target, label)
+    // program rules from NextBox for Windows are listed apart: they do nothing here
+    val (programs, appItems) = all.partition { it.kind == "process" }
+    if (all.isEmpty() && sites.isEmpty() && ips.isEmpty()) {
         if (card) {
             NbCard { Text(T("还没有规则。点右下角「添加」，可以加网站、应用或 IP。"), style = NbType.small, color = c.muted) }
         } else {
@@ -511,8 +513,14 @@ private fun TargetLists(
                 NbCard(padding = PaddingValues(0.dp)) { ItemRows(ips, apps, onEdit) }
             }
         }
+        if (programs.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionLabel(T("电脑程序 · %d", programs.size))
+                NbCard(padding = PaddingValues(0.dp)) { ItemRows(programs, apps, onEdit) }
+            }
+        }
     } else {
-        ItemRows(appItems + sites + ips, apps, onEdit, dividerFirst = true)
+        ItemRows(appItems + sites + ips + programs, apps, onEdit, dividerFirst = true)
     }
 }
 

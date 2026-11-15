@@ -133,12 +133,27 @@ data class BackupInfo(
     val encrypted: Boolean = false,
     val needPassword: Boolean = false,
     val platform: String = "",
+    val version: Int = 0,
     val hasNodes: Boolean = false,
+    val hasRules: Boolean = false,
+    /** Settings other than the routing rules. */
     val hasSettings: Boolean = false,
     val summary: DataSummary = DataSummary(),
     val rules: Int = 0,
-    /** Program rules of the desktop app that a phone cannot use. */
-    val skipped: Int = 0,
+    /** Program rules of the desktop app: kept, but only Windows uses them. */
+    val desktopRules: Int = 0,
+    /** The desktop app's ready-made scenes that are on ("ai", "media", "games"); they become rules. */
+    val scenes: List<String> = emptyList(),
+)
+
+/** The parts of a backup to save or to take from one. */
+@Serializable
+data class BackupParts(
+    val nodes: Boolean = true,
+    val rules: Boolean = true,
+    val settings: Boolean = true,
+    val password: String = "",
+    val replace: Boolean = false,
 )
 
 @Serializable

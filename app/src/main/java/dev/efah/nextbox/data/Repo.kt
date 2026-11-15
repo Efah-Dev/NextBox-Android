@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -250,9 +251,9 @@ object Repo {
 
     suspend fun resetUsage() = call { Nbcore.resetUsage() }
 
-    /** A backup of everything, in the format both NextBox apps read, sealed with the password. */
-    suspend fun exportBackup(password: String): Result<String> = withContext(Dispatchers.IO) {
-        runCatching { Nbcore.exportBackup(password, Prefs.exportJson()) }
+    /** A backup of the chosen parts, in the format both NextBox apps read, sealed with the password. */
+    suspend fun exportBackup(parts: BackupParts): Result<String> = withContext(Dispatchers.IO) {
+        runCatching { Nbcore.exportBackup(NbJson.encodeToString(parts), Prefs.exportJson()) }
     }
 
     suspend fun inspectBackup(content: String, password: String): Result<BackupInfo> = withContext(Dispatchers.IO) {
@@ -262,10 +263,13 @@ object Repo {
     @kotlinx.serialization.Serializable
     private data class ImportResult(val message: String = "", val android: JsonObject? = null)
 
-    /** Imports everything a backup holds (replacing nodes and rules, or adding to them) and returns the message to show. */
-    suspend fun importBackup(content: String, password: String, replace: Boolean): Result<String> {
+    /**
+     * Imports the chosen parts of a backup (nodes added or replacing the list;
+     * rules replacing the current ones) and returns the message to show.
+     */
+    suspend fun importBackup(content: String, parts: BackupParts): Result<String> {
         val r = call {
-            val res = NbJson.decodeFromString<ImportResult>(Nbcore.importBackup(content, password, replace))
+            val res = NbJson.decodeFromString<ImportResult>(Nbcore.importBackup(content, NbJson.encodeToString(parts)))
             res.android?.let { Prefs.importJson(it.toString()) }
             res.message
         }

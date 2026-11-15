@@ -1,6 +1,7 @@
 package config
 
 import (
+	"runtime"
 	"sort"
 	"strings"
 
@@ -73,7 +74,10 @@ func (m *matcher) add(kind string, values []string) {
 		case "process":
 			m.process = append(m.process, v)
 		case "package":
-			m.pkg = append(m.pkg, v)
+			// Android apps: kept in the data everywhere, only matched on Android
+			if runtime.GOOS == "android" {
+				m.pkg = append(m.pkg, v)
+			}
 		}
 	}
 }
@@ -136,18 +140,60 @@ func (m matcher) domainRule() map[string]any {
 }
 
 // Entries lists the routing steps the settings ask for, in the order they
-// are checked: ad blocking (every mode), then in rule mode the user's rules
-// and the enabled scenes. Traffic that matches none goes to the node (global
-// and rule mode) or direct.
+// are checked (LAN addresses, which always go direct, come before them).
+// In rule mode that is the order of Settings.Rules, where ad blocking and
+// each scene have a place of their own (store.KindAds, store.KindScene);
+// in the other modes only ad blocking applies. Traffic that matches none
+// goes to the node (global and rule mode) or direct.
 func Entries(s store.Settings) []Entry {
-	var out []Entry
-	if s.BlockAds {
-		out = append(out, Entry{Source: "ads", Target: store.TargetBlock, matcher: matcher{sets: []string{adsRuleSet}}})
-	}
+	ads := Entry{Source: "ads", Index: -1, Target: store.TargetBlock, matcher: matcher{sets: []string{adsRuleSet}}}
 	if s.RouteMode != "rule" {
-		return out
+		if s.BlockAds {
+			return []Entry{ads}
+		}
+		return nil
 	}
+	enabled := map[string]store.Scene{}
+	for _, sc := range s.Scenes {
+		if sc.Enabled {
+			enabled[sc.ID] = sc
+		}
+	}
+	scene := func(id string, index int) (Entry, bool) {
+		sc, on := enabled[id]
+		d, known := sceneDef(id)
+		if !on || !known {
+			return Entry{}, false
+		}
+		target := sc.Target
+		if id == "cn" || target == "" {
+			target = store.TargetDirect
+		}
+		return Entry{Source: "scene", Index: index, Scene: id, Target: target,
+			matcher: matcher{sets: append([]string(nil), d.Sets...), cidr: append([]string(nil), d.CIDR...)}}, true
+	}
+	var out []Entry
+	adsPlaced := false
+	placed := map[string]bool{}
 	for i, r := range s.Rules {
+		switch r.Kind {
+		case store.KindAds:
+			if !adsPlaced && s.BlockAds {
+				a := ads
+				a.Index = i
+				out = append(out, a)
+			}
+			adsPlaced = true
+			continue
+		case store.KindScene:
+			if len(r.Values) > 0 && !placed[r.Values[0]] {
+				placed[r.Values[0]] = true
+				if e, ok := scene(r.Values[0], i); ok {
+					out = append(out, e)
+				}
+			}
+			continue
+		}
 		if r.Disabled {
 			continue
 		}
@@ -157,23 +203,16 @@ func Entries(s store.Settings) []Entry {
 			out = append(out, e)
 		}
 	}
-	enabled := map[string]store.Scene{}
-	for _, sc := range s.Scenes {
-		if sc.Enabled {
-			enabled[sc.ID] = sc
-		}
+	// settings that were not normalized (store.placeSteps): the order of v2.0
+	if !adsPlaced && s.BlockAds {
+		out = append([]Entry{ads}, out...)
 	}
 	for _, d := range SceneDefs {
-		sc, ok := enabled[d.ID]
-		if !ok {
-			continue
+		if !placed[d.ID] {
+			if e, ok := scene(d.ID, -1); ok {
+				out = append(out, e)
+			}
 		}
-		target := sc.Target
-		if d.ID == "cn" {
-			target = store.TargetDirect
-		}
-		out = append(out, Entry{Source: "scene", Scene: d.ID, Target: target,
-			matcher: matcher{sets: append([]string(nil), d.Sets...), cidr: append([]string(nil), d.CIDR...)}})
 	}
 	return out
 }

@@ -2,16 +2,21 @@ package nbcore
 
 // Backups, in the format NextBox for Windows (2.0+) reads and writes:
 // {"app":"NextBox","version":2,"platform":"android","profiles":<profiles.json>,
-// "settings":<settings.json>}, sealed with a password in the envelope of
-// internal/vault. Settings that only mean something on one system (ports,
-// TUN, autostart, program rules) stay there. Android-only preferences
-// (selected apps, the route scope) travel under "android", which the desktop
-// app ignores.
+// "settings":<settings.json>,"android":{…}}, sealed with a password in the
+// envelope of internal/vault. It mirrors the desktop app's backup.go: the
+// same three parts (nodes, routing rules, other settings), the same keys,
+// and the same rules for a backup from the other system: only the settings
+// that mean the same everywhere come along, the home page's routing choice
+// stays, and rules the other system cannot use (programs there, apps here)
+// are kept as they are so that nothing is lost on the way back.
+// Android-only preferences (selected apps and the like) travel under
+// "android", which the desktop app keeps without reading.
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"nextbox/internal/i18n"
@@ -30,7 +35,7 @@ type backupDoc struct {
 	Android  json.RawMessage `json:"android,omitempty"`
 }
 
-// Settings that mean the same on every platform (see the desktop app).
+// Settings that mean the same on every platform (as in the desktop app).
 var portableSettings = []string{
 	"theme", "accentColor", "language", "lightLevel", "darkLevel", "recentColors",
 	"remoteDns", "directDns", "enableIpv6", "sniff",
@@ -39,10 +44,34 @@ var portableSettings = []string{
 	"countrySource", "autoCheckUpdate",
 }
 
-// ExportBackup makes a backup of everything: nodes, rules and settings, plus
-// the Android-only preferences (android, a JSON object). It is sealed with
-// password unless that is empty.
-func ExportBackup(password, android string) (string, error) {
+// Settings that make up the routing rules (分流规则), as in the desktop app.
+var ruleSettings = []string{
+	"routeMode", "blockAds", "rules", "scenes", "ruleSetMirror",
+	"directRules", "proxyRules", "blockRules", // v1.2 and Android 1.0
+}
+
+// backupOptions says what goes into a backup or is taken from one.
+type backupOptions struct {
+	Nodes    bool   `json:"nodes"`    // groups, nodes, chain proxies, policy groups
+	Rules    bool   `json:"rules"`    // routing rules
+	Settings bool   `json:"settings"` // the other settings, with the Android preferences
+	Password string `json:"password"` // "" = not encrypted (export) / not given yet (import)
+	// Import only: replace the node list instead of adding to it.
+	Replace bool `json:"replace"`
+}
+
+// ExportBackup makes a backup of the parts options (a backupOptions JSON)
+// asks for; android is a JSON object of the Android-only preferences, saved
+// with the other settings. It is sealed with the password unless that is
+// empty.
+func ExportBackup(options, android string) (string, error) {
+	var o backupOptions
+	if err := json.Unmarshal([]byte(options), &o); err != nil {
+		return "", err
+	}
+	if !o.Nodes && !o.Rules && !o.Settings {
+		return "", errors.New(i18n.T("请至少选择一项内容"))
+	}
 	s, err := current()
 	if err != nil {
 		return "", err
@@ -51,23 +80,37 @@ func ExportBackup(password, android string) (string, error) {
 		return "", err
 	}
 	doc := backupDoc{App: "NextBox", Version: 2, Platform: backupPlatform}
-	if doc.Profiles, err = s.ExportData(); err != nil {
-		return "", err
+	if o.Nodes {
+		if doc.Profiles, err = s.ExportData(); err != nil {
+			return "", err
+		}
 	}
-	if doc.Settings, err = json.Marshal(s.Settings()); err != nil {
-		return "", err
+	if o.Rules || o.Settings {
+		raw, err := json.Marshal(s.Settings())
+		if err != nil {
+			return "", err
+		}
+		if !o.Settings {
+			raw, err = pickKeys(raw, ruleSettings)
+		} else if !o.Rules {
+			raw, err = dropKeys(raw, ruleSettings)
+		}
+		if err != nil {
+			return "", err
+		}
+		doc.Settings = raw
 	}
-	if json.Valid([]byte(android)) {
+	if o.Settings && json.Valid([]byte(android)) {
 		doc.Android = json.RawMessage(android)
 	}
 	plain, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return "", err
 	}
-	if password == "" {
+	if o.Password == "" {
 		return string(plain), nil
 	}
-	out, err := vault.Encrypt(plain, password)
+	out, err := vault.Encrypt(plain, o.Password)
 	return string(out), err
 }
 
@@ -111,38 +154,22 @@ func readBackup(content, password string) (doc backupDoc, encrypted bool, err er
 	return doc, encrypted, nil
 }
 
-// backupRules reads the rules of a backup as Android uses them: the desktop
-// app's scenes become rules and program rules ("chrome.exe") are dropped.
-// skipped counts the dropped program names.
-func backupRules(raw json.RawMessage) (set store.Settings, skipped int, err error) {
-	set = store.DefaultSettings()
-	set.Rules = nil
-	if err := json.Unmarshal(raw, &set); err != nil {
-		return set, 0, errors.New(i18n.T("备份里的设置已损坏"))
-	}
-	set.Normalize()
-	kept := set.Rules[:0]
-	for _, r := range set.Rules {
-		if r.Kind == "process" {
-			skipped += len(r.Values)
-			continue
-		}
-		kept = append(kept, r)
-	}
-	set.Rules = kept
-	scenesToRules(&set)
-	return set, skipped, nil
-}
-
 type backupInfo struct {
 	Encrypted    bool              `json:"encrypted"`
 	NeedPassword bool              `json:"needPassword"`
 	Platform     string            `json:"platform"` // "windows", "android" or ""
+	Version      int               `json:"version"`
 	HasNodes     bool              `json:"hasNodes"`
-	HasSettings  bool              `json:"hasSettings"`
+	HasRules     bool              `json:"hasRules"`
+	HasSettings  bool              `json:"hasSettings"` // settings other than the rules
 	Summary      store.DataSummary `json:"summary"`
 	Rules        int               `json:"rules"`
-	Skipped      int               `json:"skipped"` // program rules a phone cannot use
+	// DesktopRules counts the rules by program ("chrome.exe"), which only
+	// the desktop app can use; they are kept anyway.
+	DesktopRules int `json:"desktopRules"`
+	// Scenes lists the desktop app's ready-made scenes that are on ("ai",
+	// "media", "games"); they become rules here.
+	Scenes []string `json:"scenes"`
 }
 
 // InspectBackup describes a backup before it is imported. An encrypted one
@@ -152,12 +179,12 @@ func InspectBackup(content, password string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	info := backupInfo{Encrypted: encrypted}
+	info := backupInfo{Encrypted: encrypted, Scenes: []string{}}
 	if encrypted && password == "" {
 		info.NeedPassword = true
 		return marshal(info)
 	}
-	info.Platform = doc.Platform
+	info.Platform, info.Version = doc.Platform, doc.Version
 	if len(doc.Profiles) > 0 {
 		sum, err := store.SummarizeData(doc.Profiles)
 		if err != nil {
@@ -166,11 +193,39 @@ func InspectBackup(content, password string) (string, error) {
 		info.HasNodes, info.Summary = true, sum
 	}
 	if len(doc.Settings) > 0 {
-		set, skipped, err := backupRules(doc.Settings)
-		if err != nil {
-			return "", err
+		var keys map[string]json.RawMessage
+		if json.Unmarshal(doc.Settings, &keys) != nil {
+			return "", errors.New(i18n.T("备份里的设置已损坏"))
 		}
-		info.HasSettings, info.Rules, info.Skipped = true, len(set.Rules), skipped
+		for k := range keys {
+			if contains(ruleSettings, k) {
+				info.HasRules = true
+			} else {
+				info.HasSettings = true
+			}
+		}
+		set := store.DefaultSettings()
+		set.Rules = nil
+		if json.Unmarshal(doc.Settings, &set) == nil {
+			set.Normalize()
+			for _, r := range set.Rules {
+				switch {
+				case r.IsStep():
+				case r.Kind == "process":
+					info.DesktopRules++
+					info.Rules++
+				default:
+					info.Rules++
+				}
+			}
+			if _, ok := keys["scenes"]; ok {
+				for _, sc := range set.Scenes {
+					if sc.Enabled && sc.ID != "cn" {
+						info.Scenes = append(info.Scenes, sc.ID)
+					}
+				}
+			}
+		}
 	}
 	return marshal(info)
 }
@@ -180,25 +235,30 @@ type importResult struct {
 	Android json.RawMessage `json:"android,omitempty"` // Android preferences to apply
 }
 
-// ImportBackup imports everything a backup holds. replace replaces the nodes
-// and rules; otherwise they are added to what is there.
-func ImportBackup(content, password string, replace bool) (string, error) {
+// ImportBackup imports the parts of a backup that options (a backupOptions
+// JSON) asks for. Nodes are added to the list or replace it; the rules of
+// the backup replace the current ones, as in the desktop app.
+func ImportBackup(content, options string) (string, error) {
+	var o backupOptions
+	if err := json.Unmarshal([]byte(options), &o); err != nil {
+		return "", err
+	}
 	s, err := current()
 	if err != nil {
 		return "", err
 	}
-	doc, encrypted, err := readBackup(content, password)
+	doc, encrypted, err := readBackup(content, o.Password)
 	if err != nil {
 		return "", err
 	}
-	if encrypted && password == "" {
+	if encrypted && o.Password == "" {
 		return "", errors.New(i18n.T("请输入备份密码"))
 	}
 	var done []string
 	var res importResult
 	policyMap := map[int64]int64{}
-	if len(doc.Profiles) > 0 {
-		m, err := s.ImportData(doc.Profiles, replace)
+	if o.Nodes && len(doc.Profiles) > 0 {
+		m, err := s.ImportData(doc.Profiles, o.Replace)
 		if err != nil {
 			return "", fmt.Errorf(i18n.T("导入节点失败: %w"), err)
 		}
@@ -207,82 +267,72 @@ func ImportBackup(content, password string, replace bool) (string, error) {
 		done = append(done, fmt.Sprintf(i18n.T("%d 个节点"), sum.Nodes+sum.Chains))
 	}
 	if len(doc.Settings) > 0 {
-		in, _, err := backupRules(doc.Settings)
-		if err != nil {
-			return "", err
+		// only the parts the backup has: a backup of the other settings must
+		// not clear the rules here (nor turn ad blocking off)
+		var in map[string]json.RawMessage
+		if json.Unmarshal(doc.Settings, &in) != nil {
+			return "", errors.New(i18n.T("备份里的设置已损坏"))
 		}
-		remapPolicies(&in, policyMap)
-		var keys []string // nil: every setting of an Android backup
-		if doc.Platform != backupPlatform {
-			keys = portableSettings
-		}
-		cur := s.Settings()
-		next, err := mergeSettings(cur, doc.Settings, keys)
-		if err != nil {
-			return "", err
-		}
-		// the routing part, the way Android keeps it
-		next.BlockAds = in.BlockAds
-		next.Scenes = in.Scenes
-		next.RouteMode = "rule"
-		if in.RouteMode == "direct" {
-			next.RouteMode = "direct"
-		}
-		if in.RouteMode == "global" { // the desktop app's global mode means "no bypass"
-			for i := range next.Scenes {
-				if next.Scenes[i].ID == "cn" {
-					next.Scenes[i].Enabled = false
-				}
+		hasRules, hasOther := false, false
+		for k := range in {
+			if contains(ruleSettings, k) {
+				hasRules = true
+			} else {
+				hasOther = true
 			}
 		}
-		if replace {
-			next.Rules = in.Rules
-		} else {
-			next.Rules = append(cur.Rules, newRules(cur.Rules, in.Rules)...)
+		o.Rules = o.Rules && hasRules
+		o.Settings = o.Settings && hasOther
+	}
+	if (o.Rules || o.Settings) && len(doc.Settings) > 0 {
+		var keys []string
+		if o.Rules {
+			keys = append(keys, ruleSettings...)
 		}
-		next.Rules = sortRules(next.Rules)
-		if doc.Platform != backupPlatform {
-			// keep this phone's own platform settings whatever the file says
-			next.TunEnabled, next.MixedPort, next.ListenAddress, next.AllowLAN = cur.TunEnabled, cur.MixedPort, cur.ListenAddress, cur.AllowLAN
-			next.SystemProxy, next.CloseToTray, next.AutoStart = false, false, false
+		if o.Settings {
+			if doc.Platform == backupPlatform {
+				keys = nil // everything
+			} else {
+				keys = append(keys, portableSettings...)
+			}
 		}
+		if keys != nil && doc.Platform != backupPlatform {
+			// the routing mode is the home page's choice (all direct or not);
+			// the desktop app's global mode is its own
+			keys = slices.DeleteFunc(keys, func(k string) bool { return k == "routeMode" })
+		}
+		next, err := mergeSettings(s.Settings(), doc.Settings, keys, o.Rules)
+		if err != nil {
+			return "", err
+		}
+		remapPolicies(&next, policyMap)
+		// the desktop app's ready-made scenes become rules the rules page shows
+		scenesToRules(&next)
 		if err := s.SaveSettings(next); err != nil {
 			return "", err
 		}
-		done = append(done, i18n.T("分流规则"), i18n.T("设置"))
-		if len(doc.Android) > 0 && json.Valid(doc.Android) {
-			res.Android = doc.Android
+		if o.Rules {
+			done = append(done, i18n.T("分流规则"))
+		}
+		if o.Settings {
+			done = append(done, i18n.T("设置"))
+			if len(doc.Android) > 0 && json.Valid(doc.Android) {
+				res.Android = doc.Android
+			}
 		}
 	}
 	if len(done) == 0 {
-		return "", errors.New(i18n.T("备份里没有可以导入的内容"))
+		return "", errors.New(i18n.T("备份里没有选中的内容"))
 	}
 	s.Flush()
 	res.Message = i18n.T("已导入：") + strings.Join(done, i18n.T("、"))
 	return marshal(res)
 }
 
-// newRules returns the rules of in that have is missing.
-func newRules(have, in []store.Rule) []store.Rule {
-	seen := map[string]bool{}
-	for _, r := range have {
-		b, _ := json.Marshal(r)
-		seen[string(b)] = true
-	}
-	var out []store.Rule
-	for _, r := range in {
-		b, _ := json.Marshal(r)
-		if !seen[string(b)] {
-			seen[string(b)] = true
-			out = append(out, r)
-		}
-	}
-	return out
-}
-
 // mergeSettings applies the given keys of an imported settings document (all
-// of them for keys == nil).
-func mergeSettings(cur store.Settings, imported json.RawMessage, keys []string) (store.Settings, error) {
+// of them for keys == nil, except the rules unless withRules). It is the
+// desktop app's mergeSettings.
+func mergeSettings(cur store.Settings, imported json.RawMessage, keys []string, withRules bool) (store.Settings, error) {
 	var in map[string]json.RawMessage
 	if err := json.Unmarshal(imported, &in); err != nil {
 		return cur, errors.New(i18n.T("备份里的设置已损坏"))
@@ -291,8 +341,25 @@ func mergeSettings(cur store.Settings, imported json.RawMessage, keys []string) 
 	var out map[string]json.RawMessage
 	json.Unmarshal(b, &out)
 	for k, v := range in {
-		if keys == nil || contains(keys, k) {
-			out[k] = v
+		if keys != nil && !contains(keys, k) {
+			continue
+		}
+		if keys == nil && !withRules && contains(ruleSettings, k) {
+			continue
+		}
+		out[k] = v
+	}
+	// levels of a backup made before the v2.1 scales are converted (see
+	// store.Settings.ThemeScale)
+	_, light := in["lightLevel"]
+	_, dark := in["darkLevel"]
+	if _, scale := in["themeScale"]; (light || dark) && !scale && (keys == nil || contains(keys, "lightLevel")) {
+		out["themeScale"] = json.RawMessage("0")
+	}
+	if withRules {
+		// rules from the backup replace the current ones
+		if _, ok := in["rules"]; !ok {
+			out["rules"] = json.RawMessage("[]")
 		}
 	}
 	b, _ = json.Marshal(out)
@@ -307,15 +374,47 @@ func mergeSettings(cur store.Settings, imported json.RawMessage, keys []string) 
 // remapPolicies points imported rules at the policy groups as they were
 // imported; rules naming a group that did not come along use the node.
 func remapPolicies(s *store.Settings, m map[int64]int64) {
-	for i, r := range s.Rules {
-		if id := store.TargetPolicy(r.Target); id != 0 {
-			if n, ok := m[id]; ok {
-				s.Rules[i].Target = store.PolicyTarget(n)
-			} else {
-				s.Rules[i].Target = store.TargetProxy
-			}
+	fix := func(t string) string {
+		id := store.TargetPolicy(t)
+		if id == 0 {
+			return t
+		}
+		if n, ok := m[id]; ok {
+			return store.PolicyTarget(n)
+		}
+		return store.TargetProxy
+	}
+	for i := range s.Rules {
+		s.Rules[i].Target = fix(s.Rules[i].Target)
+	}
+	for i := range s.Scenes {
+		s.Scenes[i].Target = fix(s.Scenes[i].Target)
+	}
+}
+
+func pickKeys(raw []byte, keys []string) ([]byte, error) {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, err
+	}
+	out := map[string]json.RawMessage{}
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			out[k] = v
 		}
 	}
+	return json.Marshal(out)
+}
+
+func dropKeys(raw []byte, keys []string) ([]byte, error) {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, err
+	}
+	for _, k := range keys {
+		delete(m, k)
+	}
+	return json.Marshal(m)
 }
 
 func contains(list []string, s string) bool {

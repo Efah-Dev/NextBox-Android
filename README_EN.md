@@ -49,7 +49,7 @@
 - 🛡️ **Modes**: VPN, or proxy-only (a local HTTP + SOCKS5 port)
 - 🎨 **Appearance**: Light / dark / system, accent colors; glass effects (blur on Android 12+, refraction on 13+, can be turned off)
 - 🌐 **Languages**: 简体中文, 繁體中文, English
-- 💾 **Backup**: interchangeable with NextBox for Windows: either side imports the other's encrypted backups; a preview before importing, then add to or replace what is there; desktop-only settings (program rules, ports, TUN, start at login) are skipped
+- 💾 **Backup**: interchangeable with NextBox for Windows: either side imports the other's encrypted backups; export nodes and subscriptions, routing rules and other settings, or any of them; a preview before importing, with the parts to take and nodes added or replacing the list; the rule order set on the computer and its program rules are kept, so they go back unchanged; this device's own settings (ports, TUN, start at login) stay
 - 🔄 **Updates**: Check by hand in About (compares with the latest GitHub release), or turn on the automatic check (off by default) to be told about a new version
 - ⚙️ **More**: connect when the app opens (optional); after a crash the error details can be copied for a report
 
