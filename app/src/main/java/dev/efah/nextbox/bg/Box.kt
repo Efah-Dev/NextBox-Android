@@ -40,6 +40,22 @@ object Box {
     internal val _history = MutableStateFlow<List<Speed>>(List(60) { Speed() })
     val history: StateFlow<List<Speed>> = _history.asStateFlow()
 
+    /** A message for the UI, e.g. that another node was picked automatically. */
+    internal val _notice = MutableStateFlow<String?>(null)
+    val notice: StateFlow<String?> = _notice.asStateFlow()
+
+    /** Set when automatic node selection found no working node (why). */
+    internal val _noNode = MutableStateFlow<String?>(null)
+    val noNode: StateFlow<String?> = _noNode.asStateFlow()
+
+    fun clearNotice() {
+        _notice.value = null
+    }
+
+    fun clearNoNode() {
+        _noNode.value = null
+    }
+
     /** Name of the node the running core uses. */
     internal val _nodeName = MutableStateFlow("")
     val nodeName: StateFlow<String> = _nodeName.asStateFlow()

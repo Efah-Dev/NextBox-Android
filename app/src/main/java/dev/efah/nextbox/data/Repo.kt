@@ -51,6 +51,13 @@ object Repo {
         Nbcore.setTimeZone(tz.id, tz.getOffset(System.currentTimeMillis()) / 1000)
         refreshNow()
         Prefs.migrateRoute(_state.value.settings.routeMode)
+        // 1.1.0 moved "bypass mainland China" into the core (the "cn" scene of
+        // the shared rule model): carry the old switch over once.
+        if (!Prefs.shown("route_v2")) {
+            runCatching { Nbcore.setRoute(Prefs.routeScope.value, Prefs.bypassCn.value) }
+            Prefs.markShown("route_v2")
+            refreshNow()
+        }
     }
 
     /** Android-only switches passed to nbcore.BuildConfig. */
@@ -68,9 +75,16 @@ object Repo {
 
     fun buildConfig(): String = Nbcore.buildConfig(ruleSetDir, coreOptions())
 
+    /** Name of the node selected on the home page ("" when none). */
+    fun selectedNodeName(): String = runCatching { Nbcore.selectedNodeName() }.getOrDefault("")
+
     private fun refreshNow() {
         val st = NbJson.decodeFromString<AppState>(Nbcore.state())
         _state.value = st
+        // the switch can also change on the rules page or by importing a backup
+        if (st.settings.bypassCn != Prefs.bypassCn.value) Prefs.setBypassCn(st.settings.bypassCn)
+        if (st.settings.routeMode == "direct" && Prefs.routeScope.value != Prefs.SCOPE_DIRECT) Prefs.setRouteScope(Prefs.SCOPE_DIRECT)
+        if (st.settings.routeMode != "direct" && Prefs.routeScope.value == Prefs.SCOPE_DIRECT) Prefs.setRouteScope(Prefs.SCOPE_GLOBAL)
         _profiles.value = NbJson.decodeFromString<List<Profile>>(Nbcore.profiles(st.currentGroupId))
     }
 
@@ -98,12 +112,9 @@ object Repo {
     suspend fun setRoute(scope: String = Prefs.routeScope.value, bypass: Boolean = Prefs.bypassCn.value): Result<Unit> {
         Prefs.setRouteScope(scope)
         Prefs.setBypassCn(bypass)
-        val mode = when {
-            scope == Prefs.SCOPE_DIRECT -> "direct"
-            bypass -> "rule"
-            else -> "global"
-        }
-        return updateSettings(buildJsonObject { put("routeMode", mode) })
+        val r = call { Nbcore.setRoute(scope, bypass) }
+        if (r.isSuccess) Box.reloadIfRunning()
+        return r
     }
 
     // ---------------------------------------------------------------- groups & nodes
@@ -165,7 +176,11 @@ object Repo {
 
     suspend fun deleteProfiles(ids: Collection<Long>) = call { Nbcore.deleteProfiles(ids.joinToString(",")) }
 
+    /** Sorts the current group by "latency", "name" or "region". */
     suspend fun sortGroup(by: String) = call { Nbcore.sortGroup(_state.value.currentGroupId, by) }
+
+    /** Puts the current group's nodes in the order the user dragged them into. */
+    suspend fun reorderProfiles(ids: List<Long>) = call { Nbcore.reorderProfiles(_state.value.currentGroupId, ids.joinToString(",")) }
 
     suspend fun exportLinks(ids: Collection<Long>): Result<String> = call { Nbcore.exportLinks(ids.joinToString(",")) }
 
@@ -188,7 +203,7 @@ object Repo {
         val (urlIds, tcpIds) = if (Prefs.latencyMode.value == Prefs.TEST_URL) {
             ids to emptyList()
         } else {
-            ids.partition { byId[it]?.type in udpTypes }
+            ids.partition { id -> byId[id]?.let { it.type in udpTypes || (it.type == "naive" && it.outbound["quic"]?.toString() == "true") } == true }
         }
         val s = _state.value.settings
         _testing.value = ids.toSet()
@@ -235,13 +250,117 @@ object Repo {
 
     suspend fun resetUsage() = call { Nbcore.resetUsage() }
 
-    suspend fun backup(): Result<String> = call { Nbcore.backup() }
+    /** A backup of everything, in the format both NextBox apps read, sealed with the password. */
+    suspend fun exportBackup(password: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching { Nbcore.exportBackup(password, Prefs.exportJson()) }
+    }
 
-    suspend fun restore(json: String): Result<Unit> {
-        val r = call { Nbcore.restore(json) }
+    suspend fun inspectBackup(content: String, password: String): Result<BackupInfo> = withContext(Dispatchers.IO) {
+        runCatching { NbJson.decodeFromString<BackupInfo>(Nbcore.inspectBackup(content, password)) }
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class ImportResult(val message: String = "", val android: JsonObject? = null)
+
+    /** Imports everything a backup holds (replacing nodes and rules, or adding to them) and returns the message to show. */
+    suspend fun importBackup(content: String, password: String, replace: Boolean): Result<String> {
+        val r = call {
+            val res = NbJson.decodeFromString<ImportResult>(Nbcore.importBackup(content, password, replace))
+            res.android?.let { Prefs.importJson(it.toString()) }
+            res.message
+        }
+        if (r.isSuccess) {
+            // the core now holds the imported route; make the Android side agree
+            runCatching { Nbcore.setRoute(Prefs.routeScope.value, _state.value.settings.bypassCn) }
+            runCatching { refreshNow() }
+            Box.reloadIfRunning()
+        }
+        return r
+    }
+
+    // ---------------------------------------------------------------- import
+
+    /** What a scanned code, the clipboard or a shared text holds. */
+    fun classify(text: String): Classified =
+        runCatching { NbJson.decodeFromString<Classified>(Nbcore.classify(text)) }.getOrDefault(Classified())
+
+    // ---------------------------------------------------------------- rules
+
+    /** Saves the rules and reloads the core. Their order does not matter: the route path decides it. */
+    suspend fun saveRules(rules: List<Rule>): Result<Unit> {
+        val js = NbJson.encodeToString(kotlinx.serialization.builtins.ListSerializer(Rule.serializer()), rules)
+        val r = call { Nbcore.saveRules(js) }
         if (r.isSuccess) Box.reloadIfRunning()
         return r
     }
+
+    /** Which step of the route path a website or IP (and optionally an app) leaves at. */
+    suspend fun testRoute(input: String, pkg: String = ""): Result<RouteMatch> = withContext(Dispatchers.IO) {
+        runCatching { NbJson.decodeFromString<RouteMatch>(Nbcore.testRoute(ruleSetDir, input, pkg)) }
+    }
+
+    // ---------------------------------------------------------------- policy groups
+
+    private val _policies = MutableStateFlow<List<PolicyView>>(emptyList())
+    val policies: StateFlow<List<PolicyView>> = _policies.asStateFlow()
+
+    suspend fun loadPolicies() = withContext(Dispatchers.IO) {
+        runCatching { _policies.value = NbJson.decodeFromString<List<PolicyView>>(Nbcore.policies()) }
+    }
+
+    suspend fun previewPolicy(p: Policy): List<PolicyNode> = withContext(Dispatchers.IO) {
+        runCatching { NbJson.decodeFromString<List<PolicyNode>>(Nbcore.previewPolicy(NbJson.encodeToString(Policy.serializer(), p))) }
+            .getOrDefault(emptyList())
+    }
+
+    suspend fun savePolicy(p: Policy): Result<Policy> {
+        val r = call { NbJson.decodeFromString<Policy>(Nbcore.savePolicy(NbJson.encodeToString(Policy.serializer(), p))) }
+        loadPolicies()
+        if (r.isSuccess && Nbcore.policyUsed(r.getOrThrow().id)) Box.reloadIfRunning()
+        return r
+    }
+
+    suspend fun deletePolicy(id: Long): Result<Unit> {
+        val used = Nbcore.policyUsed(id)
+        val r = call { Nbcore.deletePolicy(id) }
+        loadPolicies()
+        if (r.isSuccess && used) Box.reloadIfRunning()
+        return r
+    }
+
+    suspend fun selectPolicyNode(id: Long, node: Long): Result<Unit> {
+        val r = call { Nbcore.selectPolicyNode(id, node) }
+        loadPolicies()
+        if (r.isSuccess && Nbcore.policyUsed(id)) Box.reloadIfRunning()
+        return r
+    }
+
+    /** The regions a policy group can pick, in the desktop app's order. */
+    val places: List<Place> by lazy {
+        runCatching { NbJson.decodeFromString<List<Place>>(Nbcore.places()) }.getOrDefault(emptyList())
+    }
+
+    // ---------------------------------------------------------------- chains & all nodes
+
+    /** Every node of every group (for pickers). */
+    suspend fun allProfiles(): List<Profile> = withContext(Dispatchers.IO) {
+        runCatching { NbJson.decodeFromString<List<Profile>>(Nbcore.profiles(0)) }.getOrDefault(emptyList())
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class ChainInput(val id: Long, val groupId: Long, val name: String, val chain: List<Long>)
+
+    suspend fun saveChain(id: Long, groupId: Long, name: String, chain: List<Long>): Result<Profile> {
+        val r = call {
+            NbJson.decodeFromString<Profile>(Nbcore.saveChain(NbJson.encodeToString(ChainInput.serializer(), ChainInput(id, groupId, name, chain))))
+        }
+        if (r.isSuccess && r.getOrThrow().id == _state.value.selectedId) Box.reloadIfRunning()
+        return r
+    }
+
+    /** Names of the chain proxies that would break if these nodes were deleted. */
+    fun chainsUsing(ids: Collection<Long>): List<String> =
+        runCatching { Nbcore.chainsUsing(ids.joinToString(",")).lines().filter { it.isNotBlank() } }.getOrDefault(emptyList())
 
     suspend fun updateRuleSets(): Result<String> = call { Nbcore.updateRuleSets(ruleSetDir, Box.subscriptionProxy()) }
 }

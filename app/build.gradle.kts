@@ -17,8 +17,8 @@ android {
         minSdk = 29
         targetSdk = 37
         // major.minor.patch -> major * 10000 + minor * 100 + patch
-        versionCode = 10001
-        versionName = "1.0.1"
+        versionCode = 10100
+        versionName = "1.1.0"
         base.archivesName.set("NextBox-$versionName")
     }
 
@@ -74,6 +74,13 @@ android {
         // Compressed native libraries: a smaller APK to download.
         jniLibs { useLegacyPackaging = true }
         resources { excludes += setOf("META-INF/*.version", "META-INF/**/LICENSE*", "kotlin/**", "DebugProbesKt.bin") }
+    }
+
+    lint {
+        // Calling an API the phone does not have crashes the app (1.0.x crashed on
+        // Android 10-12 that way): make the release build fail instead.
+        fatal += "NewApi"
+        checkReleaseBuilds = true
     }
 
     dependenciesInfo {

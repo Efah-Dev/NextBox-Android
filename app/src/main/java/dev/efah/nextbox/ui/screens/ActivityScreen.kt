@@ -25,8 +25,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -94,7 +92,7 @@ private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
 /** Live connections and core logs, streamed from the command server while visible. */
 @Composable
-fun ActivityScreen() {
+fun ActivityScreen(onShowPath: (host: String, pkg: String) -> Unit) {
     val c = Nb.c
     val status by Core.status.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
@@ -114,7 +112,8 @@ fun ActivityScreen() {
 
             override fun writeLogs(messageList: LogIterator?) {
                 val it = messageList ?: return
-                val batch = buildList { while (it.hasNext()) it.next().let { e -> add(LogLine(e.level, e.message)) } }
+                // the core streams every level; the page shows warnings and errors only (0 panic … 3 warn)
+                val batch = buildList { while (it.hasNext()) it.next().let { e -> if (e.level <= 3) add(LogLine(e.level, e.message)) } }
                 main.post {
                     logs.addAll(batch)
                     if (logs.size > 500) logs.removeRange(0, logs.size - 500)
@@ -187,7 +186,7 @@ fun ActivityScreen() {
         AnimatedContent(tab, modifier = Modifier.fillMaxSize(), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "act") { t ->
             when {
                 status != Status.Started -> EmptyHint(modifier = Modifier.padding(pad), title = T("未连接"), sub = T("连接后可以在这里查看实时连接和日志"))
-                t == 0 -> ConnectionList(conns.values.sortedByDescending { it.createdAt }, pad) { id -> runCatching { client?.closeConnection(id) } }
+                t == 0 -> ConnectionList(conns.values.sortedByDescending { it.createdAt }, pad, onShowPath) { id -> runCatching { client?.closeConnection(id) } }
                 else -> LogList(logs, pad)
             }
         }
@@ -195,7 +194,7 @@ fun ActivityScreen() {
 }
 
 @Composable
-private fun ConnectionList(list: List<Conn>, pad: PaddingValues, onClose: (String) -> Unit) {
+private fun ConnectionList(list: List<Conn>, pad: PaddingValues, onShowPath: (String, String) -> Unit, onClose: (String) -> Unit) {
     if (list.isEmpty()) {
         EmptyHint(T("暂无连接"), T("有应用联网时会显示在这里"), Modifier.padding(pad))
         return
@@ -205,15 +204,13 @@ private fun ConnectionList(list: List<Conn>, pad: PaddingValues, onClose: (Strin
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = pad.calculateBottomPadding() + 16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (!showApps) {
-            item(key = "hint") {
-                Text(
-                    T("想看到每个连接来自哪个应用，可以在「设置 → 性能」里打开「显示连接所属应用」。"),
-                    style = NbType.small, color = Nb.c.muted, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
-                )
-            }
+        item(key = "hint") {
+            Text(
+                T("点一条连接，可以把它的网站或应用加进分流规则。") + if (showApps) "" else "\n" + T("想看到每个连接来自哪个应用，可以在「设置 → 高级」里打开「显示连接所属应用」。"),
+                style = NbType.small, color = Nb.c.muted, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+            )
         }
-        items(list, key = { it.id }) { x -> ConnRow(x, Modifier.animateItem(), onClose) }
+        items(list, key = { it.id }) { x -> ConnRow(x, Modifier.animateItem(), onShowPath, onClose) }
     }
 }
 
@@ -221,7 +218,7 @@ private val iconCache = HashMap<String, Drawable?>()
 private val labelCache = HashMap<String, String>()
 
 @Composable
-private fun ConnRow(x: Conn, modifier: Modifier, onClose: (String) -> Unit) {
+private fun ConnRow(x: Conn, modifier: Modifier, onShowPath: (String, String) -> Unit, onClose: (String) -> Unit) {
     val c = Nb.c
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
@@ -232,7 +229,7 @@ private fun ConnRow(x: Conn, modifier: Modifier, onClose: (String) -> Unit) {
         withContext(Dispatchers.IO) {
             runCatching {
                 val pm = ctx.packageManager
-                val info = pm.getApplicationInfo(x.pkg, PackageManager.ApplicationInfoFlags.of(0))
+                val info = InstalledApps.info(pm, x.pkg)
                 labelCache[x.pkg] = pm.getApplicationLabel(info).toString()
                 iconCache[x.pkg] = pm.getApplicationIcon(info)
             }
@@ -243,7 +240,7 @@ private fun ConnRow(x: Conn, modifier: Modifier, onClose: (String) -> Unit) {
     val proxied = x.outbound != "direct"
     Box(modifier) {
         NbCard(padding = PaddingValues(horizontal = 12.dp, vertical = 10.dp), radius = 16.dp) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true })) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.combinedClickable(onClick = { menu = true }, onLongClick = { menu = true })) {
                 Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(c.accentSoft), contentAlignment = Alignment.Center) {
                     val d = icon
                     if (d != null) {
@@ -270,8 +267,12 @@ private fun ConnRow(x: Conn, modifier: Modifier, onClose: (String) -> Unit) {
                 }
             }
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text(T("断开这个连接")) }, onClick = { menu = false; onClose(x.id) })
+        if (menu) {
+            val host = hostOf(x.destination)
+            ConnectionRuleSheet(
+                host = host, pkg = x.pkg, appLabel = label, proxied = proxied,
+                onShowPath = { onShowPath(host, x.pkg) }, onDisconnect = { onClose(x.id) }, onDismiss = { menu = false },
+            )
         }
     }
 }

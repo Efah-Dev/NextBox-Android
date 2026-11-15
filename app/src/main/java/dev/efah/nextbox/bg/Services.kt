@@ -104,6 +104,8 @@ class VpnBoxService : VpnService(), Platform {
     }
 }
 
+// only called on Android 13+, where VpnService.Builder takes IpPrefix routes
+@androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.TIRAMISU)
 private fun RoutePrefix.toIpPrefix() = IpPrefix(InetAddress.getByName(address()), prefix())
 
 /** Proxy-only mode: just the local mixed (HTTP + SOCKS5) port, no VPN. */

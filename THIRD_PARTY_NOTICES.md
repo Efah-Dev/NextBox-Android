@@ -9,6 +9,8 @@ It includes the following third-party software.
 |---|---|---|---|
 | sing-box (proxy core, `experimental/libbox`) | 1.14.4 | GPL-3.0-or-later, with an additional naming clause (see below) | https://github.com/SagerNet/sing-box/tree/v1.14.4 |
 | gomobile bindings (`github.com/sagernet/gomobile`) | 0.1.12 | BSD-3-Clause | https://github.com/SagerNet/gomobile |
+| cronet-go (NaiveProxy outbound, `with_naive_outbound`) | 0.0.0-20260912104727 | GPL-3.0-or-later | https://github.com/SagerNet/cronet-go |
+| Cronet (Chromium network stack, statically linked by cronet-go) | as built by cronet-go | BSD-3-Clause (Chromium) | https://chromium.googlesource.com/chromium/src/+/main/components/cronet/ |
 | Other Go modules (see `core/go.mod` / `core/go.sum`) | — | MIT / BSD / Apache-2.0 / MPL-2.0 | — |
 
 sing-box is used **without modification** from the official module `github.com/sagernet/sing-box v1.14.4`;

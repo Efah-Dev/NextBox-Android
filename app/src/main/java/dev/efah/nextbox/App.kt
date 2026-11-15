@@ -19,6 +19,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         app = this
+        CrashLog.install()
         Prefs.init(this)
         Repo.init(this)
         Lang.apply(Prefs.language.value)

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,8 +41,10 @@ func current() (*store.Store, error) {
 }
 
 // Open loads (or creates) the data files in dir. A fresh install starts in
-// VPN mode with every connection proxied ("global"); bypassing mainland China
-// is opt-in on Android.
+// VPN mode with every connection proxied: rule mode with no rules and no
+// scene on (bypassing mainland China is opt-in on Android). Android keeps the
+// core in rule mode except for "all direct", so that the user's rules apply in
+// both "global" and "selected apps".
 func Open(dir string) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -55,11 +58,20 @@ func Open(dir string) error {
 	}
 	if errors.Is(statErr, os.ErrNotExist) {
 		set := s.Settings()
-		set.RouteMode = "global"
+		set.RouteMode = "rule"
+		for i := range set.Scenes {
+			set.Scenes[i].Enabled = false
+		}
 		set.TunEnabled = true
 		set.SystemProxy = false
 		set.CloseToTray = false
 		set.MixedPort = 2080
+		if err := s.SaveSettings(set); err != nil {
+			return err
+		}
+	}
+	// scenes from a desktop backup become rules the rules page can show
+	if set := s.Settings(); scenesToRules(&set) {
 		if err := s.SaveSettings(set); err != nil {
 			return err
 		}
@@ -223,7 +235,7 @@ func UpdateSubscription(groupID int64, proxy string) (string, error) {
 	for _, n := range res.Nodes {
 		profiles = append(profiles, store.Profile{Name: n.Name, Type: n.Type(), Outbound: n.Outbound})
 	}
-	if err := s.ReplaceGroupProfiles(groupID, profiles); err != nil {
+	if err := s.ReplaceGroupProfiles(groupID, profiles, g.ManualOrder); err != nil {
 		return "", err
 	}
 	g, _ = s.Group(groupID)
@@ -239,13 +251,19 @@ func UpdateSubscription(groupID int64, proxy string) (string, error) {
 
 // ---------------------------------------------------------------- profiles
 
-// Profiles lists the nodes of a group (0 = all groups).
+// Profiles lists the nodes of a group (0 = all groups); chain proxies carry
+// their members (see profileView).
 func Profiles(groupID int64) (string, error) {
 	s, err := current()
 	if err != nil {
 		return "", err
 	}
-	return marshal(s.Profiles(groupID))
+	list := s.Profiles(groupID)
+	out := make([]profileView, 0, len(list))
+	for _, p := range list {
+		out = append(out, viewOf(s, p))
+	}
+	return marshal(out)
 }
 
 func Profile(id int64) (string, error) {
@@ -257,7 +275,7 @@ func Profile(id int64) (string, error) {
 	if !ok {
 		return "", errors.New(i18n.T("节点不存在"))
 	}
-	return marshal(p)
+	return marshal(viewOf(s, p))
 }
 
 func SetSelected(id int64) error {
@@ -315,10 +333,18 @@ func SaveProfile(js string) (string, error) {
 	}
 	if p.ID != 0 {
 		if old, ok := s.Profile(p.ID); ok {
-			p.Latency, p.LatencyError, p.TestedAt = old.Latency, old.LatencyError, old.TestedAt
+			if old.IsChain() {
+				return "", errors.New(i18n.T("链式代理请在链式代理编辑页修改"))
+			}
+			p.GroupID = old.GroupID
 			p.Upload, p.Download = old.Upload, old.Download
+			if sameOutbound(old.Outbound, p.Outbound) {
+				p.Latency, p.LatencyError, p.LatencyKind, p.TestedAt = old.Latency, old.LatencyError, old.LatencyKind, old.TestedAt
+				p.Country, p.CountryIP, p.CountrySource, p.CountryAt = old.Country, old.CountryIP, old.CountrySource, old.CountryAt
+			}
 		}
 	}
+	p.Chain = nil
 	saved, err := s.SaveProfile(p)
 	if err != nil {
 		return "", err
@@ -335,13 +361,39 @@ func DeleteProfiles(ids string) error {
 	return s.DeleteProfiles(parseIDs(ids))
 }
 
-// SortGroup sorts a group by "name", "type" or "latency".
+// SortGroup sorts a group by "name", "type", "latency" or "region" (nodes of
+// one region together, regions by code, unknown last).
 func SortGroup(groupID int64, by string) error {
 	s, err := current()
 	if err != nil {
 		return err
 	}
-	return s.SortGroup(groupID, by)
+	if by != "region" {
+		return s.SortGroup(groupID, by)
+	}
+	list := s.Profiles(groupID)
+	key := func(p store.Profile) string {
+		if r := regionOf(p); r != "" {
+			return r
+		}
+		return "~"
+	}
+	sort.SliceStable(list, func(a, b int) bool { return key(list[a]) < key(list[b]) })
+	ids := make([]int64, len(list))
+	for i, p := range list {
+		ids[i] = p.ID
+	}
+	return s.ReorderProfiles(groupID, ids)
+}
+
+// ReorderProfiles puts the nodes of a group in the given order (comma
+// separated ids), as dragged by the user.
+func ReorderProfiles(groupID int64, ids string) error {
+	s, err := current()
+	if err != nil {
+		return err
+	}
+	return s.ReorderProfiles(groupID, parseIDs(ids))
 }
 
 // ExportLinks returns the share links of the given nodes, one per line.
@@ -359,75 +411,6 @@ func ExportLinks(ids string) (string, error) {
 		lines = append(lines, l)
 	}
 	return strings.Join(lines, "\n"), nil
-}
-
-// ---------------------------------------------------------------- backup
-
-type backup struct {
-	App      string          `json:"app"`
-	Version  int             `json:"version"`
-	Profiles json.RawMessage `json:"profiles"`
-	Settings json.RawMessage `json:"settings"`
-}
-
-// Backup returns profiles.json and settings.json bundled in one JSON document.
-func Backup() (string, error) {
-	s, err := current()
-	if err != nil {
-		return "", err
-	}
-	if err := Flush(); err != nil {
-		return "", err
-	}
-	profiles, err := os.ReadFile(filepath.Join(s.Dir, "profiles.json"))
-	if err != nil {
-		return "", err
-	}
-	settings, err := os.ReadFile(filepath.Join(s.Dir, "settings.json"))
-	if err != nil {
-		return "", err
-	}
-	return marshal(backup{App: "NextBox", Version: 1, Profiles: profiles, Settings: settings})
-}
-
-// Restore replaces all data with a backup made by Backup. Plain Windows
-// profiles.json content is accepted as well (settings are then kept).
-func Restore(js string) error {
-	s, err := current()
-	if err != nil {
-		return err
-	}
-	var b backup
-	if err := json.Unmarshal([]byte(js), &b); err != nil {
-		return err
-	}
-	profiles, settings := b.Profiles, b.Settings
-	if len(profiles) == 0 {
-		var probe struct {
-			Profiles []json.RawMessage `json:"profiles"`
-		}
-		if json.Unmarshal([]byte(js), &probe) != nil || probe.Profiles == nil {
-			return errors.New(i18n.T("不是有效的备份文件"))
-		}
-		profiles = json.RawMessage(js)
-	}
-	dir := s.Dir
-	if err := os.WriteFile(filepath.Join(dir, "profiles.json"), profiles, 0o644); err != nil {
-		return err
-	}
-	if len(settings) > 0 {
-		if err := os.WriteFile(filepath.Join(dir, "settings.json"), settings, 0o644); err != nil {
-			return err
-		}
-	}
-	reopened, err := store.Open(dir)
-	if err != nil {
-		return err
-	}
-	mu.Lock()
-	st = reopened
-	mu.Unlock()
-	return nil
 }
 
 // ---------------------------------------------------------------- helpers

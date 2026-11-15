@@ -114,6 +114,7 @@ private fun RouteSection(onPickApps: () -> Unit) {
     val routeScope by Prefs.routeScope.collectAsState()
     val bypass by Prefs.bypassCn.collectAsState()
     val apps by Prefs.perAppList.collectAsState()
+    val appMode by Prefs.perAppMode.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Segmented(scopes.map { T(it.second) }, scopes.indexOfFirst { it.first == routeScope }, onSelect = { i ->
             val target = scopes[i].first
@@ -133,7 +134,11 @@ private fun RouteSection(onPickApps: () -> Unit) {
                     Text(T("绕过中国大陆"), style = NbType.body, color = if (enabled) c.text else c.muted)
                     Text(
                         when (routeScope) {
-                            Prefs.SCOPE_APPS -> if (apps.isEmpty()) T("还没有选择应用") else T("已选 %d 个应用", apps.size) + if (bypass) T(" · 国内网站直连") else ""
+                            Prefs.SCOPE_APPS -> when {
+                                apps.isEmpty() -> T("还没有选择应用")
+                                appMode == Prefs.APPS_EXCLUDE -> T("排除 %d 个应用，其余走代理", apps.size)
+                                else -> T("已选 %d 个应用", apps.size)
+                            } + if (bypass) T(" · 国内网站直连") else ""
                             Prefs.SCOPE_DIRECT -> T("全部直连时不需要")
                             else -> if (bypass) T("国内网站和 IP 直连，其余走代理") else T("所有流量都走代理")
                         },

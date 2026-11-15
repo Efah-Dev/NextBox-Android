@@ -90,6 +90,11 @@ import dev.efah.nextbox.ui.screens.RulesScreen
 import dev.efah.nextbox.ui.screens.ScanScreen
 import dev.efah.nextbox.ui.screens.SettingsScreen
 import dev.efah.nextbox.ui.screens.UsageScreen
+import dev.efah.nextbox.ui.screens.ChainEditorScreen
+import dev.efah.nextbox.ui.screens.PolicyEditorScreen
+import dev.efah.nextbox.ui.screens.RuleListScreen
+import dev.efah.nextbox.ui.screens.RouteTestScreen
+import dev.efah.nextbox.ui.screens.SettingsPageScreen
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NextBoxTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -104,11 +109,19 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 private sealed interface Overlay {
-    data class Editor(val id: Long) : Overlay
+    data class Editor(val id: Long, val type: String = "vless") : Overlay
     data object PerApp : Overlay
     data object Rules : Overlay
     data object Scan : Overlay
+    data class RuleList(val page: String) : Overlay
+    data class RouteTest(val host: String, val pkg: String) : Overlay
+    data class Policy(val id: Long) : Overlay
+    data class Chain(val id: Long, val exit: Long = 0) : Overlay
+    data class Page(val key: String) : Overlay
 }
+
+/** Set once "connect when the app opens" has run in this process. */
+private var autoConnectDone = false
 
 class MainActivity : ComponentActivity() {
     /** Intents that arrive while the UI is running (share links, notification buttons). */
@@ -144,7 +157,19 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
-    var overlay by remember { mutableStateOf<Overlay?>(null) }
+    // pages opened on top of the tabs, last one shown; Back closes the top one
+    val stack = remember { androidx.compose.runtime.mutableStateListOf<Overlay>() }
+    val overlay = stack.lastOrNull()
+    var forward by remember { mutableStateOf(true) }
+    fun open(o: Overlay) {
+        forward = true
+        stack.add(o)
+    }
+    fun close() {
+        forward = false
+        if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex)
+    }
+    var subDialog by remember { mutableStateOf<dev.efah.nextbox.data.Classified?>(null) }
     var notifyGuide by remember { mutableStateOf(false) }
     var externalImport by remember { mutableStateOf<String?>(null) }
     val toast: (String) -> Unit = { msg -> scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(msg) } }
@@ -196,9 +221,19 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
         connectNow()
     }
 
-    fun import(text: String) {
+    fun importNodes(text: String) {
         scope.launch {
-            Repo.importText(text).onSuccess { toast(it); tab = Tab.Nodes }.onFailure { toast(it.message ?: T("导入失败")) }
+            Repo.importText(text).onSuccess { toast(it); stack.clear(); tab = Tab.Nodes }.onFailure { toast(it.message ?: T("导入失败")) }
+        }
+    }
+
+    /** Scanned codes, the clipboard and shared text: a subscription address is offered as one. */
+    fun import(text: String) {
+        val what = Repo.classify(text)
+        when (what.kind) {
+            "subscription" -> subDialog = what
+            "nodes" -> importNodes(text)
+            else -> toast(T("没有找到可以导入的节点或订阅"))
         }
     }
 
@@ -206,6 +241,18 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
         val text = App.clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(activity)?.toString().orEmpty()
         if (text.isBlank()) toast(T("剪贴板是空的")) else import(text)
     }
+
+    // "Connect when the app opens": only for a launch by the user, once per process
+    LaunchedEffect(Unit) {
+        val launched = activity.intent?.action == Intent.ACTION_MAIN
+        if (launched && Prefs.autoConnect.value && !autoConnectDone && Core.status.value == dev.efah.nextbox.bg.Status.Stopped) {
+            autoConnectDone = true
+            if (Repo.state.value.selectedId != 0L || Repo.state.value.settings.routeMode == "direct") connect()
+        }
+    }
+
+    // a crash last time: offer the details (helps with reports from phones we cannot test on)
+    var crash by remember { mutableStateOf(dev.efah.nextbox.CrashLog.pending()) }
 
     LaunchedEffect(Unit) {
         intents.collect { intent ->
@@ -216,8 +263,16 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                 intent.action == Intent.ACTION_VIEW && intent.data != null -> externalImport = intent.data.toString()
                 intent.action == Intent.ACTION_SEND -> externalImport = intent.getStringExtra(Intent.EXTRA_TEXT)
             }
+            // a subscription address gets its own confirmation (with a name)
+            externalImport?.let { text ->
+                val what = Repo.classify(text)
+                if (what.kind == "subscription") {
+                    externalImport = null
+                    subDialog = what
+                }
+            }
             when (intent.getStringExtra(MainActivity.EXTRA_TAB)) {
-                "nodes" -> { overlay = null; tab = Tab.Nodes }
+                "nodes" -> { stack.clear(); tab = Tab.Nodes }
             }
             if (intent.getBooleanExtra(MainActivity.EXTRA_CONNECT, false)) connect()
         }
@@ -225,9 +280,17 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
 
     val error by Core.error.collectAsState()
     LaunchedEffect(error) { error?.let { toast(T("连接失败：") + it) } }
+    val notice by Core.notice.collectAsState()
+    LaunchedEffect(notice) {
+        notice?.let {
+            toast(it)
+            Core.clearNotice()
+        }
+    }
+    val noNode by Core.noNode.collectAsState()
 
     BackHandler(enabled = overlay != null || tab != Tab.Home) {
-        if (overlay != null) overlay = null else tab = Tab.Home
+        if (overlay != null) close() else tab = Tab.Home
     }
 
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -238,7 +301,7 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
             AnimatedContent(
                 targetState = overlay,
                 transitionSpec = {
-                    if (targetState != null) {
+                    if (forward) {
                         (slideInHorizontally(tween(260)) { it / 3 } + fadeIn(tween(200))) togetherWith fadeOut(tween(150))
                     } else {
                         fadeIn(tween(200)) togetherWith (slideOutHorizontally(tween(240)) { it / 3 } + fadeOut(tween(200)))
@@ -251,12 +314,22 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                         GlowBackground(strength = 0.6f)
                         CompositionLocalProvider(LocalBottomInset provides navInset) {
                             when (ov) {
-                                is Overlay.Editor -> NodeEditorScreen(ov.id) { overlay = null }
-                                Overlay.PerApp -> PerAppScreen { overlay = null }
-                                Overlay.Rules -> RulesScreen { overlay = null }
+                                is Overlay.Editor -> NodeEditorScreen(ov.id, ov.type) { close() }
+                                Overlay.PerApp -> PerAppScreen { close() }
+                                Overlay.Rules -> RulesScreen(
+                                    onClose = { close() },
+                                    onOpenList = { open(Overlay.RuleList(it)) },
+                                    onTest = { open(Overlay.RouteTest("", "")) },
+                                    onPerApp = { open(Overlay.PerApp) },
+                                )
+                                is Overlay.RuleList -> RuleListScreen(ov.page, onClose = { close() }, onEditPolicy = { open(Overlay.Policy(it)) })
+                                is Overlay.RouteTest -> RouteTestScreen(ov.host, ov.pkg) { close() }
+                                is Overlay.Policy -> PolicyEditorScreen(ov.id) { close() }
+                                is Overlay.Chain -> ChainEditorScreen(ov.id, ov.exit) { close() }
+                                is Overlay.Page -> SettingsPageScreen(ov.key) { close() }
                                 Overlay.Scan -> ScanScreen(
-                                    onResult = { text -> overlay = null; import(text) },
-                                    onClose = { overlay = null },
+                                    onResult = { text -> close(); import(text) },
+                                    onClose = { close() },
                                 )
                             }
                         }
@@ -278,18 +351,24 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                                     when (t) {
                                         Tab.Home -> HomeScreen(
                                             onConnect = ::connect, onOpenNodes = { tab = Tab.Nodes },
-                                            onImport = ::importClipboard, onPickApps = { overlay = Overlay.PerApp },
+                                            onImport = ::importClipboard, onPickApps = { open(Overlay.PerApp) },
                                         )
                                         Tab.Nodes -> NodesScreen(
-                                            onEdit = { overlay = Overlay.Editor(it) },
+                                            onEdit = { id ->
+                                                val chain = Repo.profiles.value.firstOrNull { it.id == id }?.isChain == true
+                                                open(if (chain) Overlay.Chain(id) else Overlay.Editor(id))
+                                            },
+                                            onNew = { type -> open(Overlay.Editor(0, type)) },
                                             onImportClipboard = ::importClipboard,
-                                            onScan = { overlay = Overlay.Scan },
+                                            onScan = { open(Overlay.Scan) },
+                                            onNewChain = { exit -> open(Overlay.Chain(0, exit)) },
                                         )
                                         Tab.Usage -> UsageScreen()
-                                        Tab.Activity -> ActivityScreen()
+                                        Tab.Activity -> ActivityScreen(onShowPath = { host, pkg -> open(Overlay.RouteTest(host, pkg)) })
                                         Tab.Settings -> SettingsScreen(
-                                            onPerApp = { overlay = Overlay.PerApp },
-                                            onRules = { overlay = Overlay.Rules },
+                                            onPerApp = { open(Overlay.PerApp) },
+                                            onRules = { open(Overlay.Rules) },
+                                            onOpen = { open(Overlay.Page(it)) },
                                         )
                                     }
                                 }
@@ -348,6 +427,47 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                     }) { Text(T("下载")) }
                 },
                 dismissButton = { TextButton(onClick = { Updater.close(later = true) }) { Text(T("以后再说")) } },
+            )
+        }
+
+        subDialog?.let { sub -> SubscriptionDialog(sub, onDismiss = { subDialog = null }, onAsNode = { subDialog = null; importNodes(sub.url) }) { name ->
+            subDialog = null
+            scope.launch {
+                toast(T("正在下载订阅…"))
+                Repo.addSubscription(name, sub.url).onSuccess { toast(it); stack.clear(); tab = Tab.Nodes }.onFailure { toast(it.message ?: T("添加失败")) }
+            }
+        } }
+
+        noNode?.let { msg ->
+            NbAlertDialog(
+                onDismissRequest = { Core.clearNoNode() },
+                title = { Text(T("没有可用的节点")) },
+                text = { Text(msg) },
+                confirmButton = { TextButton(onClick = { Core.clearNoNode() }) { Text(T("知道了")) } },
+                dismissButton = {
+                    TextButton(onClick = {
+                        Core.clearNoNode()
+                        stack.clear()
+                        tab = Tab.Nodes
+                    }) { Text(T("去节点页")) }
+                },
+            )
+        }
+
+        crash?.let { report ->
+            NbAlertDialog(
+                onDismissRequest = { dev.efah.nextbox.CrashLog.clear(); crash = null },
+                title = { Text(T("NextBox 上次异常退出了")) },
+                text = { Text(T("可以复制错误信息，反馈到 GitHub Issues，帮助我们修复。")) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        dev.efah.nextbox.ui.screens.copyToClipboard(report)
+                        dev.efah.nextbox.CrashLog.clear()
+                        crash = null
+                        toast(T("已复制错误信息"))
+                    }) { Text(T("复制")) }
+                },
+                dismissButton = { TextButton(onClick = { dev.efah.nextbox.CrashLog.clear(); crash = null }) { Text(T("忽略")) } },
             )
         }
 
@@ -423,4 +543,32 @@ private fun GlassNavBar(tab: Tab, backdrop: Backdrop, onSelect: (Tab) -> Unit, m
             }
         }
     }
+}
+
+/** A subscription address found by the scanner, in the clipboard or in a shared link. */
+@Composable
+private fun SubscriptionDialog(sub: dev.efah.nextbox.data.Classified, onDismiss: () -> Unit, onAsNode: () -> Unit, onAdd: (String) -> Unit) {
+    val c = Nb.c
+    var name by remember { mutableStateOf(sub.name) }
+    NbAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (sub.likelyProxy) T("这是订阅还是 HTTP 代理？") else T("识别到订阅链接")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(sub.url, style = dev.efah.nextbox.ui.theme.NbType.small, color = c.muted, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                androidx.compose.material3.OutlinedTextField(
+                    name, { name = it }, singleLine = true, label = { Text(T("订阅名称")) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(T("添加后会马上下载节点，之后按「自动更新订阅」的设置定期更新。"), style = dev.efah.nextbox.ui.theme.NbType.small, color = c.muted)
+                if (sub.url.startsWith("http://") || sub.url.startsWith("https://")) {
+                    TextButton(onClick = onAsNode, modifier = Modifier.fillMaxWidth()) {
+                        Text(T("这是一个 HTTP 代理，作为单个节点导入"), color = c.accentInk)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onAdd(name.trim()) }) { Text(T("添加订阅"), fontWeight = FontWeight.Bold) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(T("取消")) } },
+    )
 }

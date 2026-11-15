@@ -70,10 +70,10 @@ import kotlinx.serialization.json.put
 
 private val pretty = Json { prettyPrint = true; prettyPrintIndent = "  " }
 
-private val types = listOf("vless", "vmess", "trojan", "shadowsocks", "hysteria2", "tuic", "anytls", "socks", "http")
+private val types = listOf("vless", "vmess", "trojan", "shadowsocks", "hysteria2", "tuic", "anytls", "naive", "socks", "http")
 
 /** Protocols that always run over TLS. */
-private val tlsAlways = setOf("hysteria2", "tuic", "anytls")
+private val tlsAlways = setOf("hysteria2", "tuic", "anytls", "naive")
 private val tlsOptional = setOf("vless", "vmess", "trojan", "http")
 private val withTransport = setOf("vless", "vmess", "trojan")
 
@@ -128,16 +128,16 @@ private fun JsonObject.with(path: String, value: JsonElement?): JsonObject {
  * id 0 creates a node in the current group.
  */
 @Composable
-fun NodeEditorScreen(id: Long, onClose: () -> Unit) {
+fun NodeEditorScreen(id: Long, newType: String = "vless", onClose: () -> Unit) {
     val c = Nb.c
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
     val state by Repo.state.collectAsState()
     var original by remember { mutableStateOf<Profile?>(null) }
     var name by remember { mutableStateOf("") }
-    var ob by remember { mutableStateOf(blank("vless")) }
-    var mode by remember { mutableIntStateOf(0) } // 0 form, 1 JSON
-    var json by remember { mutableStateOf("") }
+    var ob by remember { mutableStateOf(blank(newType.takeIf { it in types } ?: "vless")) }
+    var mode by remember { mutableIntStateOf(if (newType == "json") 1 else 0) } // 0 form, 1 JSON
+    var json by remember { mutableStateOf(if (newType == "json") pretty.encodeToString(JsonObject.serializer(), ob) else "") }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(id) {
         val p = Repo.profile(id) ?: return@LaunchedEffect
@@ -301,6 +301,13 @@ private fun ColumnScope.Form(name: String, onName: (String) -> Unit, ob: JsonObj
                 Field(T("密码"), "password", mono = true)
                 Choice(T("拥塞控制"), ob.text("congestion_control").ifEmpty { "cubic" }, listOf("cubic", "new_reno", "bbr").map { it to it }) {
                     set(ob.with("congestion_control", JsonPrimitive(it)))
+                }
+            }
+            "naive" -> {
+                Field(T("用户名"), "username")
+                Field(T("密码"), "password", mono = true)
+                Choice(T("传输"), if (ob.flag("quic")) "quic" else "h2", listOf("h2" to "HTTPS（HTTP/2）", "quic" to "QUIC（HTTP/3）")) {
+                    set(ob.with("quic", if (it == "quic") JsonPrimitive(true) else null))
                 }
             }
             "socks", "http" -> {

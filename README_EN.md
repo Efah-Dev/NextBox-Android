@@ -31,11 +31,16 @@
 
 ## ✨ Features
 
-- 🔌 **Protocols**: Shadowsocks, VMess, VLESS (incl. Reality / Vision), Trojan, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP
+- 🔌 **Protocols**: Shadowsocks (incl. obfs, v2ray-plugin, ShadowTLS), VMess, VLESS (incl. Reality / Vision), Trojan, Hysteria2, TUIC, AnyTLS, NaiveProxy (HTTPS and QUIC), SOCKS, HTTP; chain proxies
 - 📡 **Subscriptions**: Base64 link lists, Clash / Clash.Meta YAML, sing-box JSON; shows used traffic and expiry; automatic updates
-- 📥 **Import**: QR code scan, clipboard, subscription URL, share links opened from other apps (asks first)
-- 🗂️ **Nodes**: Form or JSON editor, search, multi-select for batch delete and tests, QR code sharing
-- 🧭 **Routing**: Global / selected apps / all direct; a "bypass mainland China" switch for the first two (bundled China domain and IP rules, no download); custom direct / proxy / block rules; ad blocking
+- 📥 **Import**: QR code scan, clipboard, share links opened from other apps (asks first); a scanned or copied subscription address is added as a subscription, and `clash://` / `sing-box://` one-click links work too
+- 🗂️ **Nodes**: Form or JSON editor, search, multi-select for batch delete and tests, QR code sharing; drag to reorder, or sort by latency, name or region in one tap (kept across subscription updates); chain proxies (2 to 8 nodes in a row, drag to reorder, or long-press a node and pick "Connect through other nodes")
+- 🔀 **Automatic node selection** (optional, off by default): when the selected node does not answer on connecting, the fastest working node of its group takes over; if none works it does not connect and says why; can also check while connected
+- 🧭 **Routing**: Global / selected apps / all direct; a "bypass mainland China" switch for the first two (bundled China domain and IP rules, no download); ad blocking
+- 📐 **Routing rules**: a route path shows the steps every connection passes from top to bottom (ads → local network → block → direct → policy groups → proxy → bypass mainland China → everything else) and follows your settings as you change them; rules are split into direct, proxy and block pages, and adding one only asks what and where: websites (common services in one tap, many domains pasted at once), apps (searchable, or a package name typed by hand) or IPs; when a website appears in several places the more specific domain wins
+- 🔍 **Try it**: type a website or pick an app and the route path marks the step that catches it, and why; tap a connection on the Activity page to add its website or app to the rules
+- 🧩 **Policy groups**: nodes picked by region, keyword or by hand, the fastest used automatically or chosen by hand; rules can send traffic to them
+- 📱 **Selected apps**: proxy only the selected apps, or exclude them (every other app uses the proxy); search, select all, invert
 - ⚡ **Latency test**: URL test (real request) and TCP test; UDP protocols such as Hysteria2 and TUIC always use the URL test; configurable URL, timeout and concurrency
 - 🔔 **Notification**: Ongoing notification with live speed and session / today / month usage; disconnect, switch node or toggle the China bypass from it
 - 🎛️ **Quick settings tile**: Connect / disconnect with one tap; shows "NextBox not connected" while off and the node's name while connected
@@ -44,8 +49,9 @@
 - 🛡️ **Modes**: VPN, or proxy-only (a local HTTP + SOCKS5 port)
 - 🎨 **Appearance**: Light / dark / system, accent colors; glass effects (blur on Android 12+, refraction on 13+, can be turned off)
 - 🌐 **Languages**: 简体中文, 繁體中文, English
-- 💾 **Backup**: Export / restore, optionally password encrypted; the NextBox desktop app's `profiles.json` can be imported directly
+- 💾 **Backup**: interchangeable with NextBox for Windows: either side imports the other's encrypted backups; a preview before importing, then add to or replace what is there; desktop-only settings (program rules, ports, TUN, start at login) are skipped
 - 🔄 **Updates**: Check by hand in About (compares with the latest GitHub release), or turn on the automatic check (off by default) to be told about a new version
+- ⚙️ **More**: connect when the app opens (optional); after a crash the error details can be copied for a report
 
 ## 🪶 Lightweight
 
@@ -113,7 +119,7 @@ core/             binds sing-box libbox, nbcore and nbtest into one AAR
   nbtest/         URL latency test (a temporary in-process sing-box instance), proxied traffic counters
 app/src/main/java/dev/efah/nextbox/
   bg/             VPN / proxy services, platform interface, notification, tile
-  data/           repository (wraps nbcore), local preferences, backup encryption, update check
+  data/           repository (wraps nbcore), local preferences, update check
   ui/             Jetpack Compose screens, glass effects, languages
 docs/render/      source of the README preview image
 ```
@@ -121,7 +127,7 @@ docs/render/      source of the README preview image
 </details>
 
 The core is the official, **unmodified** module `github.com/sagernet/sing-box v1.14.4`, built with the
-tags `with_gvisor, with_quic, with_utls`.
+tags `with_gvisor, with_quic, with_utls, with_naive_outbound` (NaiveProxy links Chromium's network library, cronet, into the core).
 
 ## ⚠️ Known issues
 

@@ -11,6 +11,7 @@ import (
 
 func buildAndroid(t *testing.T, s store.Settings, opt androidOptions) map[string]any {
 	t.Helper()
+	s.TunFakeIP = opt.FakeIP // as BuildConfig does
 	node := &store.Profile{ID: 1, Name: "n", Type: "vless", Outbound: map[string]any{
 		"type": "vless", "server": "node.example.com", "server_port": 443, "uuid": "u",
 	}}
@@ -94,7 +95,7 @@ func TestDirectNodeServers(t *testing.T) {
 	if len(rules) != 4 {
 		t.Fatalf("want 4 rules, got %d", len(rules))
 	}
-	r := rules[2].(map[string]any)
+	r := rules[0].(map[string]any)
 	b, _ := json.Marshal(r)
 	want := `{"domain":["a.example.com"],"ip_cidr":["1.2.3.4/32","2001:db8::1/128"],"outbound":"direct"}`
 	if string(b) != want {

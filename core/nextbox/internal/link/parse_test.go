@@ -76,3 +76,50 @@ func TestParseVLESSDirtyLink(t *testing.T) {
 		t.Fatalf("name = %q", n.Name)
 	}
 }
+
+// Names keep their spaces also in links without a query string, where the
+// "#name" directly follows the server address.
+func TestNameKeepsSpaces(t *testing.T) {
+	for link, want := range map[string]string{
+		"socks5://127.0.0.1:1080#HK-02%20IPLC":                     "HK-02 IPLC",
+		"trojan://p@example.com:443#Tokyo%2002":                    "Tokyo 02",
+		"ss://YWVzLTI1Ni1nY206cGFzcw@1.2.3.4:8388#US%20San%20Jose": "US San Jose",
+		"trojan://p@%20example.com:443#A%20B":                      "A B",
+	} {
+		n, err := Parse(link)
+		if err != nil {
+			t.Fatalf("%s: %v", link, err)
+		}
+		if n.Name != want {
+			t.Errorf("%s: name %q, want %q", link, n.Name, want)
+		}
+		if s, _ := n.Outbound["server"].(string); strings.Contains(s, " ") {
+			t.Errorf("%s: server %q still has a space", link, s)
+		}
+	}
+}
+
+func TestNaive(t *testing.T) {
+	n, err := Parse("naive+quic://user:p%40ss@naive.example.com:8443?extra-headers=X-A%3A%201%0D%0AX-B%3A%202#TW%2003")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ob := n.Outbound
+	if n.Name != "TW 03" || ob["type"] != "naive" || ob["server_port"] != 8443 || ob["password"] != "p@ss" || ob["quic"] != true {
+		t.Fatalf("parsed: %s %v", n.Name, ob)
+	}
+	if h, _ := ob["extra_headers"].(map[string]any); h["X-B"] != "2" {
+		t.Fatalf("headers: %v", ob["extra_headers"])
+	}
+	out, err := Export(n.Name, ob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := Parse(out)
+	if err != nil || back.Outbound["quic"] != true || back.Outbound["username"] != "user" || back.Name != "TW 03" {
+		t.Fatalf("round trip %s: %v %v", out, back, err)
+	}
+	if n, _ := Parse("naive+https://u:p@h.example.com#x"); n.Outbound["server_port"] != 443 || n.Outbound["quic"] != nil {
+		t.Fatalf("https default: %v", n.Outbound)
+	}
+}

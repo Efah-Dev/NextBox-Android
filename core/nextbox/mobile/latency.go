@@ -2,10 +2,12 @@ package nbcore
 
 import (
 	"context"
+	"net"
 	"sync"
 	"time"
 
-	"nextbox/internal/core"
+	"nextbox/internal/i18n"
+	"nextbox/internal/store"
 )
 
 // LatencyHandler receives the progress of a latency test.
@@ -23,7 +25,7 @@ var (
 
 // TCPPing measures the TCP handshake time to each node server (ids is a comma
 // separated list). It blocks until every node is done or CancelTest is called;
-// results are saved to the store.
+// results are saved to the store. Chain proxies only get a URL test.
 func TCPPing(ids string, h LatencyHandler) error {
 	s, err := current()
 	if err != nil {
@@ -47,22 +49,49 @@ func TCPPing(ids string, h LatencyHandler) error {
 		testMu.Unlock()
 	}()
 
-	nodes := s.ProfilesByIDs(parseIDs(ids))
-	core.TCPPing(ctx, s.Settings(), nodes, core.Progress{
-		Start: func(id int64) { h.OnStart(id) },
-		Result: func(r core.LatencyResult) {
-			s.SetLatency(r.ID, r.Latency, r.Error, time.Now().Unix())
-			h.OnResult(r.ID, int32(r.Latency), r.Error)
-		},
-	})
+	set := s.Settings()
+	sem := make(chan struct{}, max(1, set.TestConcurrency))
+	var wg sync.WaitGroup
+	for _, n := range s.ProfilesByIDs(parseIDs(ids)) {
+		if ctx.Err() != nil {
+			break
+		}
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(n store.Profile) {
+			defer func() { <-sem; wg.Done() }()
+			h.OnStart(n.ID)
+			latency, msg := tcpPing(ctx, n, time.Duration(set.TestTimeout)*time.Millisecond)
+			s.SetLatency(n.ID, latency, msg, time.Now().Unix(), "tcp")
+			h.OnResult(n.ID, int32(latency), msg)
+		}(n)
+	}
+	wg.Wait()
 	return s.Flush()
 }
 
-// SetLatency records a latency result (ms, or -1 with a message); call Flush
-// afterwards to persist it.
+func tcpPing(ctx context.Context, n store.Profile, timeout time.Duration) (int, string) {
+	if n.IsChain() {
+		return -1, i18n.T("链式代理只能用 URL 测试")
+	}
+	d := net.Dialer{Timeout: timeout}
+	start := time.Now()
+	conn, err := d.DialContext(ctx, "tcp", n.Server())
+	if err != nil {
+		if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			return -1, i18n.T("超时")
+		}
+		return -1, err.Error()
+	}
+	conn.Close()
+	return max(1, int(time.Since(start).Milliseconds())), ""
+}
+
+// SetLatency records a URL test result (ms, or -1 with a message); call
+// Flush afterwards to persist it.
 func SetLatency(id int64, latency int32, message string) {
 	if s, err := current(); err == nil {
-		s.SetLatency(id, int(latency), message, time.Now().Unix())
+		s.SetLatency(id, int(latency), message, time.Now().Unix(), "url")
 	}
 }
 

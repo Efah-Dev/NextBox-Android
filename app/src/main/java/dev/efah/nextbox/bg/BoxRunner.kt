@@ -99,6 +99,18 @@ class BoxRunner(
 
     private suspend fun start() = lock.withLock {
         try {
+            if (Prefs.autoSelect.value) {
+                notifier.startForeground(Nbcore.selectedNodeName(), T("正在检查节点…"))
+                when (val r = AutoSelect.check()) {
+                    is AutoSelect.Outcome.NoNode -> {
+                        Box._noNode.value = r.message
+                        shutdown(null)
+                        return@withLock
+                    }
+                    is AutoSelect.Outcome.Switched -> Box._notice.value = switchedNotice(r)
+                    AutoSelect.Outcome.Kept -> {}
+                }
+            }
             val config = Repo.buildConfig()
             Box.ownerLookup = needsOwner(config)
             DefaultNetworkMonitor.start()
@@ -137,6 +149,7 @@ class BoxRunner(
                 refreshUsage()
                 if (++ticks % 6 == 0) runCatching { Nbcore.flush() }
                 if (ticks % 60 == 0) Repo.autoUpdateSubscriptions()
+                if (ticks % 30 == 0) watchNode()
             }
         }
     }
@@ -230,6 +243,33 @@ class BoxRunner(
         scope.cancel()
     }
 
+    private var watchFailures = 0
+
+    /**
+     * "Also switch while connected": every five minutes with the screen on,
+     * test the node in use; after two failures in a row pick another one.
+     */
+    private suspend fun watchNode() {
+        if (!Prefs.autoSelect.value || !Prefs.autoSelectWatch.value) return
+        if (!service.getSystemService(PowerManager::class.java).isInteractive) return
+        if (AutoSelect.selectedWorks()) {
+            watchFailures = 0
+            return
+        }
+        if (++watchFailures < 2) return // one miss can be a hiccup
+        when (val r = AutoSelect.check()) {
+            AutoSelect.Outcome.Kept -> watchFailures = 0
+            is AutoSelect.Outcome.Switched -> {
+                watchFailures = 0
+                Box._notice.value = switchedNotice(r)
+            }
+            is AutoSelect.Outcome.NoNode -> if (watchFailures == 2) Box._notice.value = r.message
+        }
+    }
+
+    private fun switchedNotice(r: AutoSelect.Outcome.Switched) =
+        if (r.from.isEmpty()) T("已自动选择 %s（%d ms）", r.to, r.ms) else T("%s 连不上，已换到 %s（%d ms）", r.from, r.to, r.ms)
+
     private fun needsOwner(config: String) = Prefs.showApps.value || config.contains("\"package_name\"")
 
     private fun overrideOptions() = OverrideOptions().apply {
@@ -237,9 +277,13 @@ class BoxRunner(
         // listener lives in this process, and its replies only reach the
         // apps through the TUN interface. Latency tests are not slowed down
         // by this: nbcore routes every node server direct.
-        val list = Prefs.perAppList.value
+        val list = Prefs.perAppList.value - service.packageName
         if (Prefs.routeScope.value == Prefs.SCOPE_APPS && list.isNotEmpty()) {
-            includePackage = StringArray((list + service.packageName).toList())
+            if (Prefs.perAppMode.value == Prefs.APPS_EXCLUDE) {
+                excludePackage = StringArray(list.toList())
+            } else {
+                includePackage = StringArray((list + service.packageName).toList())
+            }
         }
     }
 

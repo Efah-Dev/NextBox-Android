@@ -47,6 +47,98 @@ data class Profile(
     val testedAt: Long = 0,
     val upload: Long = 0,
     val download: Long = 0,
+    val latencyKind: String = "",
+    /** Member node ids of a chain proxy, entry first. */
+    val chain: List<Long> = emptyList(),
+    /** Members of a chain proxy as nbcore describes them (not saved back). */
+    val members: List<ChainHop> = emptyList(),
+    /** ISO code of the node's region, from the desktop app's detection or the name. */
+    val region: String = "",
+) {
+    val isChain: Boolean get() = type == "chain"
+}
+
+@Serializable
+data class ChainHop(val id: Long, val name: String = "", val type: String = "", val groupId: Long = 0, val missing: Boolean = false)
+
+@Serializable
+data class Rule(
+    val kind: String,
+    val values: List<String> = emptyList(),
+    val target: String = "proxy",
+    val disabled: Boolean = false,
+)
+
+@Serializable
+data class Scene(val id: String, val enabled: Boolean = false, val target: String = "proxy")
+
+@Serializable
+data class Policy(
+    val id: Long = 0,
+    val name: String = "",
+    val match: String = "country", // country | keyword | manual
+    val country: String = "",
+    val keyword: String = "",
+    val members: List<Long> = emptyList(),
+    val groupId: Long = 0,
+    val mode: String = "auto", // auto | select
+    val selected: Long = 0,
+)
+
+@Serializable
+data class PolicyNode(val id: Long, val name: String = "", val type: String = "", val latency: Int = 0, val region: String = "")
+
+@Serializable
+data class PolicyView(
+    val id: Long = 0,
+    val name: String = "",
+    val match: String = "country",
+    val country: String = "",
+    val keyword: String = "",
+    val members: List<Long> = emptyList(),
+    val groupId: Long = 0,
+    val mode: String = "auto",
+    val selected: Long = 0,
+    val nodes: List<PolicyNode> = emptyList(),
+    val rules: Int = 0,
+) {
+    fun toPolicy() = Policy(id, name, match, country, keyword, members, groupId, mode, selected)
+}
+
+@Serializable
+data class Place(val code: String, val name: String)
+
+@Serializable
+data class Classified(val kind: String = "none", val url: String = "", val name: String = "", val count: Int = 0, val likelyProxy: Boolean = false)
+
+@Serializable
+data class RouteMatch(
+    val input: String = "",
+    /** Step of the route path: ads, lan, block, direct, policy, proxy, cn or final. */
+    val step: String = "",
+    val target: String = "",
+    /** Index of the matching rule in Settings.rules, -1 for other steps. */
+    val rule: Int = -1,
+    val kind: String = "",
+    /** What matched: a domain, rule-set name, app package ... */
+    val value: String = "",
+    val note: String = "",
+)
+
+@Serializable
+data class DataSummary(val groups: Int = 0, val subscriptions: Int = 0, val nodes: Int = 0, val chains: Int = 0, val policies: Int = 0)
+
+@Serializable
+data class BackupInfo(
+    val encrypted: Boolean = false,
+    val needPassword: Boolean = false,
+    val platform: String = "",
+    val hasNodes: Boolean = false,
+    val hasSettings: Boolean = false,
+    val summary: DataSummary = DataSummary(),
+    val rules: Int = 0,
+    /** Program rules of the desktop app that a phone cannot use. */
+    val skipped: Int = 0,
 )
 
 @Serializable
@@ -59,11 +151,10 @@ data class Settings(
     val tunEnabled: Boolean = true,
     val tunStack: String = "mixed",
     val tunMtu: Int = 9000,
-    val routeMode: String = "global",
+    val routeMode: String = "rule",
     val blockAds: Boolean = false,
-    val directRules: String = "",
-    val proxyRules: String = "",
-    val blockRules: String = "",
+    val rules: List<Rule> = emptyList(),
+    val scenes: List<Scene> = emptyList(),
     val remoteDns: String = "",
     val directDns: String = "",
     val enableIpv6: Boolean = false,
@@ -73,7 +164,9 @@ data class Settings(
     val testConcurrency: Int = 16,
     val subUpdateByProxy: Boolean = false,
     val logLevel: String = "info",
-)
+) {
+    val bypassCn: Boolean get() = scenes.firstOrNull { it.id == "cn" }?.enabled == true
+}
 
 @Serializable
 data class AppState(
@@ -123,7 +216,10 @@ fun protocolName(type: String): String = when (type) {
     "hysteria2" -> "Hysteria2"
     "tuic" -> "TUIC"
     "anytls" -> "AnyTLS"
+    "naive" -> "NaiveProxy"
     "socks" -> "SOCKS"
     "http" -> "HTTP"
+    "chain" -> T("链式代理")
+    "shadowtls" -> "ShadowTLS"
     else -> type
 }

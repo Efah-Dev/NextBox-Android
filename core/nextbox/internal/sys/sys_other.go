@@ -17,12 +17,30 @@ func SetSystemProxy(addr string) error   { return errUnsupported() }
 func ClearSystemProxy(addr string) error { return nil }
 func IsElevated() bool                   { return os.Geteuid() == 0 }
 func RestartAsAdmin() error              { return errUnsupported() }
-func SetAutoStart(name string, enable bool) error {
-	if enable {
+
+// Autostart and session handling are Windows only.
+const (
+	AutoStartRun  = "run"
+	AutoStartTask = "task"
+)
+
+type AutoStartInfo struct {
+	Method   string `json:"method"`
+	Path     string `json:"path"`
+	Disabled bool   `json:"disabled"`
+}
+
+func SetAutoStart(method string) error {
+	if method != "" {
 		return errUnsupported()
 	}
 	return nil
 }
+func GetAutoStart() AutoStartInfo       { return AutoStartInfo{} }
+func SameExe(path string) bool          { return false }
+func RepairAutoStart() error            { return errUnsupported() }
+func SetProxyCleanup(addr string) error { return nil }
+func OnSessionEnd(fn func())            {}
 
 func WaitPid(pid int) {
 	for i := 0; i < 100; i++ {
@@ -34,6 +52,18 @@ func WaitPid(pid int) {
 	}
 }
 
+// Interrupt asks a child process to shut down by itself.
+func Interrupt(pid int) error {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	return p.Signal(os.Interrupt)
+}
+
 func PrepareCmd(cmd *exec.Cmd) {}
 func AttachCmd(cmd *exec.Cmd)  {}
 func CoreBinaryName() string   { return "sing-box" }
+
+func Protect(data []byte) ([]byte, error)   { return nil, errUnsupported() }
+func Unprotect(data []byte) ([]byte, error) { return nil, errUnsupported() }

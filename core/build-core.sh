@@ -29,7 +29,7 @@ if ! ls -d "$ANDROID_HOME"/platforms/android-[0-9]* 2>/dev/null | grep -Eq 'andr
   export ANDROID_HOME="$shim"
 fi
 
-tags="with_gvisor,with_quic,with_utls,badlinkname,tfogo_checklinkname0,ts_omit_logtail,ts_omit_ssh,ts_omit_drive,ts_omit_taildrop,ts_omit_webclient,ts_omit_doctor,ts_omit_capture,ts_omit_kube,ts_omit_aws,ts_omit_synology,ts_omit_bird"
+tags="with_gvisor,with_quic,with_utls,with_naive_outbound,badlinkname,tfogo_checklinkname0,ts_omit_logtail,ts_omit_ssh,ts_omit_drive,ts_omit_taildrop,ts_omit_webclient,ts_omit_doctor,ts_omit_capture,ts_omit_kube,ts_omit_aws,ts_omit_synology,ts_omit_bird"
 version="1.14.4"
 ldflags="-X github.com/sagernet/sing-box/constant.Version=$version -X runtime.godebugDefault=multipathtcp=0,tlssha1=1 -checklinkname=0 -s -w -buildid="
 

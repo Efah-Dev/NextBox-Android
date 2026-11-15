@@ -51,6 +51,10 @@
                 <data android:scheme="hy2" />
                 <data android:scheme="tuic" />
                 <data android:scheme="anytls" />
+                <!-- one-click subscription links of other clients -->
+                <data android:scheme="clash" />
+                <data android:scheme="clashmeta" />
+                <data android:scheme="sing-box" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

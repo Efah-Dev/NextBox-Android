@@ -75,6 +75,7 @@ object Prefs {
         lang.flow.value = sp.getString(lang.key, lang.default) ?: lang.default
         subHours.flow.value = sp.getInt(subHours.key, subHours.default)
         autoUpdatePref.flow.value = sp.getBoolean(autoUpdatePref.key, autoUpdatePref.default)
+        listOf(appModePref, autoConnectPref,autoSelectPref, autoSelectAllPref, autoSelectTimeoutPref, autoSelectWatchPref).forEach { load(it) }
     }
 
     /** First start of this version: derive the route scope from the core setting. */
@@ -170,6 +171,106 @@ object Prefs {
     var skippedVersion: String
         get() = sp.getString("update_skipped", "").orEmpty()
         set(v) = sp.edit().putString("update_skipped", v).apply()
+
+    // ---- added in 1.1.0 ----
+
+    const val APPS_INCLUDE = "include" // only the selected apps use the VPN
+    const val APPS_EXCLUDE = "exclude" // every app except the selected ones
+
+    private val appModePref = Pref("per_app_mode", APPS_INCLUDE)
+    private val autoConnectPref = Pref("auto_connect", false)
+    private val autoSelectPref = Pref("auto_select", false)
+    private val autoSelectAllPref = Pref("auto_select_all", false)
+    private val autoSelectTimeoutPref = Pref("auto_select_timeout", 3000)
+    private val autoSelectWatchPref = Pref("auto_select_watch", false)
+
+    /** How the selected apps are used in the "selected apps" scope. */
+    val perAppMode: StateFlow<String> = appModePref.flow.asStateFlow()
+
+    /** Connect when the user opens the app. */
+    val autoConnect: StateFlow<Boolean> = autoConnectPref.flow.asStateFlow()
+
+    /** Switch to a working node when the selected one does not answer. */
+    val autoSelect: StateFlow<Boolean> = autoSelectPref.flow.asStateFlow()
+
+    /** Look for a replacement among all nodes instead of the node's own group. */
+    val autoSelectAll: StateFlow<Boolean> = autoSelectAllPref.flow.asStateFlow()
+
+    /** How long a node may take before it counts as unreachable (ms). */
+    val autoSelectTimeout: StateFlow<Int> = autoSelectTimeoutPref.flow.asStateFlow()
+
+    /** Also check the node while connected and switch when it stops working. */
+    val autoSelectWatch: StateFlow<Boolean> = autoSelectWatchPref.flow.asStateFlow()
+
+    fun setPerAppMode(v: String) = put(appModePref, v)
+    fun setAutoConnect(v: Boolean) = put(autoConnectPref, v)
+    fun setAutoSelect(v: Boolean) = put(autoSelectPref, v)
+    fun setAutoSelectAll(v: Boolean) = put(autoSelectAllPref, v)
+    fun setAutoSelectTimeout(v: Int) = put(autoSelectTimeoutPref, v.coerceIn(1000, 10000))
+    fun setAutoSelectWatch(v: Boolean) = put(autoSelectWatchPref, v)
+
+    private fun <T> put(p: Pref<T>, v: T) {
+        p.flow.value = v
+        sp.edit().apply {
+            when (v) {
+                is Boolean -> putBoolean(p.key, v)
+                is Int -> putInt(p.key, v)
+                is String -> putString(p.key, v)
+            }
+        }.apply()
+    }
+
+    private fun <T> load(p: Pref<T>) {
+        @Suppress("UNCHECKED_CAST")
+        p.flow.value = when (val d = p.default) {
+            is Boolean -> sp.getBoolean(p.key, d) as T
+            is Int -> sp.getInt(p.key, d) as T
+            is String -> (sp.getString(p.key, d) ?: d) as T
+            else -> d
+        }
+    }
+
+    /** The Android-only preferences that travel in a backup ("android" in the file). */
+    fun exportJson(): String = kotlinx.serialization.json.buildJsonObject {
+        put("routeScope", kotlinx.serialization.json.JsonPrimitive(routeScope.value))
+        put("perAppMode", kotlinx.serialization.json.JsonPrimitive(perAppMode.value))
+        put("perAppList", kotlinx.serialization.json.JsonArray(perAppList.value.sorted().map { kotlinx.serialization.json.JsonPrimitive(it) }))
+        put("notifySpeed", kotlinx.serialization.json.JsonPrimitive(notifySpeed.value))
+        put("notifyStats", kotlinx.serialization.json.JsonPrimitive(notifyStats.value))
+        put("billingDay", kotlinx.serialization.json.JsonPrimitive(billingDay.value))
+        put("latencyMode", kotlinx.serialization.json.JsonPrimitive(latencyMode.value))
+        put("fakeIp", kotlinx.serialization.json.JsonPrimitive(fakeIp.value))
+        put("glass", kotlinx.serialization.json.JsonPrimitive(glass.value))
+        put("subAutoHours", kotlinx.serialization.json.JsonPrimitive(subAutoHours.value))
+        put("autoConnect", kotlinx.serialization.json.JsonPrimitive(autoConnect.value))
+        put("autoSelect", kotlinx.serialization.json.JsonPrimitive(autoSelect.value))
+        put("autoSelectAll", kotlinx.serialization.json.JsonPrimitive(autoSelectAll.value))
+        put("autoSelectTimeout", kotlinx.serialization.json.JsonPrimitive(autoSelectTimeout.value))
+        put("autoSelectWatch", kotlinx.serialization.json.JsonPrimitive(autoSelectWatch.value))
+    }.toString()
+
+    /** Applies preferences from a backup; unknown or missing keys are left alone. */
+    fun importJson(js: String) {
+        val o = runCatching { NbJson.parseToJsonElement(js) as kotlinx.serialization.json.JsonObject }.getOrNull() ?: return
+        fun str(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+        fun bool(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull()
+        fun int(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull()
+        str("routeScope")?.takeIf { it in setOf(SCOPE_GLOBAL, SCOPE_APPS, SCOPE_DIRECT) }?.let { setRouteScope(it) }
+        str("perAppMode")?.takeIf { it == APPS_INCLUDE || it == APPS_EXCLUDE }?.let { setPerAppMode(it) }
+        (o["perAppList"] as? kotlinx.serialization.json.JsonArray)?.let { a -> setPerAppList(a.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.toSet()) }
+        bool("notifySpeed")?.let { setNotifySpeed(it) }
+        bool("notifyStats")?.let { setNotifyStats(it) }
+        int("billingDay")?.let { setBillingDay(it) }
+        str("latencyMode")?.takeIf { it == TEST_TCP || it == TEST_URL }?.let { setLatencyMode(it) }
+        bool("fakeIp")?.let { setFakeIp(it) }
+        bool("glass")?.let { setGlass(it) }
+        int("subAutoHours")?.let { setSubAutoHours(it) }
+        bool("autoConnect")?.let { setAutoConnect(it) }
+        bool("autoSelect")?.let { setAutoSelect(it) }
+        bool("autoSelectAll")?.let { setAutoSelectAll(it) }
+        int("autoSelectTimeout")?.let { setAutoSelectTimeout(it) }
+        bool("autoSelectWatch")?.let { setAutoSelectWatch(it) }
+    }
 
     /** One-time hints ("notify_guide" ...). */
     fun shown(key: String): Boolean = sp.getBoolean("shown_$key", false)

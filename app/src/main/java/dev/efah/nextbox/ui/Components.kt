@@ -98,6 +98,14 @@ fun BarIcon(icon: ImageVector, label: String, onClick: () -> Unit, tint: Color =
     }
 }
 
+/** BarIcon with the click handler last, for a trailing lambda. */
+@Composable
+fun BarIcon(icon: ImageVector, label: String, tint: Color = Nb.c.text, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+    }
+}
+
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(text, style = NbType.section, color = Nb.c.muted, modifier = modifier.padding(start = 6.dp, bottom = 6.dp))

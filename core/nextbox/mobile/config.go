@@ -18,6 +18,8 @@ import (
 	"nextbox/internal/i18n"
 	"nextbox/internal/ruleset"
 	"nextbox/internal/store"
+
+	"golang.org/x/net/idna"
 )
 
 var ruleSetMu sync.Mutex
@@ -43,7 +45,8 @@ func BuildConfig(ruleSetDir, options string) (string, error) {
 			return "", err
 		}
 	}
-	set := s.Settings()
+	// the rules in the order of the path the rules page shows
+	set, _ := pathSettings(s.Settings())
 	var node *store.Profile
 	if id := s.SelectedID(); id != 0 {
 		if p, ok := s.Profile(id); ok {
@@ -51,9 +54,14 @@ func BuildConfig(ruleSetDir, options string) (string, error) {
 		}
 	}
 	ensureRuleSets(ruleSetDir, set, "")
+	// The FakeIP of the shared builder answers every proxied domain with a
+	// fake address (IPv6 too unless turned off below).
+	set.TunFakeIP = opt.FakeIP
 	cfg, err := config.Build(config.Input{
 		Settings:            set,
 		Node:                node,
+		Member:              s.Profile,
+		Policies:            policyInputs(s, set),
 		RuleSetDir:          ruleSetDir,
 		SkipMissingRuleSets: true,
 	})
@@ -87,6 +95,10 @@ func directNodeServers(cfg map[string]any, profiles []store.Profile) {
 			cidrs = append(cidrs, netip.PrefixFrom(ip, ip.BitLen()).String())
 		} else {
 			domains = append(domains, host)
+			// connections carry the ASCII form of an international domain name
+			if ascii, err := idna.Lookup.ToASCII(host); err == nil && ascii != host {
+				domains = append(domains, ascii)
+			}
 		}
 	}
 	if len(domains)+len(cidrs) == 0 {
@@ -100,18 +112,11 @@ func directNodeServers(cfg map[string]any, profiles []store.Profile) {
 		rule["ip_cidr"] = cidrs
 	}
 	rules, _ := route["rules"].([]any)
-	// after sniff and hijack-dns, before every other rule
-	at := 0
-	for at < len(rules) {
-		m, _ := rules[at].(map[string]any)
-		if m["action"] != "sniff" && m["action"] != "hijack-dns" {
-			break
-		}
-		at++
-	}
-	out := append([]any{}, rules[:at]...)
-	out = append(out, rule)
-	route["rules"] = append(out, rules[at:]...)
+	// First, before sniffing: a sniffed TLS name (Reality, CDN fronting) often
+	// differs from the server address, and once sniffed the rules match that
+	// name instead of the destination. Node traffic is never DNS, so going
+	// ahead of hijack-dns is harmless.
+	route["rules"] = append([]any{rule}, rules...)
 }
 
 // androidOptions are the Android-only knobs of BuildConfig.
@@ -139,7 +144,7 @@ func BuildTestConfig(ids string, port int32, secret string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cfg, err := config.BuildTest(s.Settings(), s.ProfilesByIDs(parseIDs(ids)), "", secret, int(port))
+	cfg, err := config.BuildTest(s.Settings(), s.ProfilesByIDs(parseIDs(ids)), s.Profile, "", secret, int(port))
 	if err != nil {
 		return "", err
 	}
@@ -202,47 +207,70 @@ func adaptForAndroid(cfg map[string]any, s store.Settings, opt androidOptions) {
 	usesPackages := false
 	if route, ok := cfg["route"].(map[string]any); ok {
 		if rules, ok := route["rules"].([]any); ok {
+			kept := rules[:0]
 			for _, r := range rules {
-				if m, ok := r.(map[string]any); ok {
-					if v, ok := m["process_name"]; ok {
-						m["package_name"] = v
-						delete(m, "process_name")
-						usesPackages = true
+				m, ok := r.(map[string]any)
+				if !ok {
+					kept = append(kept, r)
+					continue
+				}
+				// Program rules from the desktop app ("chrome.exe") mean
+				// nothing here; a rule left without a condition goes too.
+				if _, ok := m["process_name"]; ok {
+					delete(m, "process_name")
+					if !hasCondition(m) {
+						continue
 					}
 				}
+				if _, ok := m["package_name"]; ok {
+					usesPackages = true
+				}
+				kept = append(kept, m)
 			}
+			route["rules"] = kept
 		}
 		route["find_process"] = s.TunEnabled && (opt.FindProcess || usesPackages)
 	}
 	if exp, ok := cfg["experimental"].(map[string]any); ok {
 		delete(exp, "clash_api")
-		if cache, ok := exp["cache_file"].(map[string]any); ok && opt.FakeIP {
-			cache["store_fakeip"] = true
-		}
 	}
-	if opt.FakeIP && s.TunEnabled && s.RouteMode != "direct" {
-		addFakeIP(cfg, s.EnableIPv6)
+	if !s.EnableIPv6 {
+		ipv4OnlyFakeIP(cfg)
 	}
 }
 
-// addFakeIP makes A/AAAA queries that would go to the remote DNS server
-// return fake addresses instead. Rules sending a domain to the direct DNS
-// (bypass rules, mainland domains) come first and still get real answers.
-func addFakeIP(cfg map[string]any, ipv6 bool) {
+// hasCondition reports whether a route rule still matches on something.
+func hasCondition(rule map[string]any) bool {
+	for k := range rule {
+		switch k {
+		case "outbound", "action", "invert":
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+// ipv4OnlyFakeIP keeps FakeIP to A queries when IPv6 is off: the phone then
+// asks for AAAA records too, and a fake IPv6 answer would lead apps to try a
+// route the VPN does not carry.
+func ipv4OnlyFakeIP(cfg map[string]any) {
 	dns, ok := cfg["dns"].(map[string]any)
-	if !ok || dns["final"] != config.TagDNSRemote {
+	if !ok {
 		return
 	}
-	server := map[string]any{"type": "fakeip", "tag": "dns-fakeip", "inet4_range": "198.18.0.0/15"}
-	types := []string{"A"}
-	if ipv6 {
-		server["inet6_range"] = "fc00::/18"
-		types = append(types, "AAAA")
-	}
 	servers, _ := dns["servers"].([]any)
-	dns["servers"] = append(servers, server)
+	for _, sv := range servers {
+		if m, ok := sv.(map[string]any); ok && m["type"] == "fakeip" {
+			delete(m, "inet6_range")
+		}
+	}
 	rules, _ := dns["rules"].([]any)
-	dns["rules"] = append(rules, map[string]any{"query_type": types, "server": "dns-fakeip"})
+	for _, r := range rules {
+		if m, ok := r.(map[string]any); ok && m["server"] == config.TagFakeIP {
+			m["query_type"] = []string{"A"}
+		}
+	}
 }
 
 // UpdateRuleSets downloads every rule-set the current settings need again.
