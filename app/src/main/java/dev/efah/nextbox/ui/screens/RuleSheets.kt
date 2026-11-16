@@ -237,7 +237,10 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
                 )
             }
             1 -> {
-                Box(Modifier.fillMaxWidth().height(380.dp)) {
+                // the sheet does not scroll here (the list does): the list gives
+                // way when the targets below take two or three lines, so the
+                // buttons always keep their height
+                Box(Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(min = 160.dp, max = 380.dp)) {
                     AppChooser(selected = apps, onChange = { apps = it }, showBulkActions = false, padding = PaddingValues(0.dp))
                 }
                 TextButton(onClick = { manual = true }) { Text(T("找不到？手动输入包名"), color = c.accentInk) }

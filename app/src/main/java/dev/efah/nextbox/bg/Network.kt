@@ -84,6 +84,7 @@ object DefaultNetworkMonitor {
         runCatching { App.connectivity.unregisterNetworkCallback(callback) }
         registered = false
         defaultNetwork = null
+        last = null
     }
 
     fun setListener(l: InterfaceUpdateListener?) {
@@ -96,9 +97,24 @@ object DefaultNetworkMonitor {
         if (listener === l) listener = null
     }
 
+    /**
+     * Called when the default network stays on the same interface but is
+     * not the same any more: another Wi-Fi or cell (a new Network) or new
+     * addresses. sing-box only resets its connections when the interface
+     * name or index changes, so without this a long-lived connection (the
+     * QUIC session of Hysteria2, say) keeps sending from an address that no
+     * longer works until it times out.
+     */
+    @Volatile
+    var onSameInterfaceChange: (() -> Unit)? = null
+
+    /** The network, interface and addresses last reported. */
+    private var last: Triple<Network, String, List<String>>? = null
+
     private fun notifyListener(network: Network?) {
         val l = listener ?: return
         if (network == null) {
+            last = null
             l.updateDefaultInterface("", -1, false, false)
             return
         }
@@ -109,6 +125,15 @@ object DefaultNetworkMonitor {
                 val caps = App.connectivity.getNetworkCapabilities(network)
                 val expensive = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false
                 l.updateDefaultInterface(lp.interfaceName, index, expensive, false)
+                val now = Triple(network, lp.interfaceName.orEmpty(), lp.linkAddresses
+                    // IPv6 privacy addresses rotate on their own: they do not mean a new network
+                    .filter { (it.flags and android.system.OsConstants.IFA_F_TEMPORARY) == 0 && !it.address.isLinkLocalAddress }
+                    .map { it.address.hostAddress.orEmpty() }.sorted())
+                val before = last
+                last = now
+                if (before != null && before.second == now.second && (before.first != now.first || before.third != now.third)) {
+                    onSameInterfaceChange?.invoke()
+                }
                 return
             }
             Thread.sleep(100)

@@ -57,6 +57,7 @@ import dev.efah.nextbox.ui.NbAlertDialog
 import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.T
+import dev.efah.nextbox.ui.flagged
 import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
@@ -83,7 +84,7 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
     val appLabel = apps.firstOrNull { it.pkg == pkg }?.label ?: pkg
     val s = state.settings
     val direct = routeScope == Prefs.SCOPE_DIRECT
-    val node = remember(state.selectedId) { Repo.selectedNodeName() }.ifEmpty { T("首页选中的节点") }
+    val node = remember(state.selectedId) { Repo.selectedNodeLabel() }.ifEmpty { T("首页选中的节点") }
     LaunchedEffect(Unit) { Repo.loadPolicies() }
 
     // test as the user types, and again when the rules change
@@ -201,7 +202,7 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
                     exitTarget.startsWith("policy:") -> {
                         val p = policies.firstOrNull { it.id == RuleUi.policyId(exitTarget) }
                         val chosen = p?.nodes?.firstOrNull { it.id == p.selected } ?: p?.nodes?.minByOrNull { if (it.latency > 0) it.latency else Int.MAX_VALUE }
-                        T("策略组 %s", p?.name ?: "") + (chosen?.let { " · " + it.name } ?: "")
+                        T("策略组 %s", p?.name ?: "") + (chosen?.let { " · " + flagged(it.name, it.region) } ?: "")
                     }
                     else -> RuleUi.targetLabel(exitTarget, policies)
                 }

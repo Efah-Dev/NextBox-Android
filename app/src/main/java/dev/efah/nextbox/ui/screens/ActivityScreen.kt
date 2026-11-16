@@ -31,6 +31,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -44,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,6 +66,7 @@ import dev.efah.nextbox.libbox.StatusMessage
 import dev.efah.nextbox.libbox.StringIterator
 import dev.efah.nextbox.ui.EmptyHint
 import dev.efah.nextbox.ui.GlassScreen
+import dev.efah.nextbox.ui.LocalToast
 import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.TopBar
@@ -70,7 +74,7 @@ import dev.efah.nextbox.ui.fmtSpeed
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import dev.efah.nextbox.bg.Box as Core
 
@@ -86,9 +90,40 @@ private data class Conn(
     val createdAt: Long,
 )
 
-private data class LogLine(val level: Int, val text: String)
+/** A log line: id orders and keys it, time is the clock time ("14:53:48"). */
+private data class LogLine(val id: Long, val level: Int, val time: String, val text: String)
+
+/** Most log lines the page keeps; older ones are dropped from the top. */
+private const val MAX_LOG_LINES = 500
 
 private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+// The core colours its log lines for terminals (ESC "[31m" ERROR ESC "[0m"): drop the codes.
+private val ansi = Regex("\u001B\\[[0-9;]*m")
+
+// "ERROR[0025] connection: …": the level, then seconds since the core instance started.
+private val logPrefix = Regex("^([A-Z]+)\\[(\\d+)] ")
+
+private var logSeq = 0L
+
+/** Turns a core log message into a line with its clock time. */
+private fun logLine(level: Int, message: String): LogLine {
+    val text = message.replace(ansi, "")
+    val now = System.currentTimeMillis()
+    val m = logPrefix.find(text)
+    val base = Core.coreStartedAt
+    var at = now
+    var body = text
+    if (m != null) {
+        body = m.groupValues[1] + " " + text.substring(m.range.last + 1)
+        val t = base + (m.groupValues[2].toLongOrNull() ?: 0) * 1000
+        // a line of an earlier instance (before a reload) would land in the future
+        if (base > 0 && t <= now + 2000) at = t
+    }
+    val time = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
+        .format(java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()))
+    return LogLine(++logSeq, level, time, body)
+}
 
 /** Live connections and core logs, streamed from the command server while visible. */
 @Composable
@@ -113,10 +148,11 @@ fun ActivityScreen(onShowPath: (host: String, pkg: String) -> Unit) {
             override fun writeLogs(messageList: LogIterator?) {
                 val it = messageList ?: return
                 // the core streams every level; the page shows warnings and errors only (0 panic … 3 warn)
-                val batch = buildList { while (it.hasNext()) it.next().let { e -> if (e.level <= 3) add(LogLine(e.level, e.message)) } }
+                val batch = buildList { while (it.hasNext()) it.next().let { e -> if (e.level <= 3) add(logLine(e.level, e.message.orEmpty())) } }
+                if (batch.isEmpty()) return
                 main.post {
                     logs.addAll(batch)
-                    if (logs.size > 500) logs.removeRange(0, logs.size - 500)
+                    if (logs.size > MAX_LOG_LINES) logs.removeRange(0, logs.size - MAX_LOG_LINES)
                 }
             }
 
@@ -284,24 +320,65 @@ private fun LogList(logs: List<LogLine>, pad: PaddingValues) {
         EmptyHint(T("暂无日志"), T("这里只显示内核的警告和错误，没有就说明一切正常"), Modifier.padding(pad))
         return
     }
-    val state = rememberLazyListState()
-    LaunchedEffect(logs.size) {
-        delay(50)
-        if (logs.isNotEmpty()) state.scrollToItem(logs.lastIndex)
+    val toast = LocalToast.current
+    val scope = rememberCoroutineScope()
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = logs.lastIndex)
+    // The list follows new lines only while the user is at the bottom; once
+    // they scroll up it stays where it is and offers a way back instead.
+    var follow by remember { mutableStateOf(true) }
+    var seenId by remember { mutableStateOf(logs.last().id) }
+    val atBottom by remember { derivedStateOf { !state.canScrollForward } }
+    val lastId = logs.last().id
+    LaunchedEffect(state.isScrollInProgress, atBottom) {
+        if (atBottom) follow = true else if (state.isScrollInProgress) follow = false
     }
-    LazyColumn(
-        state = state,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = pad.calculateBottomPadding() + 16.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        items(logs) { l ->
-            val color = when {
-                l.level <= 2 -> c.bad
-                l.level == 3 -> c.mid
-                else -> c.text
+    LaunchedEffect(lastId, atBottom) {
+        if (follow && !atBottom) state.scrollToItem(logs.lastIndex)
+        if (follow || atBottom) seenId = lastId
+    }
+    val unseen = if (follow) 0 else logs.count { it.id > seenId }
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = state,
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = pad.calculateBottomPadding() + 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            // keys keep the lines the user is reading in place while old ones are dropped from the top
+            items(logs, key = { it.id }) { l ->
+                val color = when {
+                    l.level <= 2 -> c.bad
+                    l.level == 3 -> c.mid
+                    else -> c.text
+                }
+                Text(
+                    androidx.compose.ui.text.buildAnnotatedString {
+                        withStyle(androidx.compose.ui.text.SpanStyle(color = c.muted)) { append(l.time) }
+                        append("  ")
+                        withStyle(androidx.compose.ui.text.SpanStyle(color = color)) { append(l.text) }
+                    },
+                    fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, lineHeight = 15.sp,
+                    modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = {
+                        dev.efah.nextbox.App.clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NextBox", l.time + " " + l.text))
+                        toast(T("已复制这一行"))
+                    }),
+                )
             }
-            Text(l.text, color = color, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
+        }
+        if (!atBottom && !follow) {
+            Text(
+                if (unseen > 0) "↓ " + T("%d 条新日志", unseen) else "↓ " + T("回到最新"),
+                color = c.accentInk, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = pad.calculateBottomPadding() + 12.dp)
+                    .clip(RoundedCornerShape(18.dp)).background(c.accentSoft)
+                    .combinedClickable(onClick = {
+                        scope.launch {
+                            state.animateScrollToItem(logs.lastIndex)
+                            follow = true
+                        }
+                    })
+                    .padding(horizontal = 16.dp, vertical = 9.dp),
+            )
         }
     }
 }

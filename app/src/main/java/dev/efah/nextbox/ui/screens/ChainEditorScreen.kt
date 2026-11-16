@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -47,10 +49,12 @@ import dev.efah.nextbox.data.Profile
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.protocolName
 import dev.efah.nextbox.ui.BarIcon
+import dev.efah.nextbox.ui.Chip
 import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.LocalBottomInset
 import dev.efah.nextbox.ui.LocalToast
-import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.flagged
+import dev.efah.nextbox.ui.label
 import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.T
@@ -140,14 +144,14 @@ fun ChainEditorScreen(id: Long, exit: Long = 0, onClose: () -> Unit) {
                                     },
                                     style = NbType.small.copy(fontSize = 11.sp), color = c.muted,
                                 )
-                                Text(p?.name ?: T("节点已不存在"), style = NbType.body, color = if (p == null) c.bad else c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(p?.label ?: T("节点已不存在"), style = NbType.body, color = if (p == null) c.bad else c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 if (p != null) Text(protocolName(p.type), style = NbType.small, color = c.muted)
                             }
                             IconButton(onClick = { hops = hops.filterIndexed { j, _ -> j != i } }) {
                                 Icon(NbIcons.Close, T("移除"), tint = c.muted, modifier = Modifier.size(16.dp))
                             }
                             Box(
-                                Modifier.size(44.dp).dragHandle(drag, hid, i, hops.size, gap = 14.dp, onMove = { from, to ->
+                                Modifier.size(44.dp).dragHandle(drag, hid, hops, gap = 14.dp, onMove = { from, to ->
                                     hops = hops.toMutableList().also { it.add(to, it.removeAt(from)) }
                                 }),
                                 contentAlignment = Alignment.Center,
@@ -164,11 +168,11 @@ fun ChainEditorScreen(id: Long, exit: Long = 0, onClose: () -> Unit) {
                         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(NbIcons.Plus, null, tint = c.accentInk, modifier = Modifier.size(18.dp))
-                        Text(T("再加一个节点"), color = c.accentInk, modifier = Modifier.padding(start = 8.dp))
+                        Text(T("添加节点"), color = c.accentInk, modifier = Modifier.padding(start = 8.dp))
                     }
                 }
                 Connector()
-                Endpoint(NbIcons.Globe, if (hops.isEmpty()) T("网站") else T("网站看到：%s 的 IP", byId[hops.last()]?.name ?: "?"))
+                Endpoint(NbIcons.Globe, if (hops.isEmpty()) T("网站") else T("网站看到：%s 的 IP", byId[hops.last()]?.label ?: "?"))
             }
             Button(
                 onClick = {
@@ -189,11 +193,13 @@ fun ChainEditorScreen(id: Long, exit: Long = 0, onClose: () -> Unit) {
         NodePicker(
             all.filter { !it.isChain && it.id !in hops },
             title = T("选择节点"),
+            ordered = true,
+            max = 8 - hops.size,
             onDismiss = { picking = false },
-        ) { p ->
+        ) { ids ->
             picking = false
-            // with a preset exit node, new hops go in front of it
-            hops = if (exit != 0L && hops.lastOrNull() == exit) hops.dropLast(1) + p.id + exit else hops + p.id
+            // in the order they were ticked; with a preset exit node, new hops go in front of it
+            hops = if (exit != 0L && hops.lastOrNull() == exit) hops.dropLast(1) + ids + exit else hops + ids
         }
     }
 }
@@ -211,37 +217,148 @@ private fun Connector() {
     Box(Modifier.padding(start = 21.dp).width(2.dp).height(14.dp).background(Nb.c.accent.copy(alpha = 0.45f)))
 }
 
-/** A searchable list of nodes to pick one from. */
+/**
+ * Picks nodes from every group: narrowed by subscription (or manual group),
+ * by region and by name; each row says which group the node comes from.
+ * Several can be ticked at once. With ordered, the ticks are numbered and
+ * onDone gets the nodes in the order they were ticked (a chain's hops); max
+ * caps how many. initial is what is ticked to begin with.
+ */
 @Composable
-fun NodePicker(nodes: List<Profile>, title: String, onDismiss: () -> Unit, onPick: (Profile) -> Unit) {
+fun NodePicker(
+    nodes: List<Profile>,
+    title: String,
+    initial: List<Long> = emptyList(),
+    ordered: Boolean = false,
+    max: Int = Int.MAX_VALUE,
+    onDismiss: () -> Unit,
+    onDone: (List<Long>) -> Unit,
+) {
     val c = Nb.c
+    val toast = LocalToast.current
     val state by Repo.state.collectAsState()
     var query by remember { mutableStateOf("") }
+    var group by remember { mutableStateOf(0L) } // 0: every group
+    var region by remember { mutableStateOf<String?>(null) } // null: every region, "": not recognised
+    var picked by remember { mutableStateOf(initial) }
+    val groups = state.groups.filter { g -> nodes.any { it.groupId == g.id } }
     val groupName = state.groups.associate { it.id to it.displayName }
+    val placeName = Repo.places.associate { it.code to it.name }
+    val inGroup = nodes.filter { group == 0L || it.groupId == group }
+    // regions of the chosen group, most nodes first
+    val regions = inGroup.groupingBy { it.region }.eachCount().entries
+        .sortedWith(compareBy<Map.Entry<String, Int>>({ it.key.isEmpty() }, { -it.value }, { it.key }))
+    // a region the chosen group does not have counts as "every region"
+    val inRegion = region?.takeIf { r -> regions.any { it.key == r } }
     val q = query.trim().lowercase()
-    val shown = nodes.filter { q.isEmpty() || it.name.lowercase().contains(q) }
-    NbAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text(T("搜索节点")) }, modifier = Modifier.fillMaxWidth())
-                LazyColumn(Modifier.heightIn(max = 380.dp)) {
-                    items(shown, key = { it.id }) { p ->
-                        Row(
-                            Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(12.dp)).clickable { onPick(p) }.padding(horizontal = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+    val shown = inGroup.filter { (inRegion == null || it.region == inRegion) && (q.isEmpty() || it.name.lowercase().contains(q)) }
+
+    fun toggle(id: Long) {
+        picked = when {
+            id in picked -> picked - id
+            picked.size >= max -> {
+                toast(T("最多再加 %d 个", max))
+                picked
+            }
+            else -> picked + id
+        }
+    }
+
+    NbSheet(onDismiss, scroll = false) {
+        Text(title, style = NbType.big, color = c.text, modifier = Modifier.padding(bottom = 10.dp))
+        OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text(T("搜索节点")) }, modifier = Modifier.fillMaxWidth())
+        if (groups.size > 1) {
+            Text(T("订阅 / 分组"), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T("全部") + " " + nodes.size, group == 0L, onClick = { group = 0L })
+                groups.forEach { g -> Chip(g.displayName + " " + nodes.count { it.groupId == g.id }, group == g.id, onClick = { group = g.id }) }
+            }
+        }
+        if (regions.size > 1) {
+            Text(T("地区"), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T("全部"), inRegion == null, onClick = { region = null })
+                regions.forEach { (code, n) ->
+                    val label = if (code.isEmpty()) T("未识别") else flagged(placeName[code] ?: code, code)
+                    Chip("$label $n", inRegion == code, onClick = { region = code })
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (ordered) T("按点选的顺序加入") else T("已选 %d 个", picked.size),
+                style = NbType.small, color = c.muted, modifier = Modifier.weight(1f).padding(start = 4.dp),
+            )
+            if (!ordered && shown.isNotEmpty()) {
+                val all = shown.all { it.id in picked }
+                TextButton(onClick = {
+                    picked = if (all) picked - shown.map { it.id }.toSet() else picked + shown.map { it.id }.filter { it !in picked }
+                }) { Text(if (all) T("取消全选") else T("全选这 %d 个", shown.size), color = c.accentInk) }
+            }
+        }
+        Box(Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(min = 120.dp, max = 440.dp)) {
+            if (shown.isEmpty()) {
+                Text(
+                    if (nodes.isEmpty()) T("没有可以加入的节点") else T("没有符合条件的节点"),
+                    style = NbType.small, color = c.muted, modifier = Modifier.padding(vertical = 24.dp, horizontal = 4.dp),
+                )
+            }
+            LazyColumn {
+                items(shown, key = { it.id }) { p ->
+                    val n = picked.indexOf(p.id)
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(12.dp))
+                            .background(if (n >= 0) c.accentSoft.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color.Transparent)
+                            .clickable { toggle(p.id) }.padding(horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // a numbered circle for a chain's order, a tick otherwise
+                        Box(
+                            Modifier.padding(end = 10.dp).size(24.dp).clip(CircleShape)
+                                .background(if (n >= 0) c.accentStrong else androidx.compose.ui.graphics.Color.Transparent)
+                                .border(1.5.dp, if (n >= 0) c.accentStrong else c.muted, CircleShape),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(p.name, style = NbType.body, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(protocolName(p.type) + " · " + groupName[p.groupId].orEmpty(), style = NbType.small, color = c.muted, maxLines = 1)
+                            if (n >= 0) {
+                                if (ordered) {
+                                    Text("${n + 1}", color = androidx.compose.ui.graphics.Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                } else {
+                                    Icon(NbIcons.Check, null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(14.dp))
+                                }
                             }
-                            LatencyText(p.latency)
                         }
+                        Column(Modifier.weight(1f)) {
+                            Text(p.label, style = NbType.body, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                listOfNotNull(
+                                    protocolName(p.type),
+                                    p.region.takeIf { it.isNotEmpty() }?.let { placeName[it] ?: it },
+                                    groupName[p.groupId],
+                                ).joinToString(" · "),
+                                style = NbType.small, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        LatencyText(p.latency)
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(T("取消")) } },
-    )
+        }
+        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TextButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp)) { Text(T("取消")) }
+            Button(
+                onClick = { onDone(picked) },
+                enabled = ordered.not() || picked.isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
+                modifier = Modifier.weight(2f).height(48.dp),
+            ) {
+                Text(
+                    when {
+                        ordered -> if (picked.isEmpty()) T("选择节点") else T("加入 %d 个节点", picked.size)
+                        else -> T("确定（%d 个）", picked.size)
+                    },
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
 }

@@ -66,9 +66,9 @@ object Repo {
         put("fakeIP", Prefs.fakeIp.value)
         put("findProcess", Prefs.showApps.value)
         if (dev.efah.nextbox.BuildConfig.DEBUG) {
-            // debug builds keep a full core log in the cache dir (adb run-as)
+            // debug builds keep a full core log (see bg.DebugLog)
             put("logLevel", "debug")
-            put("logFile", File(dev.efah.nextbox.App.app.cacheDir, "box.log").path)
+            put("logFile", dev.efah.nextbox.bg.DebugLog.file.path)
         } else {
             put("logLevel", "warn")
         }
@@ -78,6 +78,12 @@ object Repo {
 
     /** Name of the node selected on the home page ("" when none). */
     fun selectedNodeName(): String = runCatching { Nbcore.selectedNodeName() }.getOrDefault("")
+
+    /** The selected node as lists show it: its name with the flag of its region ("" when none). */
+    fun selectedNodeLabel(): String = runCatching {
+        val id = _state.value.selectedId
+        if (id == 0L) "" else NbJson.decodeFromString<Profile>(Nbcore.profile(id)).let { dev.efah.nextbox.ui.flagged(it.name, it.region) }
+    }.getOrDefault("")
 
     private fun refreshNow() {
         val st = NbJson.decodeFromString<AppState>(Nbcore.state())
@@ -140,8 +146,26 @@ object Repo {
     suspend fun addSubscription(name: String, url: String): Result<String> =
         call { Nbcore.addSubscription(name, url, Box.subscriptionProxy()) }
 
-    suspend fun updateSubscription(groupId: Long): Result<String> =
+    suspend fun updateSubscription(groupId: Long): Result<String> = reloadIfConfigChanges {
         call { Nbcore.updateSubscription(groupId, Box.subscriptionProxy()) }
+    }
+
+    /**
+     * Runs an update of the node list (a subscription) and, while connected,
+     * reloads the core when the configuration it would now build differs: a
+     * node's address, port or password changed, or the node servers the route
+     * sends direct. Without it the core keeps using the old node until the
+     * user reconnects.
+     */
+    private suspend fun <T> reloadIfConfigChanges(block: suspend () -> T): T {
+        val before = if (Box.isRunning) withContext(Dispatchers.IO) { runCatching { buildConfig() }.getOrNull() } else null
+        val result = block()
+        if (before != null && Box.isRunning) {
+            val after = withContext(Dispatchers.IO) { runCatching { buildConfig() }.getOrNull() }
+            if (after != null && after != before) Box.reloadIfRunning()
+        }
+        return result
+    }
 
     private val autoUpdating = java.util.concurrent.atomic.AtomicBoolean(false)
     private val lastAttempt = HashMap<Long, Long>()
@@ -159,11 +183,14 @@ object Repo {
             val due = _state.value.groups.filter {
                 it.isSubscription && now - it.updatedAt >= hours * 3600L && now - (lastAttempt[it.id] ?: 0) >= 3600
             }
-            for (g in due) {
-                lastAttempt[g.id] = now
-                runCatching { Nbcore.updateSubscription(g.id, Box.subscriptionProxy()) }
+            if (due.isEmpty()) return@withContext
+            reloadIfConfigChanges {
+                for (g in due) {
+                    lastAttempt[g.id] = now
+                    runCatching { Nbcore.updateSubscription(g.id, Box.subscriptionProxy()) }
+                }
             }
-            if (due.isNotEmpty()) runCatching { refreshNow() }
+            runCatching { refreshNow() }
         } finally {
             autoUpdating.set(false)
         }

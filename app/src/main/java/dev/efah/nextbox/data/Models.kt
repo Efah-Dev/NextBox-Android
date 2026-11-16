@@ -207,6 +207,7 @@ data class NodeUsage(
     val name: String,
     val type: String = "",
     val group: String = "",
+    val region: String = "",
     val up: Long = 0,
     val down: Long = 0,
 ) {

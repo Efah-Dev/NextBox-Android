@@ -66,6 +66,7 @@ import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
+import dev.efah.nextbox.ui.flagged
 import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
@@ -139,7 +140,7 @@ fun RulesScreen(onClose: () -> Unit, onOpenList: (String) -> Unit, onTest: () ->
     val apps by Prefs.perAppList.collectAsState()
     val s = state.settings
     val direct = routeScope == Prefs.SCOPE_DIRECT
-    val node = remember(state.selectedId) { Repo.selectedNodeName() }.ifEmpty { T("首页选中的节点") }
+    val node = remember(state.selectedId) { Repo.selectedNodeLabel() }.ifEmpty { T("首页选中的节点") }
     val labels by produceState(emptyMap<String, String>()) { value = InstalledApps.load(ctx).associate { it.pkg to it.label } }
     LaunchedEffect(Unit) { Repo.loadPolicies() }
     val scopes = listOf(Prefs.SCOPE_GLOBAL to T("全局代理"), Prefs.SCOPE_APPS to T("指定应用"), Prefs.SCOPE_DIRECT to T("全部直连"))
@@ -353,7 +354,7 @@ fun RuleListScreen(page: String, onClose: () -> Unit, onEditPolicy: (Long) -> Un
     var editing by remember { mutableStateOf<RuleItem?>(null) }
     val apps by produceState<List<AppItem>>(emptyList()) { value = InstalledApps.load(ctx) }
     val label: (String) -> String = { pkg -> apps.firstOrNull { it.pkg == pkg }?.label ?: pkg }
-    val node = remember(state.selectedId) { Repo.selectedNodeName() }
+    val node = remember(state.selectedId) { Repo.selectedNodeLabel() }
     LaunchedEffect(Unit) { Repo.loadPolicies() }
 
     val counts = pages.map { p -> RuleUi.count(rules) { RuleUi.page(it) == p } }
@@ -390,7 +391,7 @@ fun RuleListScreen(page: String, onClose: () -> Unit, onEditPolicy: (Long) -> Un
                         val target = "policy:${p.id}"
                         val sub = when {
                             p.nodes.isEmpty() -> T("没有节点")
-                            p.mode == "select" -> T("手动选择 · 用 %s", p.nodes.firstOrNull { it.id == p.selected }?.name ?: p.nodes.first().name)
+                            p.mode == "select" -> T("手动选择 · 用 %s", (p.nodes.firstOrNull { it.id == p.selected } ?: p.nodes.first()).let { flagged(it.name, it.region) })
                             else -> T("自动选最快 · %d 个节点", p.nodes.size)
                         }
                         DestinationCard(T("策略组 · %s", p.name), sub, target, { onEditPolicy(p.id) }) {

@@ -111,12 +111,18 @@ class BoxRunner(
                     AutoSelect.Outcome.Kept -> {}
                 }
             }
+            DebugLog.trim()
             val config = Repo.buildConfig()
             Box.ownerLookup = needsOwner(config)
+            DefaultNetworkMonitor.onSameInterfaceChange = {
+                Log.i(TAG, "default network changed on the same interface: resetting connections")
+                scope.launch { runCatching { server?.resetNetwork() } }
+            }
             DefaultNetworkMonitor.start()
             val s = Libbox.newCommandServer(this, platform)
             s.start()
             server = s
+            Box.coreStartedAt = System.currentTimeMillis()
             s.startOrReloadService(config, overrideOptions())
             Nbtest.trackProxy(s)
             onStarted()
@@ -149,6 +155,7 @@ class BoxRunner(
                 refreshUsage()
                 if (++ticks % 6 == 0) runCatching { Nbcore.flush() }
                 if (ticks % 60 == 0) Repo.autoUpdateSubscriptions()
+                if (ticks % 60 == 0) DebugLog.trim()
                 if (ticks % 30 == 0) watchNode()
             }
         }
@@ -161,6 +168,7 @@ class BoxRunner(
                 try {
                     val config = Repo.buildConfig()
                     Box.ownerLookup = needsOwner(config)
+                    Box.coreStartedAt = System.currentTimeMillis()
                     s.startOrReloadService(config, overrideOptions())
                     Nbtest.trackProxy(s)
                     nodeId = Repo.state.value.selectedId
@@ -201,6 +209,7 @@ class BoxRunner(
         runCatching { tunFd?.close() }
         tunFd = null
         DefaultNetworkMonitor.stop()
+        DefaultNetworkMonitor.onSameInterfaceChange = null
         runCatching { Nbcore.flush() }
         withContext(Dispatchers.Main) {
             if (receiverRegistered) {
@@ -231,6 +240,7 @@ class BoxRunner(
             runCatching { tunFd?.close() }
             tunFd = null
             DefaultNetworkMonitor.stop()
+            DefaultNetworkMonitor.onSameInterfaceChange = null
             runCatching { Nbcore.flush() }
             if (receiverRegistered) {
                 runCatching { service.unregisterReceiver(receiver) }

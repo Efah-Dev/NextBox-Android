@@ -112,6 +112,8 @@ type nodeItem struct {
 	Name  string `json:"name"`
 	Type  string `json:"type"`
 	Group string `json:"group"`
+	// Region is the node's region code ("JP"), for its flag.
+	Region string `json:"region,omitempty"`
 	traffic
 }
 
@@ -171,7 +173,7 @@ func Usage(billingDay int32) (string, error) {
 			continue
 		}
 		rep.Nodes = append(rep.Nodes, nodeItem{
-			ID: p.ID, Name: p.Name, Type: p.Type, Group: groups[p.GroupID],
+			ID: p.ID, Name: p.Name, Type: p.Type, Group: groups[p.GroupID], Region: regionOf(p),
 			traffic: traffic{Up: p.Upload, Down: p.Download},
 		})
 	}

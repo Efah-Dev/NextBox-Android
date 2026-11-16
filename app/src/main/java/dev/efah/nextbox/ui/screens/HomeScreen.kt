@@ -345,6 +345,8 @@ private fun ConnectButton(status: Status, diameter: Dp, onClick: () -> Unit) {
 @Composable
 private fun NodeCard(node: Profile?, onClick: () -> Unit) {
     val c = Nb.c
+    // a flag in the name moves into the badge, so the row shows one flag only
+    val (nameFlag, shownName) = node?.let { dev.efah.nextbox.ui.splitFlag(it.name) } ?: ("" to "")
     NbCard(onClick = onClick, padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -354,14 +356,20 @@ private fun NodeCard(node: Profile?, onClick: () -> Unit) {
                     .background(c.accentSoft),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    node?.let { badge(it.name) } ?: "?",
-                    color = c.accentInk, fontWeight = FontWeight.Bold, fontSize = 14.sp,
-                )
+                // the flag of the node's region, else two letters from its name
+                val flag = nameFlag.ifEmpty { node?.let { dev.efah.nextbox.ui.flagOf(it.region) }.orEmpty() }
+                if (flag.isNotEmpty()) {
+                    Text(flag, fontSize = 24.sp)
+                } else {
+                    Text(
+                        node?.let { badge(it.name) } ?: "?",
+                        color = c.accentInk, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                    )
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(node?.name ?: T("还没有选择节点"), style = NbType.bodyBold.copy(fontSize = 16.sp), color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (node != null) shownName else T("还没有选择节点"), style = NbType.bodyBold.copy(fontSize = 16.sp), color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     node?.let { protocolName(it.type) } ?: T("到「节点」页导入订阅或分享链接"),
                     style = NbType.small.copy(fontSize = 13.sp), color = c.muted, maxLines = 1,

@@ -26,6 +26,15 @@ object Box {
     internal val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    /**
+     * When the running core instance was created (a reload makes a new one).
+     * Its log lines count seconds from then ("ERROR[0025]"), which the log
+     * page turns back into clock times.
+     */
+    @Volatile
+    var coreStartedAt = 0L
+        internal set
+
     internal val _startedAt = MutableStateFlow(0L)
     val startedAt: StateFlow<Long> = _startedAt.asStateFlow()
 

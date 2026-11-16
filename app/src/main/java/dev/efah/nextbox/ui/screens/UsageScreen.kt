@@ -1,6 +1,7 @@
 package dev.efah.nextbox.ui.screens
 
 import dev.efah.nextbox.ui.T
+import dev.efah.nextbox.ui.flagged
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -120,7 +121,7 @@ fun UsageScreen() {
                 NbCard(padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), modifier = Modifier.animateItem()) {
                     Row {
                         Column(Modifier.weight(1f)) {
-                            Text(n.name, style = NbType.bodyBold, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(flagged(n.name, n.region), style = NbType.bodyBold, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text((if (n.group == T("默认分组")) T("默认分组") else n.group) + " · " + protocolName(n.type), style = NbType.small, color = c.muted, maxLines = 1)
                         }
                         Text(fmtBytes(n.total), style = NbType.bodyBold, color = c.text, modifier = Modifier.padding(start = 8.dp))

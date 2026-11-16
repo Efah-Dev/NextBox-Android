@@ -83,6 +83,7 @@ import dev.efah.nextbox.ui.NbAlertDialog
 import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.T
+import dev.efah.nextbox.ui.label
 import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.UsageBar
 import dev.efah.nextbox.ui.dragHandle
@@ -299,7 +300,7 @@ fun NodesScreen(
                         SortRow(
                             p,
                             Modifier.dragRow(drag, p.id),
-                            Modifier.dragHandle(drag, p.id, i, order.size, gap = 6.dp, onMove = { from, to ->
+                            Modifier.dragHandle(drag, p.id, order.map { it.id }, gap = 6.dp, onMove = { from, to ->
                                 sorting = order.toMutableList().also { it.add(to, it.removeAt(from)) }
                             }),
                             dragging = drag.key == p.id,
@@ -564,7 +565,7 @@ private fun NodeRow(
             }
             Column(Modifier.weight(1f)) {
                 Text(
-                    p.name, color = c.text, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    p.label, color = c.text, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 )
                 Text(
@@ -629,7 +630,7 @@ private fun SortRow(p: Profile, modifier: Modifier, handle: Modifier, dragging: 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(p.name, color = c.text, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(p.label, color = c.text, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(protocolName(p.type), style = NbType.small, color = c.muted, maxLines = 1)
         }
         LatencyText(p.latency)
