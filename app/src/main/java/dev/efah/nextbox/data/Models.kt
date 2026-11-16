@@ -67,7 +67,13 @@ data class Rule(
     val values: List<String> = emptyList(),
     val target: String = "proxy",
     val disabled: Boolean = false,
+    /** The service of the desktop app's catalog the rule was set from ("youtube"); kept for the way back. */
+    val app: String = "",
 )
+
+/** One node kept and its copies that go (store.DupSet). */
+@Serializable
+data class DupSet(val keep: Profile, val drop: List<Profile> = emptyList(), val running: Boolean = false)
 
 @Serializable
 data class Scene(val id: String, val enabled: Boolean = false, val target: String = "proxy")
@@ -160,12 +166,12 @@ data class BackupParts(
 data class Settings(
     val theme: String = "auto",
     val accentColor: String = "#F472B6",
+    /** Custom accent colours, newest first (shared with NextBox for Windows). */
+    val recentColors: List<String> = emptyList(),
     val language: String = "zh-CN",
     val mixedPort: Int = 2080,
     val allowLan: Boolean = false,
     val tunEnabled: Boolean = true,
-    val tunStack: String = "mixed",
-    val tunMtu: Int = 9000,
     val routeMode: String = "rule",
     val blockAds: Boolean = false,
     val rules: List<Rule> = emptyList(),
@@ -173,12 +179,9 @@ data class Settings(
     val remoteDns: String = "",
     val directDns: String = "",
     val enableIpv6: Boolean = false,
-    val sniff: Boolean = true,
     val testUrl: String = "https://www.google.com/generate_204",
     val testTimeout: Int = 5000,
     val testConcurrency: Int = 16,
-    val subUpdateByProxy: Boolean = false,
-    val logLevel: String = "info",
 ) {
     val bypassCn: Boolean get() = scenes.firstOrNull { it.id == "cn" }?.enabled == true
 }

@@ -553,5 +553,10 @@
   "按点选的顺序加入": "Added in the order you tick them",
   "全选这 %d 个": "Select these %d",
   "加入 %d 个节点": "Add %d nodes",
-  "确定（%d 个）": "OK (%d)"
+  "确定（%d 个）": "OK (%d)",
+  "使用这个颜色": "Use this color",
+  "找到 %d 个重复节点：服务器、端口、密码等连接参数完全一样，只是名字不同。每组保留一个，其余删除。": "Found %d duplicate nodes: server, port, password and the other connection settings are the same, only the names differ. One of each set is kept, the others are deleted.",
+  "已删除 %d 个重复节点": "Deleted %d duplicate nodes",
+  "删除失败": "Could not delete",
+  "删除 %d 个": "Delete %d"
 }

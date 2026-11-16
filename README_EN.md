@@ -32,9 +32,9 @@
 ## ✨ Features
 
 - 🔌 **Protocols**: Shadowsocks (incl. obfs, v2ray-plugin, ShadowTLS), VMess, VLESS (incl. Reality / Vision), Trojan, Hysteria2, TUIC, AnyTLS, NaiveProxy (HTTPS and QUIC), SOCKS, HTTP; chain proxies
-- 📡 **Subscriptions**: Base64 link lists, Clash / Clash.Meta YAML, sing-box JSON; shows used traffic and expiry; automatic updates, and node changes take effect at once while connected
+- 📡 **Subscriptions**: Base64 link lists, Clash / Clash.Meta YAML, sing-box JSON; shows used traffic and expiry; automatic updates that leave out duplicates within a subscription, and node changes take effect at once while connected
 - 📥 **Import**: QR code scan, clipboard, share links opened from other apps (asks first); a scanned or copied subscription address is added as a subscription, and `clash://` / `sing-box://` one-click links work too
-- 🗂️ **Nodes**: Form or JSON editor, search, multi-select for batch delete and tests, QR code sharing; region flags in front of node names; drag to reorder, or sort by latency, name or region in one tap (kept across subscription updates); chain proxies (2 to 8 nodes in a row, picked several at once and filtered by subscription and region, drag to reorder, or long-press a node and pick "Connect through other nodes")
+- 🗂️ **Nodes**: Form or JSON editor, search, multi-select for batch delete and tests, QR code sharing; remove duplicate nodes across all groups in one tap; region flags in front of node names; drag to reorder, or sort by latency, name or region in one tap (kept across subscription updates); chain proxies (2 to 8 nodes in a row, picked several at once and filtered by subscription and region, drag to reorder, or long-press a node and pick "Connect through other nodes")
 - 🔀 **Automatic node selection** (optional, off by default): when the selected node does not answer on connecting, the fastest working node of its group takes over; if none works it does not connect and says why; can also check while connected
 - 🧭 **Routing**: Global / selected apps / all direct; a "bypass mainland China" switch for the first two (bundled China domain and IP rules, no download); ad blocking
 - 📐 **Routing rules**: a route path shows the steps every connection passes from top to bottom (ads → local network → block → direct → policy groups → proxy → bypass mainland China → everything else) and follows your settings as you change them; rules are split into direct, proxy and block pages, and adding one only asks what and where: websites (common services in one tap, many domains pasted at once), apps (searchable, or a package name typed by hand) or IPs; when a website appears in several places the more specific domain wins
@@ -47,7 +47,7 @@
 - 📊 **Usage**: Today, this month (with a billing day), the last 30 days, and the proxied traffic of each node
 - 📜 **Activity**: Live connections and the core log (with times; new lines do not pull you down while you read older ones; long-press to copy a line)
 - 🛡️ **Modes**: VPN, or proxy-only (a local HTTP + SOCKS5 port)
-- 🎨 **Appearance**: Light / dark / system, accent colors; glass effects (blur on Android 12+, refraction on 13+, can be turned off)
+- 🎨 **Appearance**: Light / dark / system, accent colors from presets or your own (color panel, HEX; shared with the Windows version through backups); glass effects (blur on Android 12+, refraction on 13+, can be turned off)
 - 🌐 **Languages**: 简体中文, 繁體中文, English
 - 💾 **Backup**: interchangeable with NextBox for Windows: either side imports the other's encrypted backups; export nodes and subscriptions, routing rules and other settings, or any of them; a preview before importing, with the parts to take and nodes added or replacing the list; the rule order set on the computer and its program rules are kept, so they go back unchanged; this device's own settings (ports, TUN, start at login) stay
 - 🔄 **Updates**: Check by hand in About (compares with the latest GitHub release), or turn on the automatic check (off by default) to be told about a new version

@@ -43,11 +43,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -77,7 +75,6 @@ import dev.efah.nextbox.ui.Chip
 import dev.efah.nextbox.ui.EmptyHint
 import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.LocalBottomInset
-import dev.efah.nextbox.ui.LocalGlass
 import dev.efah.nextbox.ui.LocalToast
 import dev.efah.nextbox.ui.NbAlertDialog
 import dev.efah.nextbox.ui.NbCard
@@ -234,6 +231,7 @@ fun NodesScreen(
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(text = { Text(T("多选")) }, onClick = { menu = false; picked = emptySet() })
                             DropdownMenuItem(text = { Text(T("调整顺序")) }, onClick = { menu = false; query = null; sorting = profiles })
+                            DropdownMenuItem(text = { Text(T("删除重复节点")) }, onClick = { menu = false; dialog = "duplicates" })
                             if (group != null && !group.default) {
                                 DropdownMenuItem(text = { Text(T("编辑分组")) }, onClick = { menu = false; dialog = "edit-group" })
                                 DropdownMenuItem(text = { Text(T("删除分组"), color = c.bad) }, onClick = { menu = false; dialog = "delete-group" })
@@ -437,6 +435,7 @@ fun NodesScreen(
                 scope.launch { Repo.editGroup(group, name, url).onFailure { toast(it.message ?: T("保存失败")) } }
             }
         }
+        "duplicates" -> DuplicatesSheet(onDismiss = { dialog = null })
         "delete-group" -> if (group != null) {
             NbAlertDialog(
                 onDismissRequest = { dialog = null },

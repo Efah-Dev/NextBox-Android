@@ -24,8 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -275,10 +273,10 @@ private fun RegionSheet(selected: String, onDismiss: () -> Unit, onPick: (String
     var query by remember { mutableStateOf("") }
     val q = query.trim().lowercase()
     val shown = Repo.places.filter { q.isEmpty() || it.name.lowercase().contains(q) || it.code.lowercase().contains(q) }
-    NbSheet(onDismiss, scroll = false) {
+    NbSheet(onDismiss) {
         Text(T("选择地区"), style = NbType.big, color = c.text, modifier = Modifier.padding(bottom = 10.dp))
         OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text(T("搜索地区，例如 日本 或 JP")) }, modifier = Modifier.fillMaxWidth())
-        Box(Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(min = 120.dp, max = 520.dp).padding(top = 8.dp)) {
+        Box(Modifier.fillMaxWidth().padding(top = 8.dp).height(sheetListHeight(0.55f, 520.dp))) {
             LazyColumn {
                 items(shown, key = { it.code }) { pl ->
                     val on = pl.code == selected

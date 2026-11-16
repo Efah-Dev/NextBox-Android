@@ -2,9 +2,7 @@ package dev.efah.nextbox.ui.screens
 
 import android.content.Intent
 import android.provider.Settings as AndroidSettings
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -41,10 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,12 +52,10 @@ import dev.efah.nextbox.ui.NbAlertDialog
 import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.SectionTitle
-import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
-import dev.efah.nextbox.ui.theme.parseHex
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -188,10 +180,11 @@ fun SettingsScreen(onPerApp: () -> Unit, onRules: () -> Unit, onOpen: (String) -
             Prefs.setLanguage(v)
             Lang.apply(v)
         }
-        "theme" -> ThemeDialog(s.theme, s.accentColor, { dialog = null }) { theme, accent ->
+        "theme" -> ThemeSheet(s.theme, s.accentColor, s.recentColors, { dialog = null }) { theme, accent, recent ->
             patch(reload = false) {
                 put("theme", theme)
                 put("accentColor", accent)
+                put("recentColors", kotlinx.serialization.json.JsonArray(recent.map { kotlinx.serialization.json.JsonPrimitive(it) }))
             }
         }
     }
@@ -264,42 +257,10 @@ fun IconSep() {
 
 // ---------------------------------------------------------------- dialogs
 
-private val accents = listOf("#F472B6", "#60A5FA", "#34D399", "#A78BFA", "#FB923C")
-
 private fun themeLabel(theme: String) = when (theme) {
     "light" -> T("浅色")
     "dark" -> T("深色")
     else -> T("跟随系统")
-}
-
-@Composable
-private fun ThemeDialog(theme: String, accent: String, onDismiss: () -> Unit, onChange: (String, String) -> Unit) {
-    val c = Nb.c
-    val themes = listOf("auto", "light", "dark")
-    NbAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(T("主题")) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Segmented(listOf(T("跟随系统"), T("浅色"), T("深色")), themes.indexOf(theme).coerceAtLeast(0), onSelect = { onChange(themes[it], accent) })
-                Text(T("主题色"), style = NbType.section, color = c.muted)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    accents.forEach { hex ->
-                        val sel = hex.equals(accent, ignoreCase = true)
-                        val ring by animateColorAsState(if (sel) c.text else Color.Transparent, label = "ring")
-                        Box(
-                            Modifier.size(36.dp).border(2.dp, ring, CircleShape).padding(4.dp).clip(CircleShape)
-                                .background(parseHex(hex)).clickable { onChange(theme, hex) },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (sel) Icon(NbIcons.Check, T("已选中"), tint = Color.White, modifier = Modifier.size(14.dp))
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(T("完成")) } },
-    )
 }
 
 @Composable

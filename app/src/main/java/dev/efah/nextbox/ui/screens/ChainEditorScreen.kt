@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -264,7 +263,7 @@ fun NodePicker(
         }
     }
 
-    NbSheet(onDismiss, scroll = false) {
+    NbSheet(onDismiss) {
         Text(title, style = NbType.big, color = c.text, modifier = Modifier.padding(bottom = 10.dp))
         OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text(T("搜索节点")) }, modifier = Modifier.fillMaxWidth())
         if (groups.size > 1) {
@@ -296,7 +295,7 @@ fun NodePicker(
                 }) { Text(if (all) T("取消全选") else T("全选这 %d 个", shown.size), color = c.accentInk) }
             }
         }
-        Box(Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(min = 120.dp, max = 440.dp)) {
+        Box(Modifier.fillMaxWidth().height(sheetListHeight(0.45f, 440.dp))) {
             if (shown.isEmpty()) {
                 Text(
                     if (nodes.isEmpty()) T("没有可以加入的节点") else T("没有符合条件的节点"),

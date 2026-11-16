@@ -204,6 +204,16 @@ object Repo {
 
     suspend fun deleteProfiles(ids: Collection<Long>) = call { Nbcore.deleteProfiles(ids.joinToString(",")) }
 
+    /** The nodes of all groups that connect the same way as another one, each set with the one kept. */
+    suspend fun findDuplicates(): List<DupSet> = withContext(Dispatchers.IO) {
+        runCatching { NbJson.decodeFromString<List<DupSet>>(Nbcore.findDuplicates()) }.getOrDefault(emptyList())
+    }
+
+    /** Removes the copies and returns how many went; chains and policy groups move to the kept nodes. */
+    suspend fun deleteDuplicates(): Result<Long> = reloadIfConfigChanges {
+        call { Nbcore.deleteDuplicates() }
+    }
+
     /** Sorts the current group by "latency", "name" or "region". */
     suspend fun sortGroup(by: String) = call { Nbcore.sortGroup(_state.value.currentGroupId, by) }
 

@@ -47,6 +47,7 @@ var portableSettings = []string{
 // Settings that make up the routing rules (分流规则), as in the desktop app.
 var ruleSettings = []string{
 	"routeMode", "blockAds", "rules", "scenes", "ruleSetMirror",
+	"routeView", "routeHideOff", "routeViewAsked", // how the desktop page looks
 	"directRules", "proxyRules", "blockRules", // v1.2 and Android 1.0
 }
 

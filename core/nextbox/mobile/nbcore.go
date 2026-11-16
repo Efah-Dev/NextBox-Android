@@ -235,6 +235,9 @@ func UpdateSubscription(groupID int64, proxy string) (string, error) {
 	for _, n := range res.Nodes {
 		profiles = append(profiles, store.Profile{Name: n.Name, Type: n.Type(), Outbound: n.Outbound})
 	}
+	// copies within one subscription are left out, as on Windows
+	all := len(profiles)
+	profiles = store.DedupeList(profiles)
 	if err := s.ReplaceGroupProfiles(groupID, profiles, g.ManualOrder); err != nil {
 		return "", err
 	}
@@ -246,7 +249,36 @@ func UpdateSubscription(groupID int64, proxy string) (string, error) {
 	if err := s.UpdateGroup(g); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(i18n.T("“%s”更新完成：%d 个节点"), g.Name, len(profiles)) + skipNote(res.Skipped), nil
+	msg := fmt.Sprintf(i18n.T("“%s”更新完成：%d 个节点"), g.Name, len(profiles))
+	if n := all - len(profiles); n > 0 {
+		msg += fmt.Sprintf(i18n.T("（去掉了 %d 个重复节点）"), n)
+	}
+	return msg + skipNote(res.Skipped), nil
+}
+
+// FindDuplicates lists the nodes of all groups that connect the same way as
+// another one (JSON list of store.DupSet): which one is kept (the node in
+// use, else one in a manual group, else the first) and which go.
+func FindDuplicates() (string, error) {
+	s, err := current()
+	if err != nil {
+		return "", err
+	}
+	sets := s.FindDuplicates(0) // 0: the selected node counts as in use
+	if sets == nil {
+		sets = []store.DupSet{}
+	}
+	return marshal(sets)
+}
+
+// DeleteDuplicates removes the copies FindDuplicates lists; chain proxies and
+// policy groups that used one use the kept node. It returns how many went.
+func DeleteDuplicates() (int, error) {
+	s, err := current()
+	if err != nil {
+		return 0, err
+	}
+	return s.DeleteDuplicates(0)
 }
 
 // ---------------------------------------------------------------- profiles

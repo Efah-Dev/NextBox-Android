@@ -1,7 +1,6 @@
 package dev.efah.nextbox.ui.screens
 
 import dev.efah.nextbox.ui.T
-import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn

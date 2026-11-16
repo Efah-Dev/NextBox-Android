@@ -85,7 +85,7 @@ func TestBackupRoundTrip(t *testing.T) {
 const windowsBackup = `{"app":"NextBox","version":2,"platform":"windows",
 "profiles":{"nextId":3,"groups":[{"id":1,"name":"g"}],"profiles":[{"id":2,"groupId":1,"name":"n","type":"socks","outbound":{"type":"socks","server":"1.2.3.4","server_port":1080}}]},
 "settings":{"routeMode":"global","mixedPort":2030,"tunEnabled":false,"theme":"dark","blockAds":true,"themeScale":2,"lightLevel":35,
-"rules":[{"kind":"scene","values":["cn"],"target":""},{"kind":"suffix","values":["a.com"],"target":"proxy"},{"kind":"ads","values":[],"target":""},
+"rules":[{"kind":"scene","values":["cn"],"target":""},{"kind":"suffix","values":["a.com"],"target":"proxy","app":"youtube"},{"kind":"ads","values":[],"target":""},
 {"kind":"process","values":["chrome.exe"],"target":"direct"},{"kind":"scene","values":["ai"],"target":""},{"kind":"suffix","values":["b.com"],"target":"direct"},
 {"kind":"scene","values":["media"],"target":""},{"kind":"scene","values":["games"],"target":""}],
 "scenes":[{"id":"ai","enabled":true,"target":"proxy"},{"id":"media","enabled":false,"target":"proxy"},{"id":"games","enabled":false,"target":"direct"},{"id":"cn","enabled":true,"target":"direct"}]}}`
@@ -130,6 +130,9 @@ func TestWindowsBackup(t *testing.T) {
 	json.Unmarshal(doc.Settings, &back)
 	if got := ruleList(back.Rules); got != want {
 		t.Fatalf("exported rules:\n%s", got)
+	}
+	if !slices.ContainsFunc(back.Rules, func(r store.Rule) bool { return r.App == "youtube" }) {
+		t.Fatal("the catalog service of a desktop rule is lost")
 	}
 	var keys map[string]json.RawMessage
 	json.Unmarshal(doc.Settings, &keys)

@@ -30,7 +30,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -42,17 +41,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.Repo
@@ -61,7 +59,6 @@ import dev.efah.nextbox.ui.Chip
 import dev.efah.nextbox.ui.LocalGlass
 import dev.efah.nextbox.ui.LocalToast
 import dev.efah.nextbox.ui.NbAlertDialog
-import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.WindowBlurBehind
@@ -89,6 +86,16 @@ fun NbSheet(onDismiss: () -> Unit, scroll: Boolean = true, content: @Composable 
         )
     }
 }
+
+/**
+ * The height of a list inside a sheet: a share of the screen, fixed. A list
+ * that takes "the space left" makes the sheet's height depend on where the
+ * sheet is, and the two chase each other when the sheet is pulled (it
+ * shakes, or keeps moving); the sheet scrolls instead when it is too tall.
+ */
+@Composable
+fun sheetListHeight(share: Float, max: Dp): Dp =
+    (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * share).dp.coerceIn(160.dp, max)
 
 /** What the add sheet starts with: which tab, prefilled text or apps, and the target. */
 data class RuleDraft(val tab: Int = 0, val text: String = "", val apps: Set<String> = emptySet(), val target: String = "direct")
@@ -193,7 +200,7 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
         if (clash.isEmpty()) apply(pending) else confirm = pending to clash
     }
 
-    NbSheet(onDismiss, scroll = tab != 1) {
+    NbSheet(onDismiss) {
         Text(T("添加规则"), style = NbType.big, color = c.text, modifier = Modifier.padding(bottom = 12.dp))
         Segmented(listOf(T("网站"), T("应用"), T("IP")), tab, { tab = it }, height = 38.dp)
         Spacer(Modifier.height(14.dp))
@@ -237,10 +244,9 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
                 )
             }
             1 -> {
-                // the sheet does not scroll here (the list does): the list gives
-                // way when the targets below take two or three lines, so the
-                // buttons always keep their height
-                Box(Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(min = 160.dp, max = 380.dp)) {
+                // a fixed height (see sheetListHeight): when many targets below
+                // make the sheet too tall, the sheet scrolls to the buttons
+                Box(Modifier.fillMaxWidth().height(sheetListHeight(0.42f, 380.dp))) {
                     AppChooser(selected = apps, onChange = { apps = it }, showBulkActions = false, padding = PaddingValues(0.dp))
                 }
                 TextButton(onClick = { manual = true }) { Text(T("找不到？手动输入包名"), color = c.accentInk) }
