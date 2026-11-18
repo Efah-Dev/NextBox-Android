@@ -14,7 +14,7 @@ class ActionReceiver : BroadcastReceiver() {
             TOGGLE_ROUTE -> {
                 val pending = goAsync()
                 Repo.scope.launch {
-                    Repo.setRoute(bypass = !dev.efah.nextbox.data.Prefs.bypassCn.value)
+                    Repo.setBypass(!dev.efah.nextbox.data.Prefs.bypassCn.value)
                     pending.finish()
                 }
             }

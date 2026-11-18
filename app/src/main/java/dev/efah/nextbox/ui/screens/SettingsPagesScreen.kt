@@ -391,6 +391,7 @@ private fun ColumnScope.BackupPage() {
     val state by Repo.state.collectAsState()
     var nodes by remember { mutableStateOf(true) }
     var rules by remember { mutableStateOf(true) }
+    var look by remember { mutableStateOf(true) }
     var other by remember { mutableStateOf(true) }
     var password by remember { mutableStateOf("") }
     var again by remember { mutableStateOf("") }
@@ -405,7 +406,7 @@ private fun ColumnScope.BackupPage() {
         if (uri == null) return@rememberLauncherForActivityResult
         busy = true
         scope.launch {
-            Repo.exportBackup(BackupParts(nodes, rules, other, password)).onSuccess { out ->
+            Repo.exportBackup(BackupParts(nodes = nodes, rules = rules, settings = other, appearance = look, password = password)).onSuccess { out ->
                 runCatching { ctx.contentResolver.openOutputStream(uri)?.use { it.write(out.toByteArray()) } }
                     .onSuccess { toast(T("已导出备份")); password = ""; again = "" }.onFailure { toast(it.message ?: T("导出失败")) }
             }.onFailure { toast(it.message ?: T("导出失败")) }
@@ -433,14 +434,15 @@ private fun ColumnScope.BackupPage() {
         if (text == null) toast(T("读取文件失败")) else inspect(text, "")
     }
 
-    val nothing = !nodes && !rules && !other
+    val nothing = !nodes && !rules && !look && !other
     Note(T("备份文件用密码加密。手机版和 NextBox for Windows 导出的备份可以互相导入。"))
     NbCard {
         Text(T("导出备份"), style = NbType.bodyBold, color = c.text)
         Spacer(Modifier.height(4.dp))
-        PartRow(nodes, T("节点与订阅"), T("含链式代理和策略组")) { nodes = it }
+        PartRow(nodes, T("节点与订阅"), T("含链式代理和分组代理")) { nodes = it }
         PartRow(rules, T("分流规则"), T("%d 条规则", RuleUi.count(state.settings.rules) { true })) { rules = it }
-        PartRow(other, T("其他设置"), T("主题、DNS、指定应用等")) { other = it }
+        PartRow(look, T("外观"), T("主题、主题色、语言")) { look = it }
+        PartRow(other, T("其他设置"), T("DNS、代理范围、通知等")) { other = it }
         val pw = androidx.compose.ui.text.input.PasswordVisualTransformation()
         OutlinedTextField(
             password, { password = it }, singleLine = true, label = { Text(T("密码")) },
@@ -518,11 +520,13 @@ private fun ImportSheet(i: BackupInfo, onDismiss: () -> Unit, onImport: (BackupP
     val c = Nb.c
     var nodes by remember { mutableStateOf(i.hasNodes) }
     var rules by remember { mutableStateOf(i.hasRules) }
-    // as in the desktop app, the other settings are only taken when ticked
+    // as in the desktop app, the look is taken by default, the other
+    // settings only when ticked
+    var look by remember { mutableStateOf(i.hasAppearance) }
     var other by remember { mutableStateOf(false) }
     var replace by remember { mutableStateOf(false) }
     val fromOther = i.platform != "android"
-    val any = (nodes && i.hasNodes) || (rules && i.hasRules) || (other && i.hasSettings)
+    val any = (nodes && i.hasNodes) || (rules && i.hasRules) || (look && i.hasAppearance) || (other && i.hasSettings)
     NbSheet(onDismiss) {
         Text(T("导入这份备份？"), style = NbType.big, color = c.text)
         Text(
@@ -540,11 +544,12 @@ private fun ImportSheet(i: BackupInfo, onDismiss: () -> Unit, onImport: (BackupP
                 PartRow(
                     nodes, T("节点与订阅"),
                     T("%d 个节点", s.nodes + s.chains) + (if (s.subscriptions > 0) T("，%d 个订阅", s.subscriptions) else "") +
-                        (if (s.policies > 0) T("，%d 个策略组", s.policies) else ""),
+                        (if (s.policies > 0) T("，%d 个分组代理", s.policies) else ""),
                 ) { nodes = it }
             }
             if (i.hasRules) PartRow(rules, T("分流规则"), T("%d 条，会替换现有规则", i.rules)) { rules = it }
-            if (i.hasSettings) PartRow(other, T("其他设置"), if (fromOther) T("主题、DNS、测速") else T("全部，包括指定应用")) { other = it }
+            if (i.hasAppearance) PartRow(look, T("外观"), T("主题、主题色、语言")) { look = it }
+            if (i.hasSettings) PartRow(other, T("其他设置"), if (fromOther) T("DNS、测速") else T("全部，包括代理范围")) { other = it }
         }
         val notes = buildList {
             if (rules && i.desktopRules > 0) add(T("其中 %d 条按电脑程序分流，只在 Windows 版生效，会原样保留，再导出给电脑时不会丢。", i.desktopRules))
@@ -565,7 +570,7 @@ private fun ImportSheet(i: BackupInfo, onDismiss: () -> Unit, onImport: (BackupP
             Spacer(Modifier.height(8.dp))
             Segmented(listOf(T("合并到现有节点"), T("替换现有节点")), if (replace) 1 else 0, onSelect = { replace = it == 1 }, height = 40.dp)
             Text(
-                if (replace) T("现有的分组、节点和策略组会被替换。") else T("已有的订阅不会重复添加。"),
+                if (replace) T("现有的分组、节点和分组代理会被替换。") else T("已有的订阅不会重复添加。"),
                 style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 6.dp),
             )
         }
@@ -573,7 +578,7 @@ private fun ImportSheet(i: BackupInfo, onDismiss: () -> Unit, onImport: (BackupP
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             TextButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp)) { Text(T("取消")) }
             Button(
-                onClick = { onImport(BackupParts(nodes = nodes && i.hasNodes, rules = rules && i.hasRules, settings = other && i.hasSettings, replace = replace)) },
+                onClick = { onImport(BackupParts(nodes = nodes && i.hasNodes, rules = rules && i.hasRules, settings = other && i.hasSettings, appearance = look && i.hasAppearance, replace = replace)) },
                 enabled = any,
                 colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
                 modifier = Modifier.weight(2f).height(48.dp),

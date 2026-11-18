@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,6 +49,9 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,57 +104,49 @@ import dev.efah.nextbox.ui.theme.NbType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val scopes = listOf(
-    Prefs.SCOPE_GLOBAL to "全局代理", // i18n:skip
-    Prefs.SCOPE_APPS to "指定应用", // i18n:skip
-    Prefs.SCOPE_DIRECT to "全部直连", // i18n:skip
+private val modes = listOf(
+    "global" to "全局代理", // i18n:skip
+    "rule" to "规则分流", // i18n:skip
+    "direct" to "全部直连", // i18n:skip
 )
 
-/** Routing scope + the "bypass mainland China" switch that applies to both proxied scopes. */
+/**
+ * The routing mode (as on NextBox for Windows), the "bypass mainland China"
+ * step of rule mode, and which apps use the VPN (代理范围).
+ */
 @Composable
 private fun RouteSection(onPickApps: () -> Unit) {
     val c = Nb.c
     val scope = rememberCoroutineScope()
+    val state by Repo.state.collectAsState()
+    val mode = state.settings.routeMode
+    val bypass = state.settings.bypassCn
     val routeScope by Prefs.routeScope.collectAsState()
-    val bypass by Prefs.bypassCn.collectAsState()
     val apps by Prefs.perAppList.collectAsState()
     val appMode by Prefs.perAppMode.collectAsState()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Segmented(scopes.map { T(it.second) }, scopes.indexOfFirst { it.first == routeScope }, onSelect = { i ->
-            val target = scopes[i].first
-            scope.launch { Repo.setRoute(scope = target) }
-            if (target == Prefs.SCOPE_APPS && apps.isEmpty()) onPickApps()
-        })
-        NbCard(padding = PaddingValues(0.dp)) {
-            val enabled = routeScope != Prefs.SCOPE_DIRECT
+    // one card, one line per row: the connect button above takes the height left
+    NbCard(padding = PaddingValues(0.dp)) {
+        Column {
+            Segmented(
+                modes.map { T(it.second) }, modes.indexOfFirst { it.first == mode }.coerceAtLeast(0),
+                onSelect = { i -> scope.launch { Repo.setRouteMode(modes[i].first) } },
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp), height = 40.dp,
+            )
+            val enabled = mode != "direct"
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = enabled) { scope.launch { Repo.setRoute(bypass = !bypass) } }
-                    .padding(start = 16.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+                    .heightIn(min = 50.dp)
+                    .clickable(enabled = enabled) { scope.launch { Repo.setBypass(!bypass) } }
+                    .padding(start = 16.dp, end = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(T("绕过中国大陆"), style = NbType.body, color = if (enabled) c.text else c.muted)
-                    Text(
-                        when (routeScope) {
-                            Prefs.SCOPE_APPS -> when {
-                                apps.isEmpty() -> T("还没有选择应用")
-                                appMode == Prefs.APPS_EXCLUDE -> T("排除 %d 个应用，其余走代理", apps.size)
-                                else -> T("已选 %d 个应用", apps.size)
-                            } + if (bypass) T(" · 国内网站直连") else ""
-                            Prefs.SCOPE_DIRECT -> T("全部直连时不需要")
-                            else -> if (bypass) T("国内网站和 IP 直连，其余走代理") else T("所有流量都走代理")
-                        },
-                        style = NbType.small, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (routeScope == Prefs.SCOPE_APPS) {
-                    androidx.compose.material3.TextButton(onClick = onPickApps) { Text(T("选择应用"), color = c.accentInk) }
-                }
+                Text(T("绕过中国大陆"), style = NbType.body, color = if (enabled) c.text else c.muted, modifier = Modifier.weight(1f))
+                // how it resolves names, while it is on
+                if (bypass && mode == "rule") ResolveDnsChip(state.settings.bypassDns, Modifier.padding(end = 4.dp))
                 androidx.compose.material3.Switch(
-                    checked = bypass && enabled, enabled = enabled,
-                    onCheckedChange = { scope.launch { Repo.setRoute(bypass = it) } },
+                    checked = bypass && mode == "rule", enabled = enabled,
+                    onCheckedChange = { scope.launch { Repo.setBypass(it) } },
                     colors = androidx.compose.material3.SwitchDefaults.colors(
                         checkedTrackColor = c.accentStrong,
                         checkedThumbColor = Color.White,
@@ -158,7 +154,28 @@ private fun RouteSection(onPickApps: () -> Unit) {
                         uncheckedBorderColor = c.muted,
                         uncheckedThumbColor = c.muted,
                     ),
+                    modifier = Modifier.graphicsLayer { scaleX = 0.86f; scaleY = 0.86f },
                 )
+            }
+            androidx.compose.material3.HorizontalDivider(color = c.line.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable(onClick = onPickApps)
+                    .padding(start = 16.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(T("代理范围"), style = NbType.body, color = c.text, modifier = Modifier.weight(1f))
+                Text(
+                    when {
+                        routeScope != Prefs.SCOPE_APPS -> T("所有应用")
+                        appMode == Prefs.APPS_EXCLUDE -> T("排除 %d 个应用", apps.size)
+                        else -> T("只代理 %d 个应用", apps.size)
+                    },
+                    style = NbType.small, color = c.muted, maxLines = 1,
+                )
+                Icon(NbIcons.Chevron, null, tint = c.muted, modifier = Modifier.padding(start = 4.dp).size(16.dp))
             }
         }
     }
@@ -176,7 +193,9 @@ fun HomeScreen(onConnect: () -> Unit, onOpenNodes: () -> Unit, onImport: () -> U
     val error by Box.error.collectAsState()
     // re-read after latency tests too (profiles changes)
     val profiles by Repo.profiles.collectAsState()
-    val selected by produceState<Profile?>(null, state.selectedId, profiles) { value = Repo.profile(state.selectedId) }
+    // starts from the node list it already has: an empty card for a moment
+    // (each time the page is built) made the page jump
+    val selected by produceState(profiles.firstOrNull { it.id == state.selectedId }, state.selectedId, profiles) { value = Repo.profile(state.selectedId) }
 
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(status) {
@@ -199,15 +218,37 @@ fun HomeScreen(onConnect: () -> Unit, onOpenNodes: () -> Unit, onImport: () -> U
             BarIcon(NbIcons.Clipboard, T("从剪贴板导入"), onImport)
         }
 
-        // No scrolling: the connect button takes whatever height is left, so
-        // the page fills any screen size exactly.
+        // The connect button takes whatever height is left, so the page fills
+        // any screen exactly. In a small window (split screen, a floating
+        // window) too little is left for it: the page then scrolls instead
+        // and the button keeps a usable size.
         BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = LocalBottomInset.current)) {
             val compact = maxHeight < 560.dp
             val gap = if (compact) 8.dp else 12.dp
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
-            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                val size = minOf(maxHeight * 0.78f, maxWidth * 0.5f, 176.dp).coerceAtLeast(72.dp)
-                ConnectButton(status, size, onConnect)
+            val page = maxHeight
+            // the disc takes 78% of the height left at most, so its lights
+            // have room around it and are not cut off at the top
+            val smallest = 88.dp
+            // the page height below which the button would get smaller than that
+            var scrollBelow by remember { mutableStateOf(0.dp) }
+            val scroll = page < scrollBelow
+        Column(
+            Modifier.fillMaxSize().let { if (scroll) it.verticalScroll(rememberScrollState()) else it },
+            verticalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            if (scroll) {
+                Box(Modifier.fillMaxWidth().height(smallest / 0.78f), contentAlignment = Alignment.Center) {
+                    ConnectButton(status, smallest, onConnect)
+                }
+            } else {
+                BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    val left = maxHeight
+                    LaunchedEffect(left, page) {
+                        if (left * 0.78f < smallest) scrollBelow = page + (smallest / 0.78f - left)
+                    }
+                    val size = minOf(maxHeight * 0.78f, maxWidth * 0.5f, 176.dp)
+                    ConnectButton(status, size, onConnect)
+                }
             }
 
             AnimatedContent(

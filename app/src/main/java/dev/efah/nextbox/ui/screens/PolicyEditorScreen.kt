@@ -87,7 +87,7 @@ fun PolicyEditorScreen(id: Long, onClose: () -> Unit) {
     LaunchedEffect(p) { preview = Repo.previewPolicy(p) }
 
     GlassScreen(header = {
-        TopBar(if (id == 0L) T("新建策略组") else T("编辑策略组"), leading = { BarIcon(NbIcons.Back, T("返回"), onClose) }) {
+        TopBar(if (id == 0L) T("新建分组代理") else T("编辑分组代理"), leading = { BarIcon(NbIcons.Back, T("返回"), onClose) }) {
             if (id != 0L) BarIcon(NbIcons.Trash, T("删除"), tint = c.bad) { confirmDelete = true }
         }
     }) { pad ->
@@ -214,7 +214,7 @@ fun PolicyEditorScreen(id: Long, onClose: () -> Unit) {
     if (confirmDelete) {
         NbAlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text(T("删除策略组")) },
+            title = { Text(T("删除分组代理")) },
             text = {
                 Text(
                     if ((existing?.rules ?: 0) > 0) T("有 %d 条规则或场景用到它，删除后改走首页选中的节点。", existing?.rules ?: 0) else T("确定删除“%s”吗？", p.name),

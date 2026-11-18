@@ -18,13 +18,15 @@ import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbColors
 
 /** A ready-made group of websites (and the IP ranges some apps connect to directly). */
-data class Service(val id: String, val label: String, val geosite: List<String>, val cidrs: List<String> = emptyList())
-
-/**
- * One entry of a rules list as the user sees it: an app, a website, an IP
- * range, or a whole service. values are the rule values it stands for.
- */
-data class RuleItem(val kind: String, val values: List<String>, val label: String, val tag: String, val target: String, val disabled: Boolean)
+data class Service(
+    val id: String,
+    val label: String,
+    val geosite: List<String>,
+    val cidrs: List<String> = emptyList(),
+    val suffix: List<String> = emptyList(),
+    /** Off: only names the rules that already use it (game downloads matter on a PC only). */
+    val offered: Boolean = true,
+)
 
 /** Labels, colours and list operations shared by the rules screens. */
 object RuleUi {
@@ -58,6 +60,21 @@ object RuleUi {
         "2001:67c:4e8::/48", "2001:b28:f23c::/47", "2001:b28:f23f::/48",
     )
 
+    private val steamStore = listOf(
+        "steampowered.com", "steamcommunity.com", "steamstatic.com", "steamusercontent.com",
+        "steam-chat.com", "steam-api.com", "steamgames.com", "steamserver.net", "s.team", "steam.tv",
+        "steamdeck.com", "valvesoftware.com",
+        "steamcdn-a.akamaihd.net", "steamcommunity-a.akamaihd.net", "steamstore-a.akamaihd.net",
+        "steamuserimages-a.akamaihd.net", "steamusercontent-a.akamaihd.net", "steamvideo-a.akamaihd.net",
+        "steambroadcast.akamaized.net", "steammobile.akamaized.net",
+    )
+    private val steamDownload = listOf(
+        "steamcontent.com", "steampipe.akamaized.net", "steampipe-kr.akamaized.net", "steampipe-partner.akamaized.net",
+        "steampowered.com.8686c.com", "steamstatic.com.8686c.com", "dl.steam.clngaa.com",
+        "st.dl.bscstorage.net", "st.dl.eccdnx.com", "st.dl.pinyuncloud.com", "xz.pphimalayanrt.com",
+        "lv.queniujq.cn", "client-update.queniuqe.com", "steamchina.com", "wmsjsteam.com",
+    )
+
     /** Common services offered as one tap in the add sheet (sing-geosite names). */
     val services = listOf(
         Service("google", "Google", listOf("google")),
@@ -77,15 +94,23 @@ object RuleUi {
         Service("facebook", "Facebook", listOf("facebook")),
         Service("apple", "Apple 服务", listOf("apple")), // i18n:skip (translated where shown)
         Service("microsoft", "微软", listOf("microsoft")), // i18n:skip (translated where shown)
-        Service("steam", "Steam", listOf("steam")),
-        Service("games-cn", "游戏下载（国内 CDN）", listOf("category-games@cn")), // i18n:skip (translated where shown)
+        // the store and community want the proxy, the downloads come from CDNs in China (as on NextBox for Windows)
+        Service("steam", "Steam", emptyList(), suffix = steamStore),
         Service("bilibili", "哔哩哔哩", listOf("bilibili")), // i18n:skip (translated where shown)
+        Service("steam-download", "Steam 下载", emptyList(), suffix = steamDownload, offered = false), // i18n:skip (translated where shown)
+        Service("games-cn", "游戏下载（国内 CDN）", listOf("category-games@cn"), offered = false), // i18n:skip (translated where shown)
     )
 
-    /** Countries for IP location rules (sing-geoip codes). */
-    val geoips = listOf(
-        "cn" to "中国大陆", "hk" to "中国香港", "tw" to "中国台湾", "jp" to "日本", "sg" to "新加坡", "kr" to "韩国", "us" to "美国",
-    ) // i18n:skip (translated where shown)
+    /** What the service picker offers, by topic. */
+    val serviceGroups: List<Pair<String, List<String>>> = listOf(
+        "AI" to listOf("openai", "anthropic", "gemini", "ai"),
+        "视频与音乐" to listOf("youtube", "netflix", "disney", "spotify", "tiktok", "bilibili"), // i18n:skip (translated where shown)
+        "社交" to listOf("telegram", "twitter", "instagram", "facebook"), // i18n:skip (translated where shown)
+        "常用平台" to listOf("google", "github", "apple", "microsoft", "steam"), // i18n:skip (translated where shown)
+    )
+
+    fun service(id: String): Service? = services.firstOrNull { it.id == id }
+
 
     fun policyId(target: String): Long = target.removePrefix("policy:").takeIf { target.startsWith("policy:") }?.toLongOrNull() ?: 0
 
@@ -104,54 +129,6 @@ object RuleUi {
         else -> c.accentSoft to c.accentInk
     }
 
-    /** The list page a target is shown on: block, direct or proxy (policy groups live on the proxy page). */
-    fun page(target: String): String = when (target) {
-        "block", "direct" -> target
-        else -> "proxy"
-    }
-
-    // ---------------------------------------------------------------- list view
-
-    /** The rules of one target as list entries, grouped as apps, websites and IP addresses. */
-    fun items(rules: List<Rule>, target: String, appLabel: (String) -> String): Triple<List<RuleItem>, List<RuleItem>, List<RuleItem>> {
-        val apps = mutableListOf<RuleItem>()
-        val sites = mutableListOf<RuleItem>()
-        val ips = mutableListOf<RuleItem>()
-        for (r in rules.filter { it.target == target }) {
-            var values = r.values
-            if (r.kind == "cidr") {
-                // a service's IP ranges show as one entry
-                for (s in services.filter { it.cidrs.isNotEmpty() && values.containsAll(it.cidrs) }) {
-                    ips += RuleItem("cidr", s.cidrs, T(s.label), T("IP 段"), r.target, r.disabled)
-                    values = values - s.cidrs.toSet()
-                }
-            }
-            for (v in values) {
-                val item = when (r.kind) {
-                    "package" -> RuleItem(r.kind, listOf(v), appLabel(v), "", r.target, r.disabled)
-                    // from NextBox for Windows: kept for the way back, never matched here
-                    "process" -> RuleItem(r.kind, listOf(v), v, T("电脑程序，只在 Windows 版生效"), r.target, r.disabled)
-                    "geosite" -> {
-                        val s = services.firstOrNull { v in it.geosite }
-                        RuleItem(r.kind, listOf(v), s?.let { T(it.label) } ?: v, if (s != null) T("常用服务") else T("网站分类"), r.target, r.disabled)
-                    }
-                    "geoip" -> RuleItem(r.kind, listOf(v), geoips.firstOrNull { it.first == v }?.second?.let { T(it) } ?: v.uppercase(), T("IP 归属地"), r.target, r.disabled)
-                    "suffix" -> RuleItem(r.kind, listOf(v), v, T("含子域名"), r.target, r.disabled)
-                    "domain" -> RuleItem(r.kind, listOf(v), v, T("只匹配这个"), r.target, r.disabled)
-                    "keyword" -> RuleItem(r.kind, listOf(v), v, T("包含关键字"), r.target, r.disabled)
-                    "regex" -> RuleItem(r.kind, listOf(v), v, T("正则"), r.target, r.disabled)
-                    else -> RuleItem(r.kind, listOf(v), v, kindLabel(r.kind), r.target, r.disabled)
-                }
-                when (r.kind) {
-                    "package", "process" -> apps += item
-                    "cidr", "geoip" -> ips += item
-                    else -> sites += item
-                }
-            }
-        }
-        return Triple(apps, sites, ips)
-    }
-
     /**
      * Rules the phone checks: not the places of ad blocking and the scenes
      * that the desktop app keeps among them, nor its program rules.
@@ -161,7 +138,7 @@ object RuleUi {
     /** How many values (services counted once) a target has. */
     fun count(rules: List<Rule>, target: (String) -> Boolean): Int =
         rules.filter { !it.disabled && applies(it) && target(it.target) }.sumOf { r ->
-            if (r.kind != "cidr") r.values.size else {
+            if (r.isSet) r.items.sumOf { it.values.size } else if (r.kind != "cidr") r.values.size else {
                 val grouped = services.filter { it.cidrs.isNotEmpty() && r.values.containsAll(it.cidrs) }
                 r.values.size - grouped.sumOf { it.cidrs.size } + grouped.size
             }
@@ -199,11 +176,13 @@ object RuleUi {
         val values = raw.map { normalize(kind, it) }.filter { it.isNotEmpty() }.distinct()
         if (values.isEmpty()) return rules
         val out = remove(rules, kind, values).toMutableList()
-        val i = out.indexOfFirst { it.kind == kind && it.target == target && it.disabled == disabled }
+        // joins an unnamed rule of the same kind and target; a new one goes
+        // before "bypass mainland China", so that it applies (Route.insertAt)
+        val i = out.indexOfFirst { it.kind == kind && it.target == target && it.disabled == disabled && it.name.isEmpty() && it.app.isEmpty() }
         if (i >= 0) {
             out[i] = out[i].copy(values = (out[i].values + values).distinct())
         } else {
-            out += Rule(kind = kind, values = values.distinct(), target = target, disabled = disabled)
+            out.add(Route.insertAt(out), Rule(kind = kind, values = values.distinct(), target = target, disabled = disabled))
         }
         return out
     }

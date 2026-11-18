@@ -14,6 +14,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineBreak
+import androidx.compose.material3.Typography
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
@@ -137,15 +139,37 @@ fun NextBoxTheme(theme: String, accentHex: String, content: @Composable () -> Un
         )
     }
     CompositionLocalProvider(LocalNb provides nb) {
-        MaterialTheme(colorScheme = scheme, content = content)
+        MaterialTheme(colorScheme = scheme, typography = phraseTypography, content = content)
     }
 }
 
+/**
+ * Line breaks between words and phrases, not inside them: Chinese text broke
+ * between any two characters ("当前节 / 点"). Android 13 and later break
+ * Chinese by phrase; older versions keep breaking by character.
+ */
+private val phraseBreak = LineBreak(
+    strategy = LineBreak.Strategy.HighQuality,
+    strictness = LineBreak.Strictness.Strict,
+    wordBreak = LineBreak.WordBreak.Phrase,
+)
+
+private val phraseTypography = Typography().run {
+    fun TextStyle.p() = copy(lineBreak = phraseBreak)
+    copy(
+        displayLarge = displayLarge.p(), displayMedium = displayMedium.p(), displaySmall = displaySmall.p(),
+        headlineLarge = headlineLarge.p(), headlineMedium = headlineMedium.p(), headlineSmall = headlineSmall.p(),
+        titleLarge = titleLarge.p(), titleMedium = titleMedium.p(), titleSmall = titleSmall.p(),
+        bodyLarge = bodyLarge.p(), bodyMedium = bodyMedium.p(), bodySmall = bodySmall.p(),
+        labelLarge = labelLarge.p(), labelMedium = labelMedium.p(), labelSmall = labelSmall.p(),
+    )
+}
+
 object NbType {
-    val title = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold)
-    val section = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium)
-    val body = TextStyle(fontSize = 15.sp)
-    val bodyBold = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold)
-    val small = TextStyle(fontSize = 12.sp)
-    val big = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    val title = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, lineBreak = phraseBreak)
+    val section = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, lineBreak = phraseBreak)
+    val body = TextStyle(fontSize = 15.sp, lineBreak = phraseBreak)
+    val bodyBold = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, lineBreak = phraseBreak)
+    val small = TextStyle(fontSize = 12.sp, lineBreak = phraseBreak)
+    val big = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, lineBreak = phraseBreak)
 }

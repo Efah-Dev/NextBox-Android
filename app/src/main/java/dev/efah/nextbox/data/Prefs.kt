@@ -75,7 +75,7 @@ object Prefs {
         lang.flow.value = sp.getString(lang.key, lang.default) ?: lang.default
         subHours.flow.value = sp.getInt(subHours.key, subHours.default)
         autoUpdatePref.flow.value = sp.getBoolean(autoUpdatePref.key, autoUpdatePref.default)
-        listOf(appModePref, autoConnectPref,autoSelectPref, autoSelectAllPref, autoSelectTimeoutPref, autoSelectWatchPref).forEach { load(it) }
+        listOf(textModePref, appModePref, autoConnectPref, autoSelectPref, autoSelectAllPref, autoSelectTimeoutPref, autoSelectWatchPref).forEach { load(it) }
     }
 
     /** First start of this version: derive the route scope from the core setting. */
@@ -154,6 +154,11 @@ object Prefs {
 
     private val autoUpdatePref = Pref("auto_update", false)
 
+    /** The rules page shows the rules as text (one per line) instead of the route. */
+    private val textModePref = Pref("rule_text_mode", false)
+    val ruleTextMode: StateFlow<Boolean> = textModePref.flow.asStateFlow()
+    fun setRuleTextMode(v: Boolean) = put(textModePref, v)
+
     /** Look for a newer release on GitHub when the app starts (off unless the user turns it on). */
     val autoUpdate: StateFlow<Boolean> = autoUpdatePref.flow.asStateFlow()
 
@@ -230,8 +235,17 @@ object Prefs {
         }
     }
 
-    /** The Android-only preferences that travel in a backup ("android" in the file). */
-    fun exportJson(): String = kotlinx.serialization.json.buildJsonObject {
+    /**
+     * The Android-only preferences that travel in a backup ("android" in the
+     * file): the look (glass, language) with the appearance part, the rest
+     * with the other settings.
+     */
+    fun exportJson(appearance: Boolean = true, settings: Boolean = true): String = kotlinx.serialization.json.buildJsonObject {
+        if (appearance) {
+            put("glass", kotlinx.serialization.json.JsonPrimitive(glass.value))
+            put("language", kotlinx.serialization.json.JsonPrimitive(language.value))
+        }
+        if (!settings) return@buildJsonObject
         put("routeScope", kotlinx.serialization.json.JsonPrimitive(routeScope.value))
         put("perAppMode", kotlinx.serialization.json.JsonPrimitive(perAppMode.value))
         put("perAppList", kotlinx.serialization.json.JsonArray(perAppList.value.sorted().map { kotlinx.serialization.json.JsonPrimitive(it) }))
@@ -240,7 +254,6 @@ object Prefs {
         put("billingDay", kotlinx.serialization.json.JsonPrimitive(billingDay.value))
         put("latencyMode", kotlinx.serialization.json.JsonPrimitive(latencyMode.value))
         put("fakeIp", kotlinx.serialization.json.JsonPrimitive(fakeIp.value))
-        put("glass", kotlinx.serialization.json.JsonPrimitive(glass.value))
         put("subAutoHours", kotlinx.serialization.json.JsonPrimitive(subAutoHours.value))
         put("autoConnect", kotlinx.serialization.json.JsonPrimitive(autoConnect.value))
         put("autoSelect", kotlinx.serialization.json.JsonPrimitive(autoSelect.value))
@@ -249,13 +262,19 @@ object Prefs {
         put("autoSelectWatch", kotlinx.serialization.json.JsonPrimitive(autoSelectWatch.value))
     }.toString()
 
-    /** Applies preferences from a backup; unknown or missing keys are left alone. */
-    fun importJson(js: String) {
+    /** Applies preferences of the chosen parts from a backup; unknown or missing keys are left alone. */
+    fun importJson(js: String, appearance: Boolean = true, settings: Boolean = true) {
         val o = runCatching { NbJson.parseToJsonElement(js) as kotlinx.serialization.json.JsonObject }.getOrNull() ?: return
         fun str(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
         fun bool(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull()
         fun int(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull()
-        str("routeScope")?.takeIf { it in setOf(SCOPE_GLOBAL, SCOPE_APPS, SCOPE_DIRECT) }?.let { setRouteScope(it) }
+        if (appearance) {
+            bool("glass")?.let { setGlass(it) }
+            str("language")?.takeIf { it == "auto" || it == "zh-CN" || it == "zh-TW" || it == "en" }?.let { setLanguage(it); dev.efah.nextbox.ui.Lang.apply(it) }
+        }
+        if (!settings) return
+        // "direct" (everything direct) was a scope in 1.x; it is a routing mode now, set with the rules (see ImportBackup)
+        str("routeScope")?.let { if (it == SCOPE_DIRECT) SCOPE_GLOBAL else it }?.takeIf { it == SCOPE_GLOBAL || it == SCOPE_APPS }?.let { setRouteScope(it) }
         str("perAppMode")?.takeIf { it == APPS_INCLUDE || it == APPS_EXCLUDE }?.let { setPerAppMode(it) }
         (o["perAppList"] as? kotlinx.serialization.json.JsonArray)?.let { a -> setPerAppList(a.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.toSet()) }
         bool("notifySpeed")?.let { setNotifySpeed(it) }
@@ -263,7 +282,6 @@ object Prefs {
         int("billingDay")?.let { setBillingDay(it) }
         str("latencyMode")?.takeIf { it == TEST_TCP || it == TEST_URL }?.let { setLatencyMode(it) }
         bool("fakeIp")?.let { setFakeIp(it) }
-        bool("glass")?.let { setGlass(it) }
         int("subAutoHours")?.let { setSubAutoHours(it) }
         bool("autoConnect")?.let { setAutoConnect(it) }
         bool("autoSelect")?.let { setAutoSelect(it) }

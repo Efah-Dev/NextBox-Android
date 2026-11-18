@@ -36,11 +36,12 @@
 - 📥 **Import**: QR code scan, clipboard, share links opened from other apps (asks first); a scanned or copied subscription address is added as a subscription, and `clash://` / `sing-box://` one-click links work too
 - 🗂️ **Nodes**: Form or JSON editor, search, multi-select for batch delete and tests, QR code sharing; remove duplicate nodes across all groups in one tap; region flags in front of node names; drag to reorder, or sort by latency, name or region in one tap (kept across subscription updates); chain proxies (2 to 8 nodes in a row, picked several at once and filtered by subscription and region, drag to reorder, or long-press a node and pick "Connect through other nodes")
 - 🔀 **Automatic node selection** (optional, off by default): when the selected node does not answer on connecting, the fastest working node of its group takes over; if none works it does not connect and says why; can also check while connected
-- 🧭 **Routing**: Global / selected apps / all direct; a "bypass mainland China" switch for the first two (bundled China domain and IP rules, no download); ad blocking
-- 📐 **Routing rules**: a route path shows the steps every connection passes from top to bottom (ads → local network → block → direct → policy groups → proxy → bypass mainland China → everything else) and follows your settings as you change them; rules are split into direct, proxy and block pages, and adding one only asks what and where: websites (common services in one tap, many domains pasted at once), apps (searchable, or a package name typed by hand) or IPs; when a website appears in several places the more specific domain wins
-- 🔍 **Try it**: type a website or pick an app and the route path marks the step that catches it, and why; tap a connection on the Activity page to add its website or app to the rules
+- 🧭 **Routing**: global / rule-based / all direct, as in NextBox for Windows; a "bypass mainland China" switch on the home screen (bundled China domain and IP rules, no download); ad blocking
+- 📐 **Routing rules**: the route of NextBox for Windows: every connection is checked from top to bottom and leaves at the first step that matches. The first step (local network) and the last (everything else) are fixed; ad blocking, the scenes (bypass mainland China, AI services, streaming, game downloads direct), rules and rule sets in between are dragged into any order, and steps that are off can be hidden. Adding a rule asks what and where: websites (common services in one tap; Steam as store and downloads), apps (searchable, or a package name typed by hand), IPs and IP regions (every country and region, searchable by name, code or pinyin initials); rules can have names; an optional text mode with one rule per line
+- 🗂️ **Rule sets**: put domains, IPs, apps, site categories, IP regions and sing-box rule-sets from the web (.srs / .json URLs) into one named rule set with one target, pasting many at once; a rule-set URL can be downloaded once to check it
+- 🔍 **Try it**: type a website or pick an app and the route marks the step that catches it, and why; as the core does, a domain is resolved with the direct DNS before the steps that match IP addresses; the Activity page shows the rule each connection matched and its exit node, and a tap adds its website or app to the rules
 - 🧩 **Policy groups**: nodes picked by region (the regions your nodes are in, with how many each), keyword or by hand, the fastest used automatically or chosen by hand; rules can send traffic to them
-- 📱 **Selected apps**: proxy only the selected apps, or exclude them (every other app uses the proxy); search, select all, invert
+- 📱 **Apps**: all apps, only the selected ones, or all but the selected ones (every other app uses the VPN); search, select all, invert
 - ⚡ **Latency test**: URL test (real request) and TCP test; UDP protocols such as Hysteria2 and TUIC always use the URL test; configurable URL, timeout and concurrency
 - 🔔 **Notification**: Ongoing notification with live speed and session / today / month usage; disconnect, switch node or toggle the China bypass from it
 - 🎛️ **Quick settings tile**: Connect / disconnect with one tap; shows "NextBox not connected" while off and the node's name while connected
@@ -49,7 +50,7 @@
 - 🛡️ **Modes**: VPN, or proxy-only (a local HTTP + SOCKS5 port)
 - 🎨 **Appearance**: Light / dark / system, accent colors from presets or your own (color panel, HEX; shared with the Windows version through backups); glass effects (blur on Android 12+, refraction on 13+, can be turned off)
 - 🌐 **Languages**: 简体中文, 繁體中文, English
-- 💾 **Backup**: interchangeable with NextBox for Windows: either side imports the other's encrypted backups; export nodes and subscriptions, routing rules and other settings, or any of them; a preview before importing, with the parts to take and nodes added or replacing the list; the rule order set on the computer and its program rules are kept, so they go back unchanged; this device's own settings (ports, TUN, start at login) stay
+- 💾 **Backup**: interchangeable with NextBox for Windows: either side imports the other's encrypted backups; export nodes and subscriptions, routing rules and other settings, or any of them; a preview before importing, with the parts to take and nodes added or replacing the list; the rule order, rule sets and rule names are the same on both, and program rules of the computer are kept, so they go back unchanged; this device's own settings (ports, TUN, start at login) stay
 - 🔄 **Updates**: Check by hand in About (compares with the latest GitHub release), or turn on the automatic check (off by default) to be told about a new version
 - ⚙️ **More**: connect when the app opens (optional); after a crash the error details can be copied for a report
 
@@ -59,7 +60,7 @@
 - FakeIP saves a DNS round trip through the proxy
 - Connection owners are not looked up unless asked for, and the core only logs warnings
 - The speed display pauses while the screen is off
-- Each per-architecture APK is about 22 MB
+- Each per-architecture APK is about 27 MB (arm64-v8a)
 
 ## 📦 Download
 
@@ -82,8 +83,8 @@ second with a major feature update, the third with small features and fixes.
 2. Tap a node to select it; the bolt icon at the top right runs a latency test first.
 3. Go back to Home and tap the connect button. The first time Android asks for the VPN permission, and on
    Android 13+ for the notification permission (used to show the speed).
-4. To reach Chinese sites directly, turn on "Bypass mainland China" on the home screen. To proxy only some
-   apps, pick "Selected apps".
+4. To reach Chinese sites directly, turn on "Bypass mainland China" on the home screen (it switches to rule-based
+   routing). To proxy only some apps, open "Apps" on the home screen and pick "Only selected".
 
 ## 🛠️ Building
 

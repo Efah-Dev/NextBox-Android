@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.Prefs
@@ -73,7 +74,6 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
     val ctx = LocalContext.current
     val state by Repo.state.collectAsState()
     val policies by Repo.policies.collectAsState()
-    val routeScope by Prefs.routeScope.collectAsState()
     var input by remember { mutableStateOf(initialHost) }
     var pkg by remember { mutableStateOf(initialPkg) }
     var result by remember { mutableStateOf<RouteMatch?>(null) }
@@ -83,7 +83,8 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
     val apps by produceState<List<AppItem>>(emptyList()) { value = InstalledApps.load(ctx) }
     val appLabel = apps.firstOrNull { it.pkg == pkg }?.label ?: pkg
     val s = state.settings
-    val direct = routeScope == Prefs.SCOPE_DIRECT
+    val direct = s.routeMode == "direct"
+    val appName = { p: String -> apps.firstOrNull { it.pkg == p }?.label ?: p }
     val node = remember(state.selectedId) { Repo.selectedNodeLabel() }.ifEmpty { T("首页选中的节点") }
     LaunchedEffect(Unit) { Repo.loadPolicies() }
 
@@ -137,20 +138,43 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
                     style = NbType.small, color = if (error != null) c.bad else c.muted, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
                 )
             }
-            val hit = r?.let { RouteSteps.all.indexOf(it.step) } ?: -1
-            RouteSteps.all.forEachIndexed { i, step ->
-                val on = RouteSteps.active(step, direct, s.blockAds, s.bypassCn)
+            // the route as the rules page shows it: LAN, the steps in order, everything else
+            data class Step(val title: String, val on: Boolean)
+            val steps = buildList {
+                add(Step(T("局域网和本机地址"), true))
+                s.rules.forEach { rule ->
+                    val title = when (rule.kind) {
+                        "ads" -> T("屏蔽广告")
+                        "scene" -> Route.sceneTitle(rule.values.firstOrNull().orEmpty())
+                        else -> Route.title(rule, appName)
+                    }
+                    add(Step(title, Route.active(s, rule)))
+                }
+                add(Step(T("其余流量"), true))
+            }
+            val last = steps.lastIndex
+            val hit = when (r?.step) {
+                null -> -1
+                "lan" -> 0
+                "rule" -> r.rule + 1
+                "ads" -> s.rules.indexOfFirst { it.kind == "ads" } + 1
+                "scene" -> s.rules.indexOfFirst { it.kind == "scene" && it.values.firstOrNull() == r.scene } + 1
+                else -> last
+            }
+            steps.forEachIndexed { i, st ->
+                val on = st.on
+                val step = if (i == 0) "lan" else ""
                 val target = if (r != null && i == hit) r.target else ""
                 val tone = when {
                     i != hit -> c.accent
                     target == "final" -> if (direct) RuleUi.targetColors("direct", c).second else c.accentInk
-                    step == RouteSteps.LAN -> RuleUi.targetColors("direct", c).second
+                    step == "lan" -> RuleUi.targetColors("direct", c).second
                     else -> RuleUi.targetColors(target, c).second
                 }
                 val toneBg = when {
                     i != hit -> c.card
                     target == "final" -> if (direct) RuleUi.targetColors("direct", c).first else c.accentSoft
-                    step == RouteSteps.LAN -> RuleUi.targetColors("direct", c).first
+                    step == "lan" -> RuleUi.targetColors("direct", c).first
                     else -> RuleUi.targetColors(target, c).first
                 }
                 val passed = r != null && i < hit
@@ -172,7 +196,7 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
                                 .border(2.dp, if (i == hit) tone else if (passed) c.accentStrong else c.line, CircleShape),
                             contentAlignment = Alignment.Center,
                         ) { if (i == hit) Icon(NbIcons.Check, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
-                        Box(Modifier.width(2.dp).weight(1f).background(if (i == RouteSteps.all.lastIndex) Color.Transparent else if (r != null && i < hit) lineOn else lineOff))
+                        Box(Modifier.width(2.dp).weight(1f).background(if (i == last) Color.Transparent else if (r != null && i < hit) lineOn else lineOff))
                     }
                     Spacer(Modifier.width(10.dp))
                     Row(
@@ -184,8 +208,8 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            RouteSteps.title(step), style = NbType.body.copy(fontSize = 13.5.sp, fontWeight = if (i == hit) FontWeight.Bold else FontWeight.Normal),
-                            color = c.text, modifier = Modifier.weight(1f),
+                            st.title, style = NbType.body.copy(fontSize = 13.5.sp, fontWeight = if (i == hit) FontWeight.Bold else FontWeight.Normal),
+                            color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                         )
                         Text(state2, style = NbType.small.copy(fontSize = 11.5.sp, fontWeight = if (i == hit) FontWeight.Bold else FontWeight.Normal), color = if (i == hit) tone else c.muted)
                     }
@@ -202,7 +226,7 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
                     exitTarget.startsWith("policy:") -> {
                         val p = policies.firstOrNull { it.id == RuleUi.policyId(exitTarget) }
                         val chosen = p?.nodes?.firstOrNull { it.id == p.selected } ?: p?.nodes?.minByOrNull { if (it.latency > 0) it.latency else Int.MAX_VALUE }
-                        T("策略组 %s", p?.name ?: "") + (chosen?.let { " · " + flagged(it.name, it.region) } ?: "")
+                        T("分组代理 %s", p?.name ?: "") + (chosen?.let { " · " + flagged(it.name, it.region) } ?: "")
                     }
                     else -> RuleUi.targetLabel(exitTarget, policies)
                 }
@@ -212,12 +236,18 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
                     else -> T("「%s」", r.value)
                 }
                 val reason = when (r.step) {
-                    RouteSteps.ADS -> T("在广告域名列表里，第一步就被拦下。")
-                    RouteSteps.LAN -> T("这是局域网地址（比如家里的路由器），总是直连。")
-                    RouteSteps.CN -> T("你的规则里都没有它；它是国内网站或国内 IP，被「绕过中国大陆」接住。")
-                    RouteSteps.FINAL -> if (direct) T("现在是全部直连。") else T("前面每一步都没匹配到，走首页选中的节点。")
-                    else -> T("命中%s：%s", RouteSteps.title(r.step), what) + if (r.kind == "package") "\n" + T("这个应用的所有连接都按这条走，不看网址。") else ""
-                } + if (r.note.isNotEmpty()) "\n" + r.note else ""
+                    "ads" -> T("在广告域名列表里，被「屏蔽广告」拦下。")
+                    "lan" -> T("这是局域网地址（比如家里的路由器），总是直连。")
+                    "scene" -> T("被常用场景「%s」接住。", Route.sceneTitle(r.scene))
+                    "final" -> when (s.routeMode) {
+                        "direct" -> T("现在是全部直连。")
+                        "global" -> T("现在是全局代理，规则不生效，走首页选中的节点。")
+                        else -> T("前面每一步都没匹配到，走首页选中的节点。")
+                    }
+                    else -> T("命中「%s」：%s", s.rules.getOrNull(r.rule)?.let { Route.title(it, appName) } ?: "", what) +
+                        if (r.kind == "package") "\n" + T("这个应用的所有连接都按这条走，不看网址。") else ""
+                } + (if (r.resolved.isNotEmpty()) "\n" + T("按 IP 判断的步骤用直连 DNS 解析出的 %s", r.resolved) else "") +
+                    if (r.note.isNotEmpty()) "\n" + r.note else ""
                 NbCard(padding = PaddingValues(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(T("结果"), style = NbType.bodyBold.copy(fontSize = 13.sp), color = c.muted, modifier = Modifier.weight(1f))

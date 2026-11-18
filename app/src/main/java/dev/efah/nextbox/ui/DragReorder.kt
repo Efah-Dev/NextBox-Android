@@ -131,3 +131,14 @@ fun Modifier.dragHandle(state: DragState, key: Any, keys: List<Any>, gap: Dp = 0
         )
     }
 }
+
+/**
+ * Keeps a row above its neighbours while a part of it (the card with
+ * dragRow) is dragged or settles, when dragRow is not on the row itself.
+ */
+@Composable
+fun Modifier.dragAbove(state: DragState, key: Any): Modifier {
+    val dragging = state.key == key
+    val lift by animateFloatAsState(if (dragging) 1f else 0f, spring(stiffness = Spring.StiffnessMedium), label = "above")
+    return zIndex(if (dragging || lift > 0.01f) 1f else 0f)
+}

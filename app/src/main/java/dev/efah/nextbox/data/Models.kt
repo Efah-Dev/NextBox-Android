@@ -69,7 +69,21 @@ data class Rule(
     val disabled: Boolean = false,
     /** The service of the desktop app's catalog the rule was set from ("youtube"); kept for the way back. */
     val app: String = "",
-)
+    /** What the user calls the rule (shown on the activity page); every rule set (kind "set") has one. */
+    val name: String = "",
+    /** A rule set's contents: values of several kinds, any of which matches; all go to [target]. */
+    val items: List<SetItem> = emptyList(),
+) {
+    val isStep: Boolean get() = kind == "ads" || kind == "scene"
+    val isSet: Boolean get() = kind == "set"
+
+    /** Whether the rule matches anything yet (values, or a rule set's items). */
+    val filled: Boolean get() = if (isSet) items.any { it.values.isNotEmpty() } else values.isNotEmpty()
+}
+
+/** One kind of values in a rule set (store.RuleItem); kind "url" is a sing-box rule-set at an address. */
+@Serializable
+data class SetItem(val kind: String, val values: List<String> = emptyList())
 
 /** One node kept and its copies that go (store.DupSet). */
 @Serializable
@@ -120,14 +134,17 @@ data class Classified(val kind: String = "none", val url: String = "", val name:
 @Serializable
 data class RouteMatch(
     val input: String = "",
-    /** Step of the route path: ads, lan, block, direct, policy, proxy, cn or final. */
+    /** Step of the route: lan, ads, rule ([rule] is its index), scene ([scene]) or final. */
     val step: String = "",
+    val scene: String = "",
     val target: String = "",
     /** Index of the matching rule in Settings.rules, -1 for other steps. */
     val rule: Int = -1,
     val kind: String = "",
     /** What matched: a domain, rule-set name, app package ... */
     val value: String = "",
+    /** The address the domain was resolved to before the steps that match IP addresses. */
+    val resolved: String = "",
     val note: String = "",
 )
 
@@ -142,8 +159,10 @@ data class BackupInfo(
     val version: Int = 0,
     val hasNodes: Boolean = false,
     val hasRules: Boolean = false,
-    /** Settings other than the routing rules. */
+    /** Settings other than the routing rules and the look. */
     val hasSettings: Boolean = false,
+    /** The look of the app (theme, colours, language). */
+    val hasAppearance: Boolean = false,
     val summary: DataSummary = DataSummary(),
     val rules: Int = 0,
     /** Program rules of the desktop app: kept, but only Windows uses them. */
@@ -158,6 +177,8 @@ data class BackupParts(
     val nodes: Boolean = true,
     val rules: Boolean = true,
     val settings: Boolean = true,
+    /** The look: theme, colours, language, glass (a part of its own since 2.0). */
+    val appearance: Boolean = true,
     val password: String = "",
     val replace: Boolean = false,
 )
@@ -175,6 +196,10 @@ data class Settings(
     val routeMode: String = "rule",
     val blockAds: Boolean = false,
     val rules: List<Rule> = emptyList(),
+    /** The rules page hides the steps that are switched off (shared with NextBox for Windows). */
+    val routeHideOff: Boolean = false,
+    /** How names are resolved for the IP steps ("bypass mainland China"): "remote" (the default) or "direct" (Settings.ResolveDNS in the core). */
+    val bypassDns: String = "remote",
     val scenes: List<Scene> = emptyList(),
     val remoteDns: String = "",
     val directDns: String = "",

@@ -115,26 +115,55 @@ func TestPathOrder(t *testing.T) {
 	}
 }
 
+// The tester checks the steps in their stored order, like the core: the
+// first rule that matches wins.
 func TestTestRouteSteps(t *testing.T) {
 	if err := Open(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	defer func() { mu.Lock(); st = nil; mu.Unlock() }()
-	SaveRules(`[{"kind":"suffix","values":["example.com"],"target":"direct"},{"kind":"suffix","values":["api.example.com"],"target":"proxy"},{"kind":"package","values":["cmb.pb"],"target":"block"}]`)
+	SetRouteMode("rule")
+	SaveRules(`[{"kind":"suffix","values":["example.com"],"target":"direct"},{"kind":"suffix","values":["api.example.com"],"target":"proxy"},{"kind":"package","values":["cmb.pb"],"target":"block"},
+{"kind":"set","name":"set","target":"proxy","items":[{"kind":"keyword","values":["setword"]}],"values":[]}]`, "")
 	for _, c := range []struct{ host, pkg, step, value string }{
-		{"www.example.com", "", "direct", "example.com"},
-		{"v1.api.example.com", "", "proxy", "api.example.com"}, // proxy rule, checked before example.com
-		{"www.example.com", "cmb.pb", "block", "cmb.pb"},
+		{"www.example.com", "", "rule", "example.com"},
+		{"v1.api.example.com", "", "rule", "example.com"}, // the broader rule comes first
+		{"www.setword.net", "", "rule", "setword"},
 		{"192.168.1.1", "", "lan", ""},
 		{"example.org", "", "final", ""},
 	} {
-		if c.pkg != "" && runtime.GOOS != "android" {
-			continue // app rules are matched on Android only
-		}
 		out, err := TestRoute(t.TempDir(), c.host, c.pkg)
 		if err != nil || !strings.Contains(out, `"step":"`+c.step+`"`) || !strings.Contains(out, `"value":"`+c.value+`"`) && c.value != "" {
 			t.Errorf("%s %s: %s %v", c.host, c.pkg, out, err)
 		}
+	}
+}
+
+// Rules of Android 1.x get the order the old path checked them in, so that
+// the same traffic goes the same way after the update.
+func TestMigrateRoute(t *testing.T) {
+	if err := Open(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { mu.Lock(); st = nil; mu.Unlock() }()
+	SaveRules(`[{"kind":"suffix","values":["example.com"],"target":"direct"},{"kind":"suffix","values":["api.example.com"],"target":"proxy"},
+{"kind":"keyword","values":["ads"],"target":"block"},{"kind":"process","values":["x.exe"],"target":"direct"},{"kind":"suffix","values":["off.com"],"target":"block","disabled":true}]`, "")
+	if err := MigrateRoute(false); err != nil {
+		t.Fatal(err)
+	}
+	set := st.Settings()
+	if set.RouteMode != "rule" {
+		t.Fatalf("mode %s", set.RouteMode)
+	}
+	want := "ads:> | keyword:ads>block | suffix:api.example.com>proxy | suffix:example.com>direct | process:x.exe>direct | suffix:off.com>block | scene:ai> | scene:media> | scene:games> | scene:cn>"
+	if got := ruleList(set.Rules); got != want {
+		t.Fatalf("rules:\n%s\nwant:\n%s", got, want)
+	}
+	if out, _ := TestRoute(t.TempDir(), "v1.api.example.com", ""); !strings.Contains(out, `"target":"proxy"`) {
+		t.Fatalf("api.example.com after the migration: %s", out)
+	}
+	if err := MigrateRoute(true); err != nil || st.Settings().RouteMode != "direct" {
+		t.Fatal("all direct")
 	}
 }
 

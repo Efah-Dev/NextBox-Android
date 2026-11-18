@@ -100,7 +100,6 @@ fun sheetListHeight(share: Float, max: Dp): Dp =
 /** What the add sheet starts with: which tab, prefilled text or apps, and the target. */
 data class RuleDraft(val tab: Int = 0, val text: String = "", val apps: Set<String> = emptySet(), val target: String = "direct")
 
-private val packageName = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+$")
 private val ipOrCidr = Regex("^[0-9a-fA-F:.]+(/\\d{1,3})?$")
 
 /** "https://www.example.com/a?b" → "www.example.com". */
@@ -145,7 +144,9 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
     var ipText by remember { mutableStateOf(if (draft.tab == 2) draft.text else "") }
     var countries by remember { mutableStateOf(emptySet<String>()) }
     var target by remember { mutableStateOf(draft.target) }
-    var manual by remember { mutableStateOf(false) }
+    var pickApps by remember { mutableStateOf(false) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val installed by androidx.compose.runtime.produceState<List<AppItem>>(emptyList()) { value = InstalledApps.load(ctx) }
     var confirm by remember { mutableStateOf<Pair<List<Pair<String, List<String>>>, Map<String, String>>?>(null) }
     LaunchedEffect(Unit) { Repo.loadPolicies() }
 
@@ -157,6 +158,7 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
             val chosen = RuleUi.services.filter { it.id in services }
             chosen.flatMap { it.geosite }.takeIf { it.isNotEmpty() }?.let { add("geosite" to it) }
             chosen.flatMap { it.cidrs }.takeIf { it.isNotEmpty() }?.let { add("cidr" to it) }
+            chosen.flatMap { it.suffix }.takeIf { it.isNotEmpty() }?.let { add("suffix" to it) }
             val typed = lines(siteText).map { if (siteKind == "regex") it else hostOf(it) }.filter { it.isNotEmpty() }.distinct()
             if (typed.isNotEmpty()) add(siteKind to typed)
         }
@@ -206,20 +208,9 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
         Spacer(Modifier.height(14.dp))
         when (tab) {
             0 -> {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(T("常用服务"), style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
-                    Text(T("点一下加入整组域名"), style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 8.dp))
-                }
-                Spacer(Modifier.height(8.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    RuleUi.services.forEach { s ->
-                        Chip(T(s.label), s.id in services, onClick = { services = if (s.id in services) services - s.id else services + s.id })
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
                 OutlinedTextField(
                     siteText, { siteText = it }, minLines = 3, maxLines = 6,
-                    label = { Text(T("或者输入域名，一行一个")) },
+                    label = { Text(T("输入域名，一行一个")) },
                     placeholder = { Text("example.com\nnews.example.org") },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -242,14 +233,17 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
                     },
                     style = NbType.small, color = c.muted,
                 )
+                Spacer(Modifier.height(14.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(T("常用服务"), style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
+                    Text(T("整组加入，不用自己找域名"), style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 8.dp))
+                }
+                Spacer(Modifier.height(8.dp))
+                ServicesField(services) { services = it }
             }
             1 -> {
-                // a fixed height (see sheetListHeight): when many targets below
-                // make the sheet too tall, the sheet scrolls to the buttons
-                Box(Modifier.fillMaxWidth().height(sheetListHeight(0.42f, 380.dp))) {
-                    AppChooser(selected = apps, onChange = { apps = it }, showBulkActions = false, padding = PaddingValues(0.dp))
-                }
-                TextButton(onClick = { manual = true }) { Text(T("找不到？手动输入包名"), color = c.accentInk) }
+                Text(T("选中的应用发起的连接都走这里"), style = NbType.small, color = c.muted, modifier = Modifier.padding(bottom = 8.dp))
+                AppsField(apps, installed) { pickApps = true }
             }
             else -> {
                 OutlinedTextField(
@@ -261,11 +255,7 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(14.dp))
                 Text(T("按 IP 所在地区"), style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
                 Spacer(Modifier.height(8.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    RuleUi.geoips.forEach { (code, name) ->
-                        Chip(T(name), code in countries, onClick = { countries = if (code in countries) countries - code else countries + code })
-                    }
-                }
+                RegionField(countries) { countries = it }
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -283,34 +273,7 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
         }
     }
 
-    if (manual) {
-        var pkg by remember { mutableStateOf("") }
-        NbAlertDialog(
-            onDismissRequest = { manual = false },
-            title = { Text(T("手动输入包名")) },
-            text = {
-                OutlinedTextField(
-                    pkg, { pkg = it }, singleLine = true, placeholder = { Text("com.example.app") },
-                    supportingText = { Text(T("没安装的应用也可以先加上")) },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {}),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val v = pkg.trim()
-                    if (!packageName.matches(v)) {
-                        toast(T("包名格式不对，例如 com.example.app"))
-                    } else {
-                        apps = apps + v
-                        manual = false
-                    }
-                }) { Text(T("添加")) }
-            },
-            dismissButton = { TextButton(onClick = { manual = false }) { Text(T("取消")) } },
-        )
-    }
+    if (pickApps) AppPicker(apps, onDone = { apps = it; pickApps = false }, onDismiss = { pickApps = false })
 
     confirm?.let { (list, clash) ->
         NbAlertDialog(
@@ -379,7 +342,7 @@ fun ConnectionRuleSheet(host: String, pkg: String, appLabel: String, proxied: Bo
         ActionCard {
             if (proxied) Action(T("这个网站走直连"), RuleUi.targetColors("direct", c).second) { add(siteKind, siteValue, "direct", siteValue) }
             else Action(T("这个网站走代理"), RuleUi.targetColors("proxy", c).second) { add(siteKind, siteValue, "proxy", siteValue) }
-            if (policies.isNotEmpty()) Action(T("这个网站走策略组…"), RuleUi.targetColors("policy:0", c).second, divider = true) { pickPolicy = "site" }
+            if (policies.isNotEmpty()) Action(T("这个网站走分组代理…"), RuleUi.targetColors("policy:0", c).second, divider = true) { pickPolicy = "site" }
             Action(T("屏蔽这个网站"), c.bad, divider = true, color = c.bad) { add(siteKind, siteValue, "block", siteValue) }
         }
         if (pkg.isNotEmpty()) {
@@ -387,7 +350,7 @@ fun ConnectionRuleSheet(host: String, pkg: String, appLabel: String, proxied: Bo
             ActionCard {
                 if (proxied) Action(T("%s 整个应用走直连", appLabel), RuleUi.targetColors("direct", c).second) { add("package", pkg, "direct", appLabel) }
                 else Action(T("%s 整个应用走代理", appLabel), RuleUi.targetColors("proxy", c).second) { add("package", pkg, "proxy", appLabel) }
-                if (policies.isNotEmpty()) Action(T("%s 整个应用走策略组…", appLabel), RuleUi.targetColors("policy:0", c).second, divider = true) { pickPolicy = "app" }
+                if (policies.isNotEmpty()) Action(T("%s 整个应用走分组代理…", appLabel), RuleUi.targetColors("policy:0", c).second, divider = true) { pickPolicy = "app" }
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -400,7 +363,7 @@ fun ConnectionRuleSheet(host: String, pkg: String, appLabel: String, proxied: Bo
     pickPolicy?.let { what ->
         NbAlertDialog(
             onDismissRequest = { pickPolicy = null },
-            title = { Text(T("选择策略组")) },
+            title = { Text(T("选择分组代理")) },
             text = {
                 Column {
                     policies.forEach { p ->

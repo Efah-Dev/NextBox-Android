@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"nextbox/internal/i18n"
@@ -33,11 +32,20 @@ type backupDoc struct {
 	Profiles json.RawMessage `json:"profiles,omitempty"`
 	Settings json.RawMessage `json:"settings,omitempty"`
 	Android  json.RawMessage `json:"android,omitempty"`
+	// Route is 3 from Android 2.0 on, whose rules are checked in their stored
+	// order (as on the desktop). Android 1.x routed by a fixed path instead,
+	// so rules from its backups are put in that path's order on import.
+	Route int `json:"route,omitempty"`
 }
 
-// Settings that mean the same on every platform (as in the desktop app).
+// The look of the app (外观), a part of its own (as in the desktop app): a
+// backup takes it along by default, also to and from the other system.
+var appearanceSettings = []string{
+	"theme", "accentColor", "language", "lightLevel", "darkLevel", "themeScale", "recentColors",
+}
+
+// Other settings that mean the same on every platform (as in the desktop app).
 var portableSettings = []string{
-	"theme", "accentColor", "language", "lightLevel", "darkLevel", "recentColors",
 	"remoteDns", "directDns", "enableIpv6", "sniff",
 	"testUrl", "testTimeout", "testConcurrency",
 	"subUserAgent", "subUpdateByProxy", "subAutoUpdate", "subUpdateHours",
@@ -46,17 +54,18 @@ var portableSettings = []string{
 
 // Settings that make up the routing rules (分流规则), as in the desktop app.
 var ruleSettings = []string{
-	"routeMode", "blockAds", "rules", "scenes", "ruleSetMirror",
+	"routeMode", "blockAds", "rules", "scenes", "ruleSetMirror", "bypassDns",
 	"routeView", "routeHideOff", "routeViewAsked", // how the desktop page looks
 	"directRules", "proxyRules", "blockRules", // v1.2 and Android 1.0
 }
 
 // backupOptions says what goes into a backup or is taken from one.
 type backupOptions struct {
-	Nodes    bool   `json:"nodes"`    // groups, nodes, chain proxies, policy groups
-	Rules    bool   `json:"rules"`    // routing rules
-	Settings bool   `json:"settings"` // the other settings, with the Android preferences
-	Password string `json:"password"` // "" = not encrypted (export) / not given yet (import)
+	Nodes      bool   `json:"nodes"`      // groups, nodes, chain proxies, policy groups
+	Rules      bool   `json:"rules"`      // routing rules
+	Appearance bool   `json:"appearance"` // theme, colours, language, with the Android ones
+	Settings   bool   `json:"settings"`   // the other settings, with the Android preferences
+	Password   string `json:"password"`   // "" = not encrypted (export) / not given yet (import)
 	// Import only: replace the node list instead of adding to it.
 	Replace bool `json:"replace"`
 }
@@ -70,7 +79,7 @@ func ExportBackup(options, android string) (string, error) {
 	if err := json.Unmarshal([]byte(options), &o); err != nil {
 		return "", err
 	}
-	if !o.Nodes && !o.Rules && !o.Settings {
+	if !o.Nodes && !o.Rules && !o.Appearance && !o.Settings {
 		return "", errors.New(i18n.T("请至少选择一项内容"))
 	}
 	s, err := current()
@@ -80,28 +89,25 @@ func ExportBackup(options, android string) (string, error) {
 	if err := s.Flush(); err != nil {
 		return "", err
 	}
-	doc := backupDoc{App: "NextBox", Version: 2, Platform: backupPlatform}
+	doc := backupDoc{App: "NextBox", Version: 2, Platform: backupPlatform, Route: routeOrdered}
 	if o.Nodes {
 		if doc.Profiles, err = s.ExportData(); err != nil {
 			return "", err
 		}
 	}
-	if o.Rules || o.Settings {
+	if o.Rules || o.Appearance || o.Settings {
 		raw, err := json.Marshal(s.Settings())
 		if err != nil {
 			return "", err
 		}
-		if !o.Settings {
-			raw, err = pickKeys(raw, ruleSettings)
-		} else if !o.Rules {
-			raw, err = dropKeys(raw, ruleSettings)
-		}
+		raw, err = keepParts(raw, o)
 		if err != nil {
 			return "", err
 		}
 		doc.Settings = raw
 	}
-	if o.Settings && json.Valid([]byte(android)) {
+	// the Android preferences of the chosen parts (see Prefs.exportJson)
+	if (o.Appearance || o.Settings) && json.Valid([]byte(android)) {
 		doc.Android = json.RawMessage(android)
 	}
 	plain, err := json.MarshalIndent(doc, "", "  ")
@@ -156,15 +162,18 @@ func readBackup(content, password string) (doc backupDoc, encrypted bool, err er
 }
 
 type backupInfo struct {
-	Encrypted    bool              `json:"encrypted"`
-	NeedPassword bool              `json:"needPassword"`
-	Platform     string            `json:"platform"` // "windows", "android" or ""
-	Version      int               `json:"version"`
-	HasNodes     bool              `json:"hasNodes"`
-	HasRules     bool              `json:"hasRules"`
-	HasSettings  bool              `json:"hasSettings"` // settings other than the rules
-	Summary      store.DataSummary `json:"summary"`
-	Rules        int               `json:"rules"`
+	Encrypted    bool   `json:"encrypted"`
+	NeedPassword bool   `json:"needPassword"`
+	Platform     string `json:"platform"` // "windows", "android" or ""
+	Version      int    `json:"version"`
+	HasNodes     bool   `json:"hasNodes"`
+	HasRules     bool   `json:"hasRules"`
+	HasSettings  bool   `json:"hasSettings"` // settings other than the rules and the look
+	// HasAppearance: the backup has the look of the app (backups made before
+	// it was a part of its own have it with the other settings).
+	HasAppearance bool              `json:"hasAppearance"`
+	Summary       store.DataSummary `json:"summary"`
+	Rules         int               `json:"rules"`
 	// DesktopRules counts the rules by program ("chrome.exe"), which only
 	// the desktop app can use; they are kept anyway.
 	DesktopRules int `json:"desktopRules"`
@@ -199,9 +208,12 @@ func InspectBackup(content, password string) (string, error) {
 			return "", errors.New(i18n.T("备份里的设置已损坏"))
 		}
 		for k := range keys {
-			if contains(ruleSettings, k) {
+			switch settingsPart(k) {
+			case "rules":
 				info.HasRules = true
-			} else {
+			case "appearance":
+				info.HasAppearance = true
+			default:
 				info.HasSettings = true
 			}
 		}
@@ -274,52 +286,38 @@ func ImportBackup(content, options string) (string, error) {
 		if json.Unmarshal(doc.Settings, &in) != nil {
 			return "", errors.New(i18n.T("备份里的设置已损坏"))
 		}
-		hasRules, hasOther := false, false
+		has := map[string]bool{}
 		for k := range in {
-			if contains(ruleSettings, k) {
-				hasRules = true
-			} else {
-				hasOther = true
-			}
+			has[settingsPart(k)] = true
 		}
-		o.Rules = o.Rules && hasRules
-		o.Settings = o.Settings && hasOther
+		o.Rules = o.Rules && has["rules"]
+		o.Appearance = o.Appearance && has["appearance"]
+		o.Settings = o.Settings && has["settings"]
 	}
-	if (o.Rules || o.Settings) && len(doc.Settings) > 0 {
-		var keys []string
-		if o.Rules {
-			keys = append(keys, ruleSettings...)
-		}
-		if o.Settings {
-			if doc.Platform == backupPlatform {
-				keys = nil // everything
-			} else {
-				keys = append(keys, portableSettings...)
-			}
-		}
-		if keys != nil && doc.Platform != backupPlatform {
-			// the routing mode is the home page's choice (all direct or not);
-			// the desktop app's global mode is its own
-			keys = slices.DeleteFunc(keys, func(k string) bool { return k == "routeMode" })
-		}
-		next, err := mergeSettings(s.Settings(), doc.Settings, keys, o.Rules)
+	if (o.Rules || o.Appearance || o.Settings) && len(doc.Settings) > 0 {
+		next, err := mergeSettings(s.Settings(), doc.Settings, importKeys(doc, o), o.Rules)
 		if err != nil {
 			return "", err
 		}
+		if o.Rules && doc.Platform == backupPlatform && doc.Route < routeOrdered {
+			next = migrateRules(next, legacyDirectOnly(doc.Android))
+		}
 		remapPolicies(&next, policyMap)
-		// the desktop app's ready-made scenes become rules the rules page shows
-		scenesToRules(&next)
 		if err := s.SaveSettings(next); err != nil {
 			return "", err
 		}
 		if o.Rules {
 			done = append(done, i18n.T("分流规则"))
 		}
+		if o.Appearance {
+			done = append(done, i18n.T("外观"))
+		}
 		if o.Settings {
 			done = append(done, i18n.T("设置"))
-			if len(doc.Android) > 0 && json.Valid(doc.Android) {
-				res.Android = doc.Android
-			}
+		}
+		// the app applies the Android preferences of the chosen parts
+		if (o.Appearance || o.Settings) && len(doc.Android) > 0 && json.Valid(doc.Android) {
+			res.Android = doc.Android
 		}
 	}
 	if len(done) == 0 {
@@ -425,4 +423,70 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// routeOrdered marks backups whose rules are checked in their stored order.
+const routeOrdered = 3
+
+// legacyDirectOnly reports whether the Android preferences of a 1.x backup
+// chose "everything direct" (a scope then, a routing mode since 2.0).
+func legacyDirectOnly(android json.RawMessage) bool {
+	var p struct {
+		RouteScope string `json:"routeScope"`
+	}
+	return json.Unmarshal(android, &p) == nil && p.RouteScope == "direct"
+}
+
+// settingsPart names the part of a backup a settings key belongs to:
+// "rules", "appearance" or "settings" (the other settings).
+func settingsPart(key string) string {
+	switch {
+	case contains(ruleSettings, key):
+		return "rules"
+	case contains(appearanceSettings, key):
+		return "appearance"
+	}
+	return "settings"
+}
+
+// keepParts keeps the settings keys of the parts o asks for.
+func keepParts(raw []byte, o backupOptions) ([]byte, error) {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, err
+	}
+	want := map[string]bool{"rules": o.Rules, "appearance": o.Appearance, "settings": o.Settings}
+	for k := range m {
+		if !want[settingsPart(k)] {
+			delete(m, k)
+		}
+	}
+	return json.Marshal(m)
+}
+
+// importKeys lists the settings keys of a backup to apply for the parts o
+// asks for. From the other system only what means the same here is taken,
+// and the routing mode stays the home page's choice.
+func importKeys(doc backupDoc, o backupOptions) []string {
+	var in map[string]json.RawMessage
+	json.Unmarshal(doc.Settings, &in)
+	same := doc.Platform == backupPlatform
+	keys := []string{} // not nil: mergeSettings takes nil for "everything"
+	for k := range in {
+		switch settingsPart(k) {
+		case "rules":
+			if o.Rules && (same || k != "routeMode") {
+				keys = append(keys, k)
+			}
+		case "appearance":
+			if o.Appearance {
+				keys = append(keys, k)
+			}
+		default:
+			if o.Settings && (same || contains(portableSettings, k)) {
+				keys = append(keys, k)
+			}
+		}
+	}
+	return keys
 }

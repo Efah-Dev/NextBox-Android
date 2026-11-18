@@ -45,8 +45,7 @@ func BuildConfig(ruleSetDir, options string) (string, error) {
 			return "", err
 		}
 	}
-	// the rules in the order of the path the rules page shows
-	set, _ := pathSettings(s.Settings())
+	set := phoneSettings(s.Settings())
 	var node *store.Profile
 	if id := s.SelectedID(); id != 0 {
 		if p, ok := s.Profile(id); ok {
@@ -216,15 +215,10 @@ func adaptForAndroid(cfg map[string]any, s store.Settings, opt androidOptions) {
 				}
 				// Program rules from the desktop app ("chrome.exe") mean
 				// nothing here; a rule left without a condition goes too.
-				if _, ok := m["process_name"]; ok {
-					delete(m, "process_name")
-					if !hasCondition(m) {
-						continue
-					}
+				if !withoutPrograms(m) {
+					continue
 				}
-				if _, ok := m["package_name"]; ok {
-					usesPackages = true
-				}
+				usesPackages = usesPackages || hasPackages(m)
 				kept = append(kept, m)
 			}
 			route["rules"] = kept
@@ -237,6 +231,43 @@ func adaptForAndroid(cfg map[string]any, s store.Settings, opt androidOptions) {
 	if !s.EnableIPv6 {
 		ipv4OnlyFakeIP(cfg)
 	}
+}
+
+// withoutPrograms removes program conditions from a route rule, also from
+// the parts of a logical rule (a rule set matching by several kinds); false
+// when nothing is left to match on.
+func withoutPrograms(m map[string]any) bool {
+	if m["type"] == "logical" {
+		parts, _ := m["rules"].([]any)
+		kept := parts[:0]
+		for _, p := range parts {
+			if pm, ok := p.(map[string]any); ok && !withoutPrograms(pm) {
+				continue
+			}
+			kept = append(kept, p)
+		}
+		m["rules"] = kept
+		return len(kept) > 0
+	}
+	if _, ok := m["process_name"]; ok {
+		delete(m, "process_name")
+		return hasCondition(m)
+	}
+	return true
+}
+
+// hasPackages reports whether a route rule (or a part of it) matches apps.
+func hasPackages(m map[string]any) bool {
+	if _, ok := m["package_name"]; ok {
+		return true
+	}
+	parts, _ := m["rules"].([]any)
+	for _, p := range parts {
+		if pm, ok := p.(map[string]any); ok && hasPackages(pm) {
+			return true
+		}
+	}
+	return false
 }
 
 // hasCondition reports whether a route rule still matches on something.
@@ -280,13 +311,14 @@ func UpdateRuleSets(ruleSetDir, proxy string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	names := config.RequiredRuleSets(s.Settings())
+	set := phoneSettings(s.Settings())
+	names := config.RequiredRuleSets(set)
 	if len(names) == 0 {
 		return i18n.T("当前设置不需要规则集"), nil
 	}
 	ruleSetMu.Lock()
 	defer ruleSetMu.Unlock()
-	if err := fetchRuleSets(ruleSetDir, s.Settings().RuleSetMirror, names, proxy); err != nil {
+	if err := fetchRuleSets(ruleSetDir, set, names, proxy); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(i18n.T("已更新 %d 个规则集"), len(names)), nil
@@ -297,14 +329,17 @@ func ensureRuleSets(dir string, s store.Settings, proxy string) {
 	defer ruleSetMu.Unlock()
 	missing := config.MissingRuleSets(dir, config.RequiredRuleSets(s))
 	if len(missing) > 0 {
-		fetchRuleSets(dir, s.RuleSetMirror, missing, proxy)
+		fetchRuleSets(dir, s, missing, proxy)
 	}
 }
 
 // fetchRuleSets makes the named .srs files available: bundled copies for the
 // local mirror, downloads for everything else (falling back to a bundled copy
-// when the download fails and no file exists yet).
-func fetchRuleSets(dir, mirror string, names []string, proxy string) error {
+// when the download fails and no file exists yet), and the rule-sets that
+// rule sets name by their address.
+func fetchRuleSets(dir string, set store.Settings, names []string, proxy string) error {
+	mirror := set.RuleSetMirror
+	urls := config.URLRuleSets(set)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -318,6 +353,14 @@ func fetchRuleSets(dir, mirror string, names []string, proxy string) error {
 	var errs []error
 	for _, name := range names {
 		dest := filepath.Join(dir, name+".srs")
+		if config.IsURLRuleSet(name) {
+			if u, ok := urls[name]; ok {
+				if err := fetchURLRuleSet(client, u, dest); err != nil {
+					errs = append(errs, fmt.Errorf("%s: %w", u, err))
+				}
+			}
+			continue
+		}
 		if mirror == store.LocalRuleSetMirror && ruleset.Has(name) {
 			if err := ruleset.Install(name, dest); err != nil {
 				errs = append(errs, err)
@@ -359,4 +402,82 @@ func download(client *http.Client, rawURL, dest string) error {
 		return err
 	}
 	return os.Rename(tmp, dest)
+}
+
+// ---------------------------------------------------------------- rule-sets from an address
+
+// The sing-box side (package nbtest) compiles a source rule-set (JSON) into
+// a binary one; nbcore itself does not link sing-box.
+var (
+	compilerMu      sync.Mutex
+	ruleSetCompiler func(src, dest string) error
+)
+
+func SetRuleSetCompilerFunc(f func(src, dest string) error) {
+	compilerMu.Lock()
+	ruleSetCompiler = f
+	compilerMu.Unlock()
+}
+
+// fetchURLRuleSet downloads a sing-box rule-set that a rule set names by its
+// address. A binary rule-set (.srs) is kept as it is; a source rule-set
+// (.json) is compiled into one, which also checks it. Anything else (a Clash
+// rule provider, a web page) is refused.
+func fetchURLRuleSet(client *http.Client, u, dest string) error {
+	resp, err := client.Get(u)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	if err != nil {
+		return err
+	}
+	if len(b) >= 3 && string(b[:3]) == "SRS" { // the magic of binary rule-sets
+		tmp := dest + ".tmp"
+		if err := os.WriteFile(tmp, b, 0o644); err != nil {
+			return err
+		}
+		return os.Rename(tmp, dest)
+	}
+	compilerMu.Lock()
+	compile := ruleSetCompiler
+	compilerMu.Unlock()
+	if compile == nil {
+		return errors.New("no rule-set compiler")
+	}
+	src := dest + ".json"
+	if err := os.WriteFile(src, b, 0o644); err != nil {
+		return err
+	}
+	defer os.Remove(src)
+	if err := compile(src, dest); err != nil {
+		return errors.New(i18n.T("不是 sing-box 规则集（.srs 或 .json）: ") + err.Error())
+	}
+	return nil
+}
+
+// CheckRuleSetURL downloads the rule-set at u right away, so that the rule
+// set editor can say whether it works. proxy is an optional
+// "http://127.0.0.1:port" (the VPN covers the app itself otherwise).
+func CheckRuleSetURL(ruleSetDir, u, proxy string) error {
+	u = store.NormalizeValue(store.KindURL, u)
+	if u == "" {
+		return errors.New(i18n.T("请输入以 http:// 或 https:// 开头的规则集地址"))
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if proxy != "" {
+		if pu, err := url.Parse(proxy); err == nil {
+			transport.Proxy = http.ProxyURL(pu)
+		}
+	}
+	ruleSetMu.Lock()
+	defer ruleSetMu.Unlock()
+	if err := os.MkdirAll(ruleSetDir, 0o755); err != nil {
+		return err
+	}
+	return fetchURLRuleSet(&http.Client{Transport: transport, Timeout: 20 * time.Second}, u, filepath.Join(ruleSetDir, config.URLRuleSetTag(u)+".srs"))
 }

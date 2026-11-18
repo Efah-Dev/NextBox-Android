@@ -80,7 +80,7 @@ fun SettingsScreen(onPerApp: () -> Unit, onRules: () -> Unit, onOpen: (String) -
     val toast = LocalToast.current
     val state by Repo.state.collectAsState()
     val s = state.settings
-    val bypass by Prefs.bypassCn.collectAsState()
+    val routeScope by Prefs.routeScope.collectAsState()
     val perApp by Prefs.perAppList.collectAsState()
     val appMode by Prefs.perAppMode.collectAsState()
     val autoConnect by Prefs.autoConnect.collectAsState()
@@ -114,15 +114,18 @@ fun SettingsScreen(onPerApp: () -> Unit, onRules: () -> Unit, onOpen: (String) -
                 IconSep()
                 val ruleCount = RuleUi.count(s.rules) { true }
                 IconNav(
-                    NbIcons.Route, T("分流规则"), T("路由路径、直连 / 代理 / 屏蔽、策略组"),
-                    listOfNotNull(if (bypass) T("绕过大陆") else null, if (ruleCount > 0) T("%d 条", ruleCount) else null).joinToString(" · ").ifEmpty { T("未设置") },
+                    NbIcons.Route, T("分流规则"), T("路由模式、路由路径、规则集、分组代理"),
+                    listOfNotNull(
+                        when (s.routeMode) { "rule" -> T("规则分流"); "direct" -> T("全部直连"); else -> T("全局代理") },
+                        if (s.routeMode == "rule" && ruleCount > 0) T("%d 条", ruleCount) else null,
+                    ).joinToString(" · "),
                     onClick = onRules,
                 )
                 IconSep()
                 IconNav(
-                    NbIcons.Apps, T("指定应用"), T("只代理或排除选中的应用"),
+                    NbIcons.Apps, T("代理范围"), T("哪些应用使用 VPN"),
                     when {
-                        perApp.isEmpty() -> T("未选择")
+                        routeScope != Prefs.SCOPE_APPS -> T("所有应用")
                         appMode == Prefs.APPS_EXCLUDE -> T("排除 %d 个", perApp.size)
                         else -> T("代理 %d 个", perApp.size)
                     },

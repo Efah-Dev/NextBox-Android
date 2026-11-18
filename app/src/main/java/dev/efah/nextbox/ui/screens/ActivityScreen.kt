@@ -84,6 +84,8 @@ private data class Conn(
     val destination: String,
     val rule: String,
     val outbound: String,
+    /** The routing step it matched ("nb-step:rule:3", "nb-step:scene:cn"), "" for LAN and everything else. */
+    val step: String = "",
     val up: Long,
     val down: Long,
     val createdAt: Long,
@@ -180,6 +182,7 @@ fun ActivityScreen(onShowPath: (host: String, pkg: String) -> Unit) {
                             pkg = x.processInfo?.packageNames()?.toList()?.firstOrNull().orEmpty(),
                             network = x.network.uppercase(),
                             destination = x.displayDestination(), rule = x.rule, outbound = x.outbound,
+                            step = x.chain().let { c -> buildList { while (c.hasNext()) add(c.next()) } }.firstOrNull { it.startsWith("nb-step:") }.orEmpty(),
                             up = x.uplink, down = x.downlink, createdAt = x.createdAt,
                         )
                     }
@@ -252,6 +255,26 @@ private fun ConnectionList(list: List<Conn>, pad: PaddingValues, onShowPath: (St
 private val iconCache = HashMap<String, Drawable?>()
 private val labelCache = HashMap<String, String>()
 
+/**
+ * The routing step a connection matched, the way the rules page names it.
+ * Each step routes through an outbound of its own (config.StepTag), so the
+ * connection's chain names it; LAN addresses and the rest have none.
+ */
+@Composable
+private fun stepLabel(x: Conn): String {
+    val state by dev.efah.nextbox.data.Repo.state.collectAsState()
+    val parts = x.step.removePrefix("nb-step:").split(":")
+    return when {
+        parts.size == 2 && parts[0] == "scene" -> Route.sceneTitle(parts[1])
+        parts.size == 2 && parts[0] == "rule" -> state.settings.rules.getOrNull(parts[1].toIntOrNull() ?: -1)?.let { r ->
+            (if (r.isSet) T("规则集") + " " else "") + Route.title(r) { it }
+        } ?: T("规则")
+        x.rule.contains("ip_is_private") -> T("局域网")
+        x.rule.contains("hijack-dns") -> T("DNS 查询")
+        else -> T("其余流量")
+    }
+}
+
 @Composable
 private fun ConnRow(x: Conn, modifier: Modifier, onShowPath: (String, String) -> Unit, onClose: (String) -> Unit) {
     val c = Nb.c
@@ -292,7 +315,7 @@ private fun ConnRow(x: Conn, modifier: Modifier, onShowPath: (String, String) ->
                     }
                     Text(x.destination, fontSize = 13.sp, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        (if (x.rule.isNotEmpty()) x.rule + " → " else "") + if (proxied) T("代理") else T("直连"),
+                        stepLabel(x) + " → " + if (proxied) x.outbound else T("直连"),
                         fontSize = 11.sp, color = if (proxied) c.accentInk else c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }

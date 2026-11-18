@@ -87,12 +87,12 @@ import dev.efah.nextbox.ui.screens.NodeEditorScreen
 import dev.efah.nextbox.ui.screens.NodesScreen
 import dev.efah.nextbox.ui.screens.PerAppScreen
 import dev.efah.nextbox.ui.screens.RulesScreen
+import dev.efah.nextbox.ui.screens.RuleSetScreen
 import dev.efah.nextbox.ui.screens.ScanScreen
 import dev.efah.nextbox.ui.screens.SettingsScreen
 import dev.efah.nextbox.ui.screens.UsageScreen
 import dev.efah.nextbox.ui.screens.ChainEditorScreen
 import dev.efah.nextbox.ui.screens.PolicyEditorScreen
-import dev.efah.nextbox.ui.screens.RuleListScreen
 import dev.efah.nextbox.ui.screens.RouteTestScreen
 import dev.efah.nextbox.ui.screens.SettingsPageScreen
 import dev.efah.nextbox.ui.theme.Nb
@@ -113,7 +113,7 @@ private sealed interface Overlay {
     data object PerApp : Overlay
     data object Rules : Overlay
     data object Scan : Overlay
-    data class RuleList(val page: String) : Overlay
+    data class RuleSet(val index: Int) : Overlay
     data class RouteTest(val host: String, val pkg: String) : Overlay
     data class Policy(val id: Long) : Overlay
     data class Chain(val id: Long, val exit: Long = 0) : Overlay
@@ -318,11 +318,12 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                                 Overlay.PerApp -> PerAppScreen { close() }
                                 Overlay.Rules -> RulesScreen(
                                     onClose = { close() },
-                                    onOpenList = { open(Overlay.RuleList(it)) },
                                     onTest = { open(Overlay.RouteTest("", "")) },
                                     onPerApp = { open(Overlay.PerApp) },
+                                    onEditSet = { open(Overlay.RuleSet(it)) },
+                                    onEditPolicy = { open(Overlay.Policy(it)) },
                                 )
-                                is Overlay.RuleList -> RuleListScreen(ov.page, onClose = { close() }, onEditPolicy = { open(Overlay.Policy(it)) })
+                                is Overlay.RuleSet -> RuleSetScreen(ov.index) { close() }
                                 is Overlay.RouteTest -> RouteTestScreen(ov.host, ov.pkg) { close() }
                                 is Overlay.Policy -> PolicyEditorScreen(ov.id) { close() }
                                 is Overlay.Chain -> ChainEditorScreen(ov.id, ov.exit) { close() }

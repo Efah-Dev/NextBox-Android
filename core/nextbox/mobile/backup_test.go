@@ -24,7 +24,8 @@ func openTemp(t *testing.T) *store.Store {
 }
 
 func opts(nodes, rules, settings bool, password string, replace bool) string {
-	b, _ := json.Marshal(backupOptions{Nodes: nodes, Rules: rules, Settings: settings, Password: password, Replace: replace})
+	// "settings" here also takes the look along, as the one part did before 2.0
+	b, _ := json.Marshal(backupOptions{Nodes: nodes, Rules: rules, Appearance: settings, Settings: settings, Password: password, Replace: replace})
 	return string(b)
 }
 
@@ -92,7 +93,7 @@ const windowsBackup = `{"app":"NextBox","version":2,"platform":"windows",
 
 func TestWindowsBackup(t *testing.T) {
 	s := openTemp(t)
-	SetRoute("direct", false)
+	SetRouteMode("direct")
 	info, err := InspectBackup(windowsBackup, "")
 	if err != nil || !strings.Contains(info, `"rules":3`) || !strings.Contains(info, `"desktopRules":1`) || !strings.Contains(info, `"scenes":["ai"]`) {
 		t.Fatalf("inspect: %s %v", info, err)
@@ -108,8 +109,8 @@ func TestWindowsBackup(t *testing.T) {
 	if !set.Scenes[slices.IndexFunc(set.Scenes, func(sc store.Scene) bool { return sc.ID == "cn" })].Enabled {
 		t.Error("the bypass step of the backup is on")
 	}
-	// the order and places are kept; the AI scene became a rule in its place
-	want := "scene:cn> | suffix:a.com>proxy | ads:> | process:chrome.exe>direct | geosite:category-ai-!cn>proxy | scene:ai> | suffix:b.com>direct | scene:media> | scene:games>"
+	// the order and places are kept, scenes included (2.0 routes like Windows)
+	want := "scene:cn> | suffix:a.com>proxy | ads:> | process:chrome.exe>direct | scene:ai> | suffix:b.com>direct | scene:media> | scene:games>"
 	if got := ruleList(set.Rules); got != want {
 		t.Fatalf("rules:\n%s\nwant:\n%s", got, want)
 	}
@@ -144,7 +145,7 @@ func TestWindowsBackup(t *testing.T) {
 // A backup of only the other settings leaves the rules alone.
 func TestPartialBackup(t *testing.T) {
 	s := openTemp(t)
-	SaveRules(`[{"kind":"suffix","values":["keep.com"],"target":"direct"}]`)
+	SaveRules(`[{"kind":"suffix","values":["keep.com"],"target":"direct"}]`, "")
 	set := s.Settings()
 	set.BlockAds = true
 	s.SaveSettings(set)
@@ -162,38 +163,33 @@ func TestPartialBackup(t *testing.T) {
 	}
 }
 
-// Rules added on the phone go where the path checks them; the rest keep
-// their place.
-func TestSettleRules(t *testing.T) {
+// The rules page saves the rules in the order it shows them (2.0: like
+// Windows, the user decides the order); the places of ad blocking and the
+// scenes are kept, and a list without them gets them (store.placeSteps).
+func TestSaveRulesOrder(t *testing.T) {
 	s := openTemp(t)
 	if _, err := ImportBackup(windowsBackup, opts(false, true, false, "", false)); err != nil {
 		t.Fatal(err)
 	}
 	var rules []store.Rule
 	json.Unmarshal(mustJSON(s.Settings().Rules), &rules)
-	// a value added to b.com's rule, a new block rule and a new policy rule
-	for i := range rules {
-		if rules[i].Kind == "suffix" && rules[i].Target == "direct" {
-			rules[i].Values = append(rules[i].Values, "c.com")
-		}
-	}
-	rules = append(rules,
-		store.Rule{Kind: "domain", Values: []string{"x.com"}, Target: store.TargetBlock},
-		store.Rule{Kind: "suffix", Values: []string{"jp.com"}, Target: store.PolicyTarget(9)})
-	if err := SaveRules(string(mustJSON(rules))); err != nil {
+	rules = append([]store.Rule{{Kind: "domain", Values: []string{"x.com"}, Target: store.TargetBlock}}, rules...)
+	if err := SaveRules(string(mustJSON(rules)), ""); err != nil {
 		t.Fatal(err)
 	}
-	want := "scene:cn> | suffix:a.com>proxy | ads:> | domain:x.com>block | process:chrome.exe>direct | geosite:category-ai-!cn>proxy | scene:ai> | suffix:b.com,c.com>direct | suffix:jp.com>policy:9 | scene:media> | scene:games>"
+	want := "domain:x.com>block | scene:cn> | suffix:a.com>proxy | ads:> | process:chrome.exe>direct | scene:ai> | suffix:b.com>direct | scene:media> | scene:games>"
 	if got := ruleList(s.Settings().Rules); got != want {
 		t.Fatalf("rules:\n%s\nwant:\n%s", got, want)
 	}
 
-	// on a phone that never saw a desktop backup the stored order is the path
 	s2 := openTemp(t)
-	SaveRules(`[{"kind":"suffix","values":["p.com"],"target":"proxy"},{"kind":"suffix","values":["d.com"],"target":"direct"},{"kind":"keyword","values":["ad"],"target":"block"}]`)
-	want = "ads:> | keyword:ad>block | suffix:d.com>direct | suffix:p.com>proxy | scene:ai> | scene:media> | scene:games> | scene:cn>"
+	SaveRules(`[{"kind":"suffix","values":["p.com"],"target":"proxy"},{"kind":"suffix","values":["d.com"],"target":"direct"}]`, `[{"id":"cn","enabled":true,"target":"direct"}]`)
+	want = "ads:> | suffix:p.com>proxy | suffix:d.com>direct | scene:ai> | scene:media> | scene:games> | scene:cn>"
 	if got := ruleList(s2.Settings().Rules); got != want {
 		t.Fatalf("fresh phone:\n%s\nwant:\n%s", got, want)
+	}
+	if !s2.Settings().Scenes[0].Enabled || s2.Settings().Scenes[0].ID != "cn" {
+		t.Fatalf("scenes: %+v", s2.Settings().Scenes)
 	}
 }
 

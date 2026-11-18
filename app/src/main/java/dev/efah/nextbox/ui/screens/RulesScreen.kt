@@ -26,16 +26,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -49,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -58,6 +62,7 @@ import dev.efah.nextbox.data.PolicyView
 import dev.efah.nextbox.data.Prefs
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.Rule
+import dev.efah.nextbox.data.Settings
 import dev.efah.nextbox.ui.BarIcon
 import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.LocalBottomInset
@@ -66,84 +71,72 @@ import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
-import dev.efah.nextbox.ui.flagged
 import dev.efah.nextbox.ui.TopBar
+import dev.efah.nextbox.ui.dragHandle
+import dev.efah.nextbox.ui.dragRow
+import dev.efah.nextbox.ui.dragAbove
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.animation.animateColorAsState
+import dev.efah.nextbox.ui.rememberDragState
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-/** The steps of the route path, in the order traffic meets them (see nbcore route.go). */
-object RouteSteps {
-    const val ADS = "ads"
-    const val LAN = "lan"
-    const val BLOCK = "block"
-    const val DIRECT = "direct"
-    const val POLICY = "policy"
-    const val PROXY = "proxy"
-    const val CN = "cn"
-    const val FINAL = "final"
-    val all = listOf(ADS, LAN, BLOCK, DIRECT, POLICY, PROXY, CN, FINAL)
-
-    fun title(step: String): String = when (step) {
-        ADS -> T("屏蔽广告")
-        LAN -> T("局域网和内网")
-        BLOCK -> T("屏蔽规则")
-        DIRECT -> T("直连规则")
-        POLICY -> T("策略组规则")
-        PROXY -> T("代理规则")
-        CN -> T("绕过中国大陆")
-        else -> T("其余所有连接")
-    }
-
-    /** Which rules belong to a rule step. */
-    fun matches(step: String, target: String): Boolean = when (step) {
-        BLOCK -> target == "block"
-        DIRECT -> target == "direct"
-        POLICY -> target.startsWith("policy:")
-        PROXY -> target == "proxy"
-        else -> false
-    }
-
-    /** Whether a step takes part with the current settings. */
-    fun active(step: String, directMode: Boolean, blockAds: Boolean, bypassCn: Boolean): Boolean = when (step) {
-        ADS -> blockAds
-        LAN, FINAL -> true
-        CN -> bypassCn && !directMode
-        else -> !directMode
-    }
-}
-
-/** Colours of a step's exit: block, direct, policy group or the node. */
-private fun stepTarget(step: String): String = when (step) {
-    RouteSteps.ADS, RouteSteps.BLOCK -> "block"
-    RouteSteps.LAN, RouteSteps.DIRECT, RouteSteps.CN -> "direct"
-    RouteSteps.POLICY -> "policy:0"
-    else -> "proxy"
-}
+private val modeOptions = listOf("global" to "全局代理", "rule" to "规则分流", "direct" to "全部直连") // i18n:skip
 
 /**
- * The rules page: the route path every connection takes, from top to bottom.
- * The home page's scope, ad blocking and "bypass mainland China" switch here
- * too; a rule step opens the list of its rules.
+ * 分流规则: the routing mode and, in rule mode, the route every connection
+ * takes from top to bottom (as on NextBox for Windows). LAN addresses come
+ * first and "everything else" last; in between, ad blocking, the scenes and
+ * the user's rules and rule sets are steps that can be dragged into any
+ * order. A step leaves at the first match. With the text mode switch on, the
+ * same rules are edited as text instead.
  */
 @Composable
-fun RulesScreen(onClose: () -> Unit, onOpenList: (String) -> Unit, onTest: () -> Unit, onPerApp: () -> Unit) {
+fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, onEditSet: (Int) -> Unit, onEditPolicy: (Long) -> Unit) {
     val c = Nb.c
     val ctx = LocalContext.current
+    val toast = LocalToast.current
     val scope = rememberCoroutineScope()
     val state by Repo.state.collectAsState()
     val policies by Repo.policies.collectAsState()
+    val textMode by Prefs.ruleTextMode.collectAsState()
     val routeScope by Prefs.routeScope.collectAsState()
     val appMode by Prefs.perAppMode.collectAsState()
     val apps by Prefs.perAppList.collectAsState()
     val s = state.settings
-    val direct = routeScope == Prefs.SCOPE_DIRECT
     val node = remember(state.selectedId) { Repo.selectedNodeLabel() }.ifEmpty { T("首页选中的节点") }
     val labels by produceState(emptyMap<String, String>()) { value = InstalledApps.load(ctx).associate { it.pkg to it.label } }
+    val appLabel = { p: String -> labels[p] ?: p }
     LaunchedEffect(Unit) { Repo.loadPolicies() }
-    val scopes = listOf(Prefs.SCOPE_GLOBAL to T("全局代理"), Prefs.SCOPE_APPS to T("指定应用"), Prefs.SCOPE_DIRECT to T("全部直连"))
+
+    // while a step is dragged, the order lives here; it is saved when the finger lifts
+    val drag = rememberDragState()
+    var local by remember { mutableStateOf<List<Rule>?>(null) }
+    val rules = local ?: s.rules
+    LaunchedEffect(drag.key) {
+        val moved = local
+        if (drag.key == null && moved != null) {
+            Repo.saveRules(moved).onFailure { toast(it.message ?: T("保存失败")) }
+            local = null
+        }
+    }
+    var adding by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(-1) }
+    var sceneSheet by remember { mutableStateOf<String?>(null) }
+    var confirmReset by remember { mutableStateOf(false) }
+
+    fun save(next: List<Rule>) = scope.launch { Repo.saveRules(next).onFailure { toast(it.message ?: T("保存失败")) } }
+
+    val exitLabel = { t: String ->
+        when {
+            t == "proxy" -> node
+            else -> RuleUi.targetLabel(t, policies)
+        }
+    }
 
     GlassScreen(header = {
         TopBar(T("分流规则"), leading = { BarIcon(NbIcons.Back, T("返回"), onClose) }) {
@@ -158,12 +151,8 @@ fun RulesScreen(onClose: () -> Unit, onOpenList: (String) -> Unit, onTest: () ->
             }
         }
         Segmented(
-            scopes.map { it.second }, scopes.indexOfFirst { it.first == routeScope },
-            onSelect = { i ->
-                val target = scopes[i].first
-                scope.launch { Repo.setRoute(scope = target) }
-                if (target == Prefs.SCOPE_APPS && apps.isEmpty()) onPerApp()
-            },
+            modeOptions.map { T(it.second) }, modeOptions.indexOfFirst { it.first == s.routeMode }.coerceAtLeast(0),
+            onSelect = { i -> scope.launch { Repo.setRouteMode(modeOptions[i].first) } },
             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 10.dp), height = 38.dp,
         )
     }) { pad ->
@@ -171,162 +160,363 @@ fun RulesScreen(onClose: () -> Unit, onOpenList: (String) -> Unit, onTest: () ->
             Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 6.dp, bottom = LocalBottomInset.current + 24.dp),
         ) {
-            // where connections come from
-            val start = when {
-                routeScope != Prefs.SCOPE_APPS -> T("手机上所有应用")
-                appMode == Prefs.APPS_EXCLUDE -> T("除了排除的 %d 个应用", apps.size)
-                else -> T("选中的 %d 个应用", apps.size)
-            }
-            Row(Modifier.height(IntrinsicSize.Min)) {
-                Rail(dot = { StartDot() }, last = false)
-                Column(Modifier.weight(1f).padding(top = 4.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(start, style = NbType.bodyBold, color = c.text)
-                    if (routeScope == Prefs.SCOPE_APPS) {
-                        Row(
-                            Modifier.clip(RoundedCornerShape(12.dp)).border(1.dp, c.line, RoundedCornerShape(12.dp))
-                                .clickable(onClick = onPerApp).padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                if (appMode == Prefs.APPS_EXCLUDE) T("排除的应用不进 VPN，直接用手机网络") else T("其他应用不进 VPN，直接用手机网络"),
-                                style = NbType.small, color = c.muted,
-                            )
-                            Icon(NbIcons.Chevron, null, tint = c.muted, modifier = Modifier.padding(start = 4.dp).size(14.dp))
-                        }
-                    }
+            if (s.routeMode != "rule") {
+                // what this mode does, and the way to the mode the path is for
+                NbCard(Modifier.fillMaxWidth().padding(bottom = 12.dp), padding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp), color = c.accentSoft.copy(alpha = 0.6f)) {
+                    Text(
+                        if (s.routeMode == "global") T("全局代理：除了局域网和屏蔽广告，所有流量都走当前节点，下面的规则和场景暂不生效。")
+                        else T("全部直连：不使用代理，下面的规则和场景暂不生效。"),
+                        style = NbType.small.copy(fontSize = 13.sp, lineHeight = 19.sp), color = c.text,
+                    )
+                    Text(
+                        T("切换到规则分流"), color = c.accentInk, fontWeight = FontWeight.Bold, fontSize = 13.5.sp,
+                        modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(10.dp)).background(c.card)
+                            .clickable { scope.launch { Repo.setRouteMode("rule") } }.padding(horizontal = 12.dp, vertical = 7.dp),
+                    )
                 }
             }
 
-            RouteSteps.all.forEachIndexed { i, step ->
-                val on = RouteSteps.active(step, direct, s.blockAds, s.bypassCn)
-                val rules = s.rules.filter { RuleUi.applies(it) && RouteSteps.matches(step, it.target) }
-                val sub = when {
-                    !on && step == RouteSteps.ADS -> T("没开，跳过这一步")
-                    !on && step == RouteSteps.CN && !direct -> T("没开，跳过这一步")
-                    !on -> T("全部直连时不生效")
-                    step == RouteSteps.ADS -> T("常见的广告和跟踪域名")
-                    step == RouteSteps.LAN -> T("192.168.x.x、10.x.x.x 等")
-                    step == RouteSteps.CN -> T("国内网站和国内 IP")
-                    step == RouteSteps.FINAL -> if (direct) T("全部直连模式") else T("上面都没匹配到的")
-                    rules.isEmpty() -> T("还没有规则，点这里添加")
-                    step == RouteSteps.POLICY -> rules.groupBy { it.target }.entries.joinToString("，") { (t, rs) ->
-                        val (a, b, d) = RuleUi.items(rs, t) { labels[it] ?: it }
-                        (a + b + d).take(2).joinToString("、") { it.label } + " → " + RuleUi.targetLabel(t, policies)
+            if (textMode) {
+                RulesText(s, policies)
+            } else {
+                // where connections come from
+                val start = when {
+                    routeScope != Prefs.SCOPE_APPS -> T("手机上所有应用")
+                    appMode == Prefs.APPS_EXCLUDE -> T("除了排除的 %d 个应用", apps.size)
+                    else -> T("选中的 %d 个应用", apps.size)
+                }
+                Row(Modifier.height(IntrinsicSize.Min).clip(RoundedCornerShape(16.dp)).clickable(onClick = onPerApp)) {
+                    Rail(first = true) { StartDot() }
+                    Row(
+                        Modifier.weight(1f).padding(bottom = 6.dp).heightIn(min = DotTop * 2 + DotSize).padding(start = 2.dp, end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(start, style = NbType.bodyBold, color = c.text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(T("代理范围"), style = NbType.small, color = c.muted)
+                        Icon(NbIcons.Chevron, null, tint = c.muted, modifier = Modifier.padding(start = 2.dp).size(14.dp))
                     }
-                    else -> {
-                        val (a, b, d) = RuleUi.items(rules, rules.first().target) { labels[it] ?: it }
-                        (a + b + d).take(3).joinToString("、") { it.label } + if (a.size + b.size + d.size > 3) "…" else ""
+                }
+
+                // 1: LAN, fixed
+                StepCard(
+                    number = 1, active = true, last = false, fixed = true,
+                    title = T("局域网和本机地址"), tag = null, sub = T("192.168.x.x、10.x.x.x、127.0.0.1 等"),
+                    exit = T("直连"), exitTarget = "direct",
+                )
+
+                val shown = rules.indices.filter { !Route.hidden(s, rules[it]) }
+                val keys = Route.keys(rules)
+                val shownKeys = shown.map { keys[it] }
+                // keyed: a moved step keeps its own composition (and the drag
+                // gesture running in it), instead of the slot it moved out of
+                shown.forEachIndexed { k, i -> key(keys[i]) {
+                    val r = rules[i]
+                    val key = keys[i]
+                    val on = Route.active(s, r)
+                    val target = Route.target(s, r)
+                    val handle = Modifier.dragHandle(drag, key, shownKeys, gap = 6.dp) { from, to ->
+                        local = Route.move(local ?: s.rules, (local ?: s.rules).indices.filter { !Route.hidden(s, (local ?: s.rules)[it]) }, from, to)
+                    }
+                    // only the card moves: the numbers and the line stay where they are
+                    val card = Modifier.dragRow(drag, key)
+                    Box(Modifier.dragAbove(drag, key)) {
+                        when {
+                            r.kind == "ads" -> StepCard(
+                                number = k + 2, active = on, last = false, handle = handle, cardModifier = card,
+                                title = T("屏蔽广告"), tag = T("内置"),
+                                sub = if (s.blockAds) T("常见的广告和跟踪域名") else T("已关闭"),
+                                exit = T("屏蔽"), exitTarget = "block",
+                                checked = s.blockAds,
+                                onToggle = { v -> scope.launch { Repo.updateSettings(buildJsonObject { put("blockAds", v) }) } },
+                            )
+                            r.kind == "scene" -> {
+                                val id = r.values.firstOrNull().orEmpty()
+                                StepCard(
+                                    number = k + 2, active = on, last = false, handle = handle, cardModifier = card,
+                                    title = Route.sceneTitle(id), tag = T("场景"),
+                                    sub = when {
+                                        !Route.sceneOn(s, id) -> T("已关闭")
+                                        s.routeMode != "rule" -> T("规则分流时生效")
+                                        id == "cn" -> Route.sceneDesc(id) + " · " + ResolveDns.label(s.bypassDns)
+                                        else -> Route.sceneDesc(id)
+                                    },
+                                    exit = exitLabel(target), exitTarget = target,
+                                    checked = Route.sceneOn(s, id),
+                                    onToggle = { v -> scope.launch { Repo.saveRules(s.rules, s.scenes.map { if (it.id == id) it.copy(enabled = v) else it }) } },
+                                    onClick = { sceneSheet = id },
+                                )
+                            }
+                            else -> StepCard(
+                                number = k + 2, active = on, last = false, handle = handle, cardModifier = card,
+                                title = Route.title(r, appLabel), tag = if (r.isSet) T("规则集") else null,
+                                sub = when {
+                                    r.kind == "process" -> T("电脑程序，只在 Windows 版生效")
+                                    r.disabled -> T("已停用")
+                                    !r.filled -> T("还没填内容")
+                                    else -> Route.summary(r, appLabel)
+                                },
+                                exit = exitLabel(target), exitTarget = target,
+                                checked = !r.disabled,
+                                onToggle = if (r.kind == "process") null else ({ v -> save(rules.toMutableList().also { it[i] = r.copy(disabled = !v) }) }),
+                                onClick = { if (r.isSet) onEditSet(i) else editing = i },
+                            )
+                        }
+                    }
+                } }
+
+                // last: everything else, fixed
+                val finalTarget = if (s.routeMode == "direct") "direct" else "proxy"
+                StepCard(
+                    number = shown.size + 2, active = true, last = true, fixed = true,
+                    title = T("其余流量"), tag = null, sub = T("上面都没有命中的"),
+                    exit = exitLabel(finalTarget), exitTarget = finalTarget,
+                )
+
+                Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = { adding = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
+                        modifier = Modifier.weight(1f).height(46.dp),
+                    ) {
+                        Icon(NbIcons.Plus, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(T("添加规则"), fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = { onEditSet(-1) },
+                        colors = ButtonDefaults.buttonColors(containerColor = c.accentSoft, contentColor = c.accentInk),
+                        modifier = Modifier.weight(1f).height(46.dp),
+                    ) {
+                        Icon(NbIcons.Archive, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(T("添加规则集"), fontWeight = FontWeight.Bold)
                     }
                 }
-                val title = when (step) {
-                    RouteSteps.BLOCK, RouteSteps.DIRECT, RouteSteps.POLICY, RouteSteps.PROXY ->
-                        RouteSteps.title(step) + " · " + T("%d 条", RuleUi.count(s.rules) { RouteSteps.matches(step, it) })
-                    else -> RouteSteps.title(step)
-                }
-                val exit = when (step) {
-                    RouteSteps.ADS, RouteSteps.BLOCK -> T("屏蔽")
-                    RouteSteps.LAN, RouteSteps.DIRECT, RouteSteps.CN -> T("直连")
-                    RouteSteps.POLICY -> T("策略组")
-                    RouteSteps.PROXY -> node
-                    else -> if (direct) T("直连") else node
-                }
-                val toggle: ((Boolean) -> Unit)? = when (step) {
-                    RouteSteps.ADS -> { v -> scope.launch { Repo.updateSettings(buildJsonObject { put("blockAds", v) }) } }
-                    RouteSteps.CN -> if (direct) null else ({ v -> scope.launch { Repo.setRoute(bypass = v) } })
-                    else -> null
-                }
-                val page = when (step) {
-                    RouteSteps.BLOCK -> "block"
-                    RouteSteps.DIRECT -> "direct"
-                    RouteSteps.POLICY, RouteSteps.PROXY -> "proxy"
-                    else -> null
-                }
-                StepRow(
-                    number = i + 1, on = on, last = i == RouteSteps.all.lastIndex,
-                    title = title, sub = sub,
-                    exit = exit, exitTarget = if (step == RouteSteps.FINAL && direct) "direct" else stepTarget(step),
-                    checked = if (step == RouteSteps.ADS) s.blockAds else s.bypassCn, onToggle = toggle,
-                    onClick = page?.let { p -> { onOpenList(p) } },
+                Text(
+                    T("从上往下依次判断，在哪一步命中就从哪一步出去。按住左边的把手拖动，调整先后顺序。"),
+                    style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp, top = 10.dp),
                 )
             }
+
+            // 分组代理: groups of nodes a rule or a scene can send traffic to (as in the Windows settings)
+            Text(T("分组代理"), style = NbType.bodyBold.copy(fontSize = 15.sp), color = c.text, modifier = Modifier.padding(start = 4.dp, top = 22.dp))
             Text(
-                T("从上往下依次判断，在哪一步匹配到就从那一步出去。同一个网站同时写在几处时，更具体的域名优先。"),
-                style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp, top = 10.dp),
+                T("一组节点（比如所有日本节点），自动用最快的或由你选一个。在规则的「走哪里」里选它，比如让 YouTube 走日本。"),
+                style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 8.dp),
             )
+            NbCard(padding = PaddingValues(0.dp)) {
+                policies.forEach { p ->
+                    val sub = when {
+                        p.nodes.isEmpty() -> T("没有节点")
+                        p.mode == "select" -> T("手动选择 · 用 %s", (p.nodes.firstOrNull { it.id == p.selected } ?: p.nodes.first()).let { dev.efah.nextbox.ui.flagged(it.name, it.region) })
+                        else -> T("自动选最快 · %d 个节点", p.nodes.size)
+                    }
+                    dev.efah.nextbox.ui.NavRow(p.name, sub, onClick = { onEditPolicy(p.id) })
+                    dev.efah.nextbox.ui.RowDivider()
+                }
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable { onEditPolicy(0) }.padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(NbIcons.Plus, null, tint = c.accentInk, modifier = Modifier.size(18.dp))
+                    Text(T("新建分组代理"), color = c.accentInk, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            NbCard(padding = PaddingValues(0.dp)) {
+                if (!textMode) {
+                    dev.efah.nextbox.ui.SwitchRow(T("隐藏未开启的步骤"), T("关闭的屏蔽广告和常用场景不显示"), s.routeHideOff, { v ->
+                        scope.launch { Repo.updateSettings(buildJsonObject { put("routeHideOff", v) }, reload = false) }
+                    })
+                }
+                dev.efah.nextbox.ui.SwitchRow(T("文本模式"), T("每行一条规则，适合一次改很多条"), textMode, { Prefs.setRuleTextMode(it) })
+            }
+            TextButton(onClick = { confirmReset = true }, modifier = Modifier.align(Alignment.End)) { Text(T("恢复默认"), color = c.muted) }
         }
+    }
+
+    if (adding) AddRuleSheet(RuleDraft(), onDismiss = { adding = false })
+    if (editing >= 0 && editing < s.rules.size) RuleEditSheet(editing, onDismiss = { editing = -1 })
+    sceneSheet?.let { id ->
+        NbSheet(onDismiss = { sceneSheet = null }) {
+            Text(Route.sceneTitle(id), style = NbType.big, color = c.text)
+            Text(Route.sceneDesc(id), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 2.dp, bottom = 14.dp))
+            if (id == "cn") {
+                // always direct; what can be chosen is how names are resolved
+                ResolveDnsChoice(s.bypassDns)
+            } else {
+                Text(T("走哪里"), style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
+                Spacer(Modifier.height(8.dp))
+                TargetChips(Route.sceneTarget(s, id), policies, withBlock = false) { t ->
+                    sceneSheet = null
+                    scope.launch { Repo.saveRules(s.rules, s.scenes.map { if (it.id == id) it.copy(target = t) else it }) }
+                }
+            }
+        }
+    }
+    if (confirmReset) {
+        dev.efah.nextbox.ui.NbAlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text(T("恢复默认分流规则")) },
+            text = { Text(T("会删除你添加的所有规则和规则集，常用场景和步骤顺序恢复成刚安装时的样子（只开启「绕过中国大陆」）。路由模式、屏蔽广告开关和分组代理不受影响。")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReset = false
+                    val (r, sc) = Route.defaults()
+                    scope.launch { Repo.saveRules(r, sc).onSuccess { toast(T("已恢复默认分流规则")) } }
+                }) { Text(T("恢复默认"), color = c.bad) }
+            },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(T("取消")) } },
+        )
+    }
+}
+
+/** The rules as text (see Route.toText); saved a moment after typing stops, when it reads without errors. */
+@Composable
+private fun RulesText(s: Settings, policies: List<PolicyView>) {
+    val c = Nb.c
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf(Route.toText(s.rules, s, policies)) }
+    var errors by remember { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(text) {
+        kotlinx.coroutines.delay(600)
+        val p = Route.fromText(text, policies, s.rules)
+        errors = p.errors
+        if (p.errors.isNotEmpty()) return@LaunchedEffect
+        val changed = p.rules != s.rules || p.sceneTargets.any { (id, t) -> Route.sceneTarget(s, id) != t }
+        if (changed) {
+            val scenes = s.scenes.map { sc -> p.sceneTargets[sc.id]?.let { sc.copy(target = it) } ?: sc }
+            scope.launch { Repo.saveRules(p.rules, scenes) }
+        }
+    }
+    OutlinedTextField(
+        text, { text = it },
+        textStyle = NbType.small.copy(fontFamily = FontFamily.Monospace, fontSize = 12.5.sp, lineHeight = 18.sp),
+        minLines = 12,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    if (errors.isNotEmpty()) {
+        errors.take(5).forEach { Text(it, style = NbType.small, color = c.bad, modifier = Modifier.padding(top = 4.dp)) }
+    } else {
+        Text(
+            T("修改会自动保存。类型：geosite、suffix（域名）、domain（完整域名）、keyword、regex、geoip、cidr（IP 段）、package（安卓应用）；规则集里还可以用 url（规则集网址）。"),
+            style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 6.dp, start = 4.dp),
+        )
     }
 }
 
 @Composable
 private fun StartDot() {
-    Box(Modifier.size(30.dp).clip(CircleShape).background(Nb.c.text), contentAlignment = Alignment.Center) {
-        Icon(NbIcons.Phone, null, tint = Nb.c.bg, modifier = Modifier.size(16.dp))
+    Box(Modifier.size(DotSize).clip(CircleShape).background(Nb.c.text), contentAlignment = Alignment.Center) {
+        Icon(NbIcons.Phone, null, tint = Nb.c.bg, modifier = Modifier.size(14.dp))
     }
 }
 
-/** The left column of the path: a dot and the line down to the next step. */
+private val DotSize = 26.dp
+
+/** Where a dot sits: centred on a one-line step card (44 dp of content and 6 dp of padding above and below). */
+private val DotTop = 15.dp
+
+/**
+ * The left column of the path: a dot on the line that runs through every
+ * step. Each row draws its own piece of the line over its whole height, so
+ * the pieces meet; the first starts and the last ends at its dot.
+ */
 @Composable
-private fun Rail(dot: @Composable () -> Unit, last: Boolean, top: Dp = 0.dp, lineColor: Color = Nb.c.accent.copy(alpha = 0.35f)) {
-    Column(Modifier.width(30.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-        if (top > 0.dp) Box(Modifier.width(2.dp).height(top).background(lineColor))
-        dot()
-        Box(Modifier.width(2.dp).weight(1f).background(if (last) Color.Transparent else lineColor))
+private fun Rail(first: Boolean = false, last: Boolean = false, dot: @Composable () -> Unit) {
+    val line = Nb.c.accent.copy(alpha = 0.35f)
+    Box(
+        Modifier.width(30.dp).fillMaxHeight().drawBehind {
+            val x = size.width / 2
+            val mid = (DotTop + DotSize / 2).toPx()
+            val top = if (first) mid else 0f
+            val bottom = if (last) mid else size.height
+            if (bottom > top) drawLine(line, Offset(x, top), Offset(x, bottom), strokeWidth = 2.dp.toPx())
+        },
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Box(Modifier.padding(top = DotTop)) { dot() }
     }
     Spacer(Modifier.width(10.dp))
 }
 
+/** One step of the route: its number, a drag handle, what it is, where it goes, and its switch. */
 @Composable
-private fun StepRow(
+fun StepCard(
     number: Int,
-    on: Boolean,
+    active: Boolean,
     last: Boolean,
     title: String,
+    tag: String?,
     sub: String,
     exit: String,
     exitTarget: String,
-    checked: Boolean,
-    onToggle: ((Boolean) -> Unit)?,
-    onClick: (() -> Unit)?,
+    fixed: Boolean = false,
+    handle: Modifier? = null,
+    checked: Boolean = false,
+    onToggle: ((Boolean) -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    highlight: Boolean = false,
+    /** On the card only (see dragRow): the dot and the line stay in place. */
+    cardModifier: Modifier = Modifier,
 ) {
     val c = Nb.c
     val (bg, fg) = RuleUi.targetColors(exitTarget, c)
+    // a dot takes the colours of the step that moves into its place
+    val anim = androidx.compose.animation.core.tween<Color>(220)
+    val dotFill by animateColorAsState(if (highlight) fg else if (active) c.card else c.line.copy(alpha = 0.4f), anim, label = "dotFill")
+    val dotRing by animateColorAsState(if (active || highlight) fg else c.line, anim, label = "dotRing")
+    val dotText by animateColorAsState(if (active) fg else c.muted, anim, label = "dotText")
     Row(Modifier.height(IntrinsicSize.Min)) {
-        Rail(
-            dot = {
-                Box(
-                    Modifier.padding(top = 12.dp).size(26.dp).clip(CircleShape)
-                        .background(if (on) c.card else c.line.copy(alpha = 0.4f))
-                        .border(2.dp, if (on) fg else c.line, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) { Text("$number", color = if (on) fg else c.muted, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-            },
-            last = last,
-        )
+        Rail(last = last) {
+            Box(
+                Modifier.size(DotSize).clip(CircleShape).background(dotFill).border(2.dp, dotRing, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (highlight) Icon(NbIcons.Check, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                else Text("$number", color = dotText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         NbCard(
-            Modifier.weight(1f).padding(bottom = 6.dp).alpha(if (on) 1f else 0.7f),
+            Modifier.weight(1f).padding(bottom = 6.dp).then(cardModifier).alpha(if (active || highlight) 1f else 0.7f),
             onClick = onClick,
-            padding = PaddingValues(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+            padding = PaddingValues(start = if (handle != null) 2.dp else 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
             radius = 16.dp,
-            color = if (on) c.card else c.card.copy(alpha = 0.5f),
+            color = if (highlight) bg else if (active) c.card else c.card.copy(alpha = 0.5f),
+            border = if (highlight) fg else c.cardBorder,
         ) {
-            Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
+                when {
+                    handle != null -> Box(handle.size(width = 30.dp, height = 44.dp), contentAlignment = Alignment.Center) {
+                        Icon(NbIcons.Grip, T("拖动调整顺序"), tint = c.muted, modifier = Modifier.size(16.dp))
+                    }
+                    fixed -> Unit
+                }
                 Column(Modifier.weight(1f)) {
-                    Text(title, style = NbType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium), color = c.text)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (tag != null) {
+                            Text(
+                                tag, color = c.accentInk, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(end = 5.dp).clip(RoundedCornerShape(6.dp)).background(c.accentSoft).padding(horizontal = 5.dp, vertical = 1.dp),
+                            )
+                        }
+                        Text(title, style = NbType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium), color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                     Text(sub, style = NbType.small.copy(fontSize = 11.5.sp), color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text(
-                    exit, color = if (on) fg else c.muted, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                    exit, color = if (active || highlight) fg else c.muted, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(start = 6.dp).widthIn(max = 110.dp).clip(RoundedCornerShape(8.dp))
-                        .background(if (on) bg else c.line.copy(alpha = 0.4f)).padding(horizontal = 8.dp, vertical = 4.dp),
+                        .background(if (active || highlight) bg else c.line.copy(alpha = 0.4f)).padding(horizontal = 8.dp, vertical = 4.dp),
                 )
                 when {
                     onToggle != null -> Switch(
                         checked = checked, onCheckedChange = onToggle,
                         colors = SwitchDefaults.colors(checkedTrackColor = c.accentStrong, checkedThumbColor = Color.White),
-                        modifier = Modifier.padding(start = 6.dp).graphicsLayer { scaleX = 0.8f; scaleY = 0.8f },
+                        modifier = Modifier.padding(start = 4.dp).graphicsLayer { scaleX = 0.8f; scaleY = 0.8f },
                     )
-                    onClick != null -> Icon(NbIcons.Chevron, null, tint = c.muted, modifier = Modifier.padding(start = 4.dp).size(16.dp))
                     else -> Spacer(Modifier.width(8.dp))
                 }
             }
@@ -334,236 +524,104 @@ private fun StepRow(
     }
 }
 
-// ---------------------------------------------------------------- lists
-
-/**
- * The rules of one page: direct, proxy (with the policy groups) or block.
- * Tapping an entry moves or deletes it; "添加" opens the add sheet.
- */
-@OptIn(ExperimentalLayoutApi::class)
+/** Editing one rule: its name, values, target, on / off, or deleting it. */
 @Composable
-fun RuleListScreen(page: String, onClose: () -> Unit, onEditPolicy: (Long) -> Unit) {
+private fun RuleEditSheet(index: Int, onDismiss: () -> Unit) {
     val c = Nb.c
     val ctx = LocalContext.current
+    val toast = LocalToast.current
+    val scope = rememberCoroutineScope()
     val state by Repo.state.collectAsState()
     val policies by Repo.policies.collectAsState()
-    val rules = state.settings.rules
-    val pages = listOf("direct", "proxy", "block")
-    var tab by remember { mutableIntStateOf(pages.indexOf(page).coerceAtLeast(0)) }
-    var adding by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<RuleItem?>(null) }
-    val apps by produceState<List<AppItem>>(emptyList()) { value = InstalledApps.load(ctx) }
-    val label: (String) -> String = { pkg -> apps.firstOrNull { it.pkg == pkg }?.label ?: pkg }
-    val node = remember(state.selectedId) { Repo.selectedNodeLabel() }
-    LaunchedEffect(Unit) { Repo.loadPolicies() }
+    val rule = remember { state.settings.rules[index] }
+    var name by remember { mutableStateOf(rule.name) }
+    var text by remember { mutableStateOf(rule.values.joinToString(if (rule.kind == "regex") "\n" else "\n")) }
+    var target by remember { mutableStateOf(rule.target) }
+    var regions by remember { mutableStateOf(if (rule.kind == "geoip") rule.values.toSet() else emptySet()) }
+    var apps by remember { mutableStateOf(if (rule.kind == "package") rule.values.toSet() else emptySet()) }
+    var picking by remember { mutableStateOf(false) }
+    val installed by produceState<List<AppItem>>(emptyList()) { value = InstalledApps.load(ctx) }
 
-    val counts = pages.map { p -> RuleUi.count(rules) { RuleUi.page(it) == p } }
-    GlassScreen(
-        header = {
-            TopBar(T("分流规则"), leading = { BarIcon(NbIcons.Back, T("返回"), onClose) })
-            Segmented(
-                listOf(T("直连 %d", counts[0]), T("代理 %d", counts[1]), T("屏蔽 %d", counts[2])), tab, { tab = it },
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 10.dp), height = 40.dp,
+    fun values(): List<String> = when (rule.kind) {
+        "geoip" -> regions.toList()
+        "package" -> apps.toList()
+        "regex" -> text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+        else -> text.split('\n', ',', '，', ' ').map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    fun save(next: List<Rule>, msg: String) {
+        onDismiss()
+        scope.launch { Repo.saveRules(next).onSuccess { toast(msg) }.onFailure { toast(it.message ?: T("保存失败")) } }
+    }
+
+    NbSheet(onDismiss) {
+        Text(T("编辑规则"), style = NbType.big, color = c.text)
+        Text(Route.kindLabel(rule.kind), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+        OutlinedTextField(
+            name, { name = it }, singleLine = true,
+            label = { Text(T("名称（可选）")) },
+            supportingText = { Text(T("活动页会用这个名称显示命中这条规则的连接")) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        when (rule.kind) {
+            "geoip" -> RegionField(regions) { regions = it }
+            "package" -> {
+                AppsField(apps, installed) { picking = true }
+            }
+            "process" -> Text(T("电脑程序，只在 Windows 版生效"), style = NbType.small, color = c.muted)
+            else -> OutlinedTextField(
+                text, { text = it }, minLines = 3, maxLines = 8,
+                label = { Text(T("一行一个")) },
+                modifier = Modifier.fillMaxWidth(),
             )
-        },
-        floating = { AddButton(Modifier.align(Alignment.BottomEnd)) { adding = true } },
-    ) { pad ->
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = LocalBottomInset.current + 96.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            when (pages[tab]) {
-                "direct" -> {
-                    Hint(T("这些不经过节点，直接连接。点一条可以修改、移到别的页或删除。"))
-                    TargetLists(rules, "direct", policies, label, apps) { editing = it }
-                }
-                "block" -> {
-                    Hint(T("这些连接会被拦下。点一条可以修改、移到别的页或删除。"))
-                    TargetLists(rules, "block", policies, label, apps) { editing = it }
-                }
-                else -> {
-                    Hint(T("开着「绕过中国大陆」或只代理部分应用时，这些也一定走代理；可以指定用哪个策略组。"))
-                    DestinationCard(T("首页选中的节点"), node.ifEmpty { T("还没有选择节点") }, "proxy", null) {
-                        TargetLists(rules, "proxy", policies, label, apps, card = false) { editing = it }
-                    }
-                    policies.forEach { p ->
-                        val target = "policy:${p.id}"
-                        val sub = when {
-                            p.nodes.isEmpty() -> T("没有节点")
-                            p.mode == "select" -> T("手动选择 · 用 %s", (p.nodes.firstOrNull { it.id == p.selected } ?: p.nodes.first()).let { flagged(it.name, it.region) })
-                            else -> T("自动选最快 · %d 个节点", p.nodes.size)
-                        }
-                        DestinationCard(T("策略组 · %s", p.name), sub, target, { onEditPolicy(p.id) }) {
-                            TargetLists(rules, target, policies, label, apps, card = false) { editing = it }
-                        }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(18.dp))
-                            .border(1.5.dp, c.line, RoundedCornerShape(18.dp)).clickable { onEditPolicy(0) },
-                        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(NbIcons.Plus, null, tint = c.accentInk, modifier = Modifier.size(18.dp))
-                        Text(T("新建策略组"), color = c.accentInk, modifier = Modifier.padding(start = 8.dp))
-                    }
-                    Hint(T("策略组是一组节点（比如所有日本节点），可以自动选最快的，也可以手动选一个。"))
-                }
-            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Text(T("走哪里"), style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
+        Spacer(Modifier.height(8.dp))
+        TargetChips(target, policies) { target = it }
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TextButton(
+                onClick = { save(state.settings.rules.filterIndexed { i, _ -> i != index }, T("已删除")) },
+                modifier = Modifier.weight(1f).height(48.dp),
+            ) { Text(T("删除"), color = c.bad) }
+            Button(
+                onClick = {
+                    val v = values().map { RuleUi.normalize(rule.kind, it) }.distinct()
+                    if (v.isEmpty() && rule.kind != "process") { toast(T("还没填内容")); return@Button }
+                    val next = state.settings.rules.toMutableList()
+                    if (index < next.size) next[index] = rule.copy(name = name.trim(), values = if (rule.kind == "process") rule.values else v, target = target)
+                    save(next, T("已保存"))
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
+                modifier = Modifier.weight(2f).height(48.dp),
+            ) { Text(T("保存"), fontWeight = FontWeight.Bold) }
         }
     }
-
-    if (adding) {
-        val target = when (pages[tab]) {
-            "direct" -> "direct"
-            "block" -> "block"
-            else -> "proxy"
-        }
-        AddRuleSheet(RuleDraft(target = target), onDismiss = { adding = false })
-    }
-    editing?.let { item -> RuleItemSheet(item, onDismiss = { editing = null }) }
+    if (picking) AppPicker(apps, onDone = { apps = it; picking = false }, onDismiss = { picking = false })
 }
 
-@Composable
-private fun Hint(text: String) {
-    Text(text, style = NbType.small, color = Nb.c.muted, modifier = Modifier.padding(horizontal = 4.dp))
-}
-
-@Composable
-fun AddButton(modifier: Modifier, onClick: () -> Unit) {
-    val c = Nb.c
-    Row(
-        modifier
-            .padding(end = 18.dp, bottom = LocalBottomInset.current + 18.dp)
-            .height(52.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .background(c.accentStrong)
-            .clickable(onClick = onClick)
-            .padding(start = 16.dp, end = 20.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(NbIcons.Plus, null, tint = Color.White, modifier = Modifier.size(20.dp))
-        Text(T("添加"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-    }
-}
-
-/** A card for one destination of the proxy page: its header and its rules. */
-@Composable
-private fun DestinationCard(title: String, sub: String, target: String, onHeader: (() -> Unit)?, content: @Composable () -> Unit) {
-    val c = Nb.c
-    val (bg, fg) = RuleUi.targetColors(target, c)
-    NbCard(padding = PaddingValues(0.dp)) {
-        Row(
-            Modifier.fillMaxWidth().background(bg.copy(alpha = 0.55f))
-                .let { if (onHeader != null) it.clickable(onClick = onHeader) else it }
-                .heightIn(min = 50.dp).padding(start = 14.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
-                Text(sub, style = NbType.small, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (onHeader != null) Icon(NbIcons.Chevron, null, tint = c.muted, modifier = Modifier.size(18.dp))
-        }
-        content()
-    }
-}
-
-/** The apps, websites and IP ranges of one target. */
+/** The regions of an IP region rule as chips, and the picker to change them. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TargetLists(
-    rules: List<Rule>,
-    target: String,
-    policies: List<PolicyView>,
-    label: (String) -> String,
-    apps: List<AppItem>,
-    card: Boolean = true,
-    onEdit: (RuleItem) -> Unit,
-) {
+fun RegionField(selected: Set<String>, onChange: (Set<String>) -> Unit) {
     val c = Nb.c
-    val (all, sites, ips) = RuleUi.items(rules, target, label)
-    // program rules from NextBox for Windows are listed apart: they do nothing here
-    val (programs, appItems) = all.partition { it.kind == "process" }
-    if (all.isEmpty() && sites.isEmpty() && ips.isEmpty()) {
-        if (card) {
-            NbCard { Text(T("还没有规则。点右下角「添加」，可以加网站、应用或 IP。"), style = NbType.small, color = c.muted) }
-        } else {
-            Text(T("还没有规则"), style = NbType.small, color = c.muted, modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp))
-        }
-        return
+    var open by remember { mutableStateOf(false) }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        selected.forEach { code -> dev.efah.nextbox.ui.Chip(Regions.name(code), true, onClick = { onChange(selected - code) }) }
+        dev.efah.nextbox.ui.Chip(if (selected.isEmpty()) T("选择地区") else T("＋ 地区"), false, onClick = { open = true })
     }
-    if (card) {
-        if (appItems.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel(T("应用 · %d", appItems.size))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    appItems.forEach { a -> AppChip(a, apps) { onEdit(a) } }
-                }
-            }
-        }
-        if (sites.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel(T("网站 · %d", sites.size))
-                NbCard(padding = PaddingValues(0.dp)) { ItemRows(sites, apps, onEdit) }
-            }
-        }
-        if (ips.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel(T("IP · %d", ips.size))
-                NbCard(padding = PaddingValues(0.dp)) { ItemRows(ips, apps, onEdit) }
-            }
-        }
-        if (programs.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel(T("电脑程序 · %d", programs.size))
-                NbCard(padding = PaddingValues(0.dp)) { ItemRows(programs, apps, onEdit) }
-            }
-        }
-    } else {
-        ItemRows(appItems + sites + ips + programs, apps, onEdit, dividerFirst = true)
-    }
+    if (open) RegionPicker(selected, onDone = { onChange(it); open = false }, onDismiss = { open = false })
 }
 
+/** The apps of an app rule as chips, and the button that opens the chooser. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SectionLabel(text: String) {
-    Text(text, style = NbType.section.copy(fontWeight = FontWeight.Bold), color = Nb.c.text, modifier = Modifier.padding(start = 4.dp))
-}
-
-@Composable
-private fun ItemRows(items: List<RuleItem>, apps: List<AppItem>, onEdit: (RuleItem) -> Unit, dividerFirst: Boolean = false) {
-    val c = Nb.c
-    items.forEachIndexed { i, it ->
-        if (i > 0 || dividerFirst) HorizontalDivider(color = c.line, thickness = 1.dp)
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 50.dp).clickable { onEdit(it) }.padding(horizontal = 14.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (it.kind == "package") AppIcon(it.values.first(), apps, 26.dp)
-            Text(
-                it.label, style = NbType.body.copy(fontSize = 14.5.sp), color = if (it.disabled) c.muted else c.text,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-            )
-            Text(
-                if (it.disabled) T("已停用") else it.tag.ifEmpty { T("应用") }, style = NbType.small.copy(fontSize = 11.5.sp), color = c.muted,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(c.line.copy(alpha = 0.5f)).padding(horizontal = 8.dp, vertical = 3.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun AppChip(item: RuleItem, apps: List<AppItem>, onClick: () -> Unit) {
-    val c = Nb.c
-    Row(
-        Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(c.card).border(1.dp, c.cardBorder, RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick).padding(start = 5.dp, end = 12.dp).alpha(if (item.disabled) 0.55f else 1f),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        AppIcon(item.values.first(), apps, 30.dp)
-        Text(item.label, style = NbType.body.copy(fontSize = 13.5.sp), color = c.text, maxLines = 1)
+fun AppsField(selected: Set<String>, installed: List<AppItem>, onPick: () -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        selected.forEach { p -> dev.efah.nextbox.ui.Chip(installed.firstOrNull { it.pkg == p }?.label ?: p, true, onClick = onPick) }
+        dev.efah.nextbox.ui.Chip(if (selected.isEmpty()) T("选择应用") else T("＋ 应用"), false, onClick = onPick)
     }
 }
 
@@ -582,45 +640,6 @@ fun AppIcon(pkg: String, apps: List<AppItem>, size: Dp) {
     }
 }
 
-/** Where a rule entry goes, and whether to drop it. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun RuleItemSheet(item: RuleItem, onDismiss: () -> Unit) {
-    val c = Nb.c
-    val toast = LocalToast.current
-    val scope = rememberCoroutineScope()
-    val state by Repo.state.collectAsState()
-    val policies by Repo.policies.collectAsState()
-    val rules = state.settings.rules
-    fun save(next: List<Rule>, msg: String) {
-        onDismiss()
-        scope.launch { Repo.saveRules(next).onSuccess { toast(msg) }.onFailure { toast(it.message ?: T("保存失败")) } }
-    }
-    NbSheet(onDismiss) {
-        Text(item.label, style = NbType.big, color = c.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text(
-            if (item.kind == "package") item.values.first() else item.tag,
-            style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 2.dp, bottom = 14.dp),
-        )
-        SectionLabel(T("走哪里"))
-        Spacer(Modifier.height(8.dp))
-        TargetChips(item.target, policies) { t ->
-            if (t != item.target) save(RuleUi.place(rules, item.kind, item.values, t, item.disabled), T("已改为：%s", RuleUi.targetLabel(t, policies)))
-        }
-        Spacer(Modifier.height(14.dp))
-        NbCard(padding = PaddingValues(0.dp)) {
-            dev.efah.nextbox.ui.SwitchRow(T("暂时停用"), T("保留在列表里，但不生效"), item.disabled, { off ->
-                save(RuleUi.place(rules, item.kind, item.values, item.target, off), if (off) T("已停用") else T("已启用"))
-            })
-        }
-        Spacer(Modifier.height(14.dp))
-        androidx.compose.material3.TextButton(
-            onClick = { save(RuleUi.remove(rules, item.kind, item.values), T("已删除")) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(T("删除这条规则"), color = c.bad) }
-    }
-}
-
 /** Direct, proxy, block and the policy groups as chips. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -636,7 +655,7 @@ fun TargetChips(selected: String, policies: List<PolicyView>, withBlock: Boolean
         options.forEach { t ->
             val on = t == selected
             val (bg, fg) = RuleUi.targetColors(t, c)
-            val label = if (t.startsWith("policy:")) T("策略组 · %s", RuleUi.targetLabel(t, policies)) else RuleUi.targetLabel(t, policies)
+            val label = if (t.startsWith("policy:")) T("分组代理 · %s", RuleUi.targetLabel(t, policies)) else RuleUi.targetLabel(t, policies)
             Box(
                 Modifier.height(38.dp).clip(RoundedCornerShape(19.dp))
                     .background(if (on) bg else Color.Transparent)

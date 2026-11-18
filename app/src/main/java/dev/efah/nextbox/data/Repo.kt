@@ -51,12 +51,18 @@ object Repo {
         val tz = TimeZone.getDefault()
         Nbcore.setTimeZone(tz.id, tz.getOffset(System.currentTimeMillis()) / 1000)
         refreshNow()
-        Prefs.migrateRoute(_state.value.settings.routeMode)
-        // 1.1.0 moved "bypass mainland China" into the core (the "cn" scene of
-        // the shared rule model): carry the old switch over once.
-        if (!Prefs.shown("route_v2")) {
-            runCatching { Nbcore.setRoute(Prefs.routeScope.value, Prefs.bypassCn.value) }
+        // 2.0 routes like NextBox for Windows: the rules are checked in the
+        // order the user gives them. Data of a 1.x version (which marked
+        // route_v2) gets its rules in the order the old route path checked
+        // them, once, so that traffic goes where it went before; "all direct"
+        // is a routing mode now, no longer a scope.
+        if (!Prefs.shown("route_v3")) {
+            if (Prefs.shown("route_v2")) {
+                runCatching { Nbcore.migrateRoute(Prefs.routeScope.value == Prefs.SCOPE_DIRECT) }
+            }
+            if (Prefs.routeScope.value == Prefs.SCOPE_DIRECT) Prefs.setRouteScope(Prefs.SCOPE_GLOBAL)
             Prefs.markShown("route_v2")
+            Prefs.markShown("route_v3")
             refreshNow()
         }
     }
@@ -90,8 +96,6 @@ object Repo {
         _state.value = st
         // the switch can also change on the rules page or by importing a backup
         if (st.settings.bypassCn != Prefs.bypassCn.value) Prefs.setBypassCn(st.settings.bypassCn)
-        if (st.settings.routeMode == "direct" && Prefs.routeScope.value != Prefs.SCOPE_DIRECT) Prefs.setRouteScope(Prefs.SCOPE_DIRECT)
-        if (st.settings.routeMode != "direct" && Prefs.routeScope.value == Prefs.SCOPE_DIRECT) Prefs.setRouteScope(Prefs.SCOPE_GLOBAL)
         _profiles.value = NbJson.decodeFromString<List<Profile>>(Nbcore.profiles(st.currentGroupId))
     }
 
@@ -111,17 +115,29 @@ object Repo {
         return r
     }
 
-    /**
-     * Routing as the user sees it: a scope (every app / selected apps / all
-     * direct) plus the "bypass mainland China" switch, which applies to both
-     * proxied scopes. The core only knows global / rule / direct.
-     */
-    suspend fun setRoute(scope: String = Prefs.routeScope.value, bypass: Boolean = Prefs.bypassCn.value): Result<Unit> {
-        Prefs.setRouteScope(scope)
-        Prefs.setBypassCn(bypass)
-        val r = call { Nbcore.setRoute(scope, bypass) }
+    /** The routing mode, as on NextBox for Windows: "global", "rule" or "direct". */
+    suspend fun setRouteMode(mode: String): Result<Unit> {
+        val r = call { Nbcore.setRouteMode(mode) }
         if (r.isSuccess) Box.reloadIfRunning()
         return r
+    }
+
+    /**
+     * Switches the "bypass mainland China" step (the "cn" scene). It is a step
+     * of rule mode, so switching it on in global mode switches to rule mode
+     * (with no rules of your own that routes like global mode plus the bypass).
+     */
+    suspend fun setBypass(on: Boolean): Result<Unit> {
+        Prefs.setBypassCn(on)
+        val s = _state.value.settings
+        if (on && s.routeMode == "global") call { Nbcore.setRouteMode("rule") }
+        return saveRules(s.rules, s.scenes.map { if (it.id == "cn") it.copy(enabled = on) else it })
+    }
+
+    /** Which apps use the VPN: every app, or the selected ones (see Prefs.perAppMode). */
+    fun setScope(scope: String) {
+        Prefs.setRouteScope(scope)
+        Box.reloadIfRunning()
     }
 
     // ---------------------------------------------------------------- groups & nodes
@@ -290,7 +306,7 @@ object Repo {
 
     /** A backup of the chosen parts, in the format both NextBox apps read, sealed with the password. */
     suspend fun exportBackup(parts: BackupParts): Result<String> = withContext(Dispatchers.IO) {
-        runCatching { Nbcore.exportBackup(NbJson.encodeToString(parts), Prefs.exportJson()) }
+        runCatching { Nbcore.exportBackup(NbJson.encodeToString(parts), Prefs.exportJson(parts.appearance, parts.settings)) }
     }
 
     suspend fun inspectBackup(content: String, password: String): Result<BackupInfo> = withContext(Dispatchers.IO) {
@@ -307,15 +323,10 @@ object Repo {
     suspend fun importBackup(content: String, parts: BackupParts): Result<String> {
         val r = call {
             val res = NbJson.decodeFromString<ImportResult>(Nbcore.importBackup(content, NbJson.encodeToString(parts)))
-            res.android?.let { Prefs.importJson(it.toString()) }
+            res.android?.let { Prefs.importJson(it.toString(), parts.appearance, parts.settings) }
             res.message
         }
-        if (r.isSuccess) {
-            // the core now holds the imported route; make the Android side agree
-            runCatching { Nbcore.setRoute(Prefs.routeScope.value, _state.value.settings.bypassCn) }
-            runCatching { refreshNow() }
-            Box.reloadIfRunning()
-        }
+        if (r.isSuccess) Box.reloadIfRunning()
         return r
     }
 
@@ -327,15 +338,24 @@ object Repo {
 
     // ---------------------------------------------------------------- rules
 
-    /** Saves the rules and reloads the core. Their order does not matter: the route path decides it. */
-    suspend fun saveRules(rules: List<Rule>): Result<Unit> {
+    /**
+     * Saves the rules in the order they are checked (with the places of ad
+     * blocking and the scenes), and the scenes when given; reloads the core.
+     */
+    suspend fun saveRules(rules: List<Rule>, scenes: List<Scene>? = null): Result<Unit> {
         val js = NbJson.encodeToString(kotlinx.serialization.builtins.ListSerializer(Rule.serializer()), rules)
-        val r = call { Nbcore.saveRules(js) }
+        val sc = scenes?.let { NbJson.encodeToString(kotlinx.serialization.builtins.ListSerializer(Scene.serializer()), it) } ?: ""
+        val r = call { Nbcore.saveRules(js, sc) }
         if (r.isSuccess) Box.reloadIfRunning()
         return r
     }
 
-    /** Which step of the route path a website or IP (and optionally an app) leaves at. */
+    /** Downloads a rule-set a rule set names by its address, to see that it works. */
+    suspend fun checkRuleSetUrl(url: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { Nbcore.checkRuleSetURL(ruleSetDir, url, Box.subscriptionProxy()) }
+    }
+
+    /** Which step of the route a website or IP (and optionally an app) leaves at. */
     suspend fun testRoute(input: String, pkg: String = ""): Result<RouteMatch> = withContext(Dispatchers.IO) {
         runCatching { NbJson.decodeFromString<RouteMatch>(Nbcore.testRoute(ruleSetDir, input, pkg)) }
     }

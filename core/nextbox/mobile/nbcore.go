@@ -41,10 +41,8 @@ func current() (*store.Store, error) {
 }
 
 // Open loads (or creates) the data files in dir. A fresh install starts in
-// VPN mode with every connection proxied: rule mode with no rules and no
-// scene on (bypassing mainland China is opt-in on Android). Android keeps the
-// core in rule mode except for "all direct", so that the user's rules apply in
-// both "global" and "selected apps".
+// VPN mode with every connection proxied: global mode, with no scene on
+// (bypassing mainland China is opt-in on Android).
 func Open(dir string) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -58,7 +56,7 @@ func Open(dir string) error {
 	}
 	if errors.Is(statErr, os.ErrNotExist) {
 		set := s.Settings()
-		set.RouteMode = "rule"
+		set.RouteMode = "global"
 		for i := range set.Scenes {
 			set.Scenes[i].Enabled = false
 		}
@@ -66,12 +64,6 @@ func Open(dir string) error {
 		set.SystemProxy = false
 		set.CloseToTray = false
 		set.MixedPort = 2080
-		if err := s.SaveSettings(set); err != nil {
-			return err
-		}
-	}
-	// scenes from a desktop backup become rules the rules page can show
-	if set := s.Settings(); scenesToRules(&set) {
 		if err := s.SaveSettings(set); err != nil {
 			return err
 		}

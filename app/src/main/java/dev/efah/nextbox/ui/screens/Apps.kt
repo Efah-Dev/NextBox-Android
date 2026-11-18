@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -117,6 +118,10 @@ fun AppChooser(
     topPadding: androidx.compose.ui.unit.Dp = 0.dp,
     showBulkActions: Boolean = true,
     padding: PaddingValues? = null,
+    /** Off: the list is shown dimmed and cannot be changed (a scope that does not use it). */
+    enabled: Boolean = true,
+    /** Next to the system apps switch, e.g. a button to type a package name. */
+    trailing: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
     header: LazyListScope.() -> Unit = {},
 ) {
     val c = Nb.c
@@ -150,6 +155,7 @@ fun AppChooser(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Chip(T("显示系统应用"), showSystem, onClick = { showSystem = !showSystem })
                     Spacer(Modifier.weight(1f))
+                    trailing()
                     if (showBulkActions && list != null) {
                         // bulk actions work on what the list shows (search and system filter)
                         val visible = shown.map { it.pkg }.toSet()
@@ -173,8 +179,9 @@ fun AppChooser(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 60.dp)
+                    .alpha(if (enabled) 1f else 0.45f)
                     .clip(RoundedCornerShape(14.dp))
-                    .clickable(onClick = toggle)
+                    .clickable(enabled = enabled, onClick = toggle)
                     .padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -194,7 +201,7 @@ fun AppChooser(
                         style = NbType.small, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Checkbox(checked = checked, onCheckedChange = { toggle() }, colors = CheckboxDefaults.colors(checkedColor = c.accentStrong))
+                Checkbox(checked = checked, enabled = enabled, onCheckedChange = { toggle() }, colors = CheckboxDefaults.colors(checkedColor = c.accentStrong))
             }
         }
     }

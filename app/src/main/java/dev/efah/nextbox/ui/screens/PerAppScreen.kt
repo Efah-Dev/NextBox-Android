@@ -21,7 +21,11 @@ import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
 
-/** The "selected apps" scope: only these apps use the VPN, or every app except these. */
+/**
+ * 代理范围: which apps use the VPN — every app, only the selected ones, or
+ * every app except the selected ones. Routing (global / rule / direct)
+ * applies to whatever goes through the VPN.
+ */
 @Composable
 fun PerAppScreen(onClose: () -> Unit) {
     val c = Nb.c
@@ -30,34 +34,41 @@ fun PerAppScreen(onClose: () -> Unit) {
     val selected by Prefs.perAppList.collectAsState()
     // the VPN only picks up the new app list when the core reloads
     DisposableEffect(Unit) { onDispose { Box.reloadIfRunning() } }
+    val choice = when {
+        routeScope != Prefs.SCOPE_APPS -> 0
+        mode == Prefs.APPS_EXCLUDE -> 2
+        else -> 1
+    }
 
     GlassScreen(header = {
-        TopBar(T("指定应用"), leading = { BarIcon(NbIcons.Back, T("返回"), onClose) }) {
-            Text(T("已选 %d 个", selected.size), style = NbType.small, color = c.muted, modifier = Modifier.padding(end = 12.dp))
+        TopBar(T("代理范围"), leading = { BarIcon(NbIcons.Back, T("返回"), onClose) }) {
+            if (choice != 0) Text(T("已选 %d 个", selected.size), style = NbType.small, color = c.muted, modifier = Modifier.padding(end = 12.dp))
         }
     }) { pad ->
         AppChooser(
             selected = selected,
             onChange = { Prefs.setPerAppList(it) },
             topPadding = pad.calculateTopPadding() + 4.dp,
+            enabled = choice != 0,
         ) {
             item(key = "mode") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
                     Segmented(
-                        listOf(T("只代理选中的应用"), T("排除选中的应用")),
-                        if (mode == Prefs.APPS_EXCLUDE) 1 else 0,
-                        onSelect = { Prefs.setPerAppMode(if (it == 1) Prefs.APPS_EXCLUDE else Prefs.APPS_INCLUDE) },
+                        listOf(T("所有应用"), T("只代理选中的"), T("排除选中的")),
+                        choice,
+                        onSelect = {
+                            when (it) {
+                                0 -> Prefs.setRouteScope(Prefs.SCOPE_GLOBAL)
+                                1 -> { Prefs.setRouteScope(Prefs.SCOPE_APPS); Prefs.setPerAppMode(Prefs.APPS_INCLUDE) }
+                                else -> { Prefs.setRouteScope(Prefs.SCOPE_APPS); Prefs.setPerAppMode(Prefs.APPS_EXCLUDE) }
+                            }
+                        },
                     )
                     Text(
-                        buildString {
-                            append(
-                                if (mode == Prefs.APPS_EXCLUDE) {
-                                    T("选中的应用直接联网，其余应用都走代理；以后新装的应用也走代理。适合排除银行、支付类应用。")
-                                } else {
-                                    T("只有选中的应用经过 VPN，其他应用直接联网。")
-                                },
-                            )
-                            if (routeScope != Prefs.SCOPE_APPS) append(T("在首页选「指定应用」后生效。"))
+                        when (choice) {
+                            0 -> T("手机上所有应用都经过 VPN，按路由模式和分流规则决定走代理还是直连。下面选好的应用会保留，切换范围后生效。")
+                            2 -> T("选中的应用直接联网，其余应用都走 VPN；以后新装的应用也走 VPN。适合排除银行、支付类应用。")
+                            else -> T("只有选中的应用经过 VPN，其他应用直接联网。")
                         },
                         style = NbType.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp),
                     )

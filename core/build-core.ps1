@@ -46,9 +46,10 @@ if (-not $env:JAVA_HOME) { $env:JAVA_HOME = "C:\Program Files\Android\Android St
 $env:Path = (Join-Path $env:JAVA_HOME "bin") + ";" + $env:Path
 
 # Only what NextBox uses: gvisor (TUN stack), QUIC (Hysteria2 / TUIC),
-# uTLS (fingerprints, Reality). Leaving out tailscale, wireguard, openvpn,
-# openconnect, usbip, naive and the clash API keeps the library small.
-$tags = "with_gvisor,with_quic,with_utls,with_naive_outbound,badlinkname,tfogo_checklinkname0,ts_omit_logtail,ts_omit_ssh,ts_omit_drive,ts_omit_taildrop,ts_omit_webclient,ts_omit_doctor,ts_omit_capture,ts_omit_kube,ts_omit_aws,ts_omit_synology,ts_omit_bird"
+# uTLS (fingerprints, Reality) and NaiveProxy (cronet). Leaving out
+# tailscale, wireguard, openvpn, openconnect, usbip and the clash API keeps
+# the library small.
+$tags = "with_gvisor,with_quic,with_utls,with_naive_outbound,badlinkname,tfogo_checklinkname0"
 $version = "1.14.4"
 $ldflags = "-X github.com/sagernet/sing-box/constant.Version=$version -X runtime.godebugDefault=multipathtcp=0,tlssha1=1 -checklinkname=0"
 if (-not $DebugBuild) { $ldflags += " -s -w -buildid=" }

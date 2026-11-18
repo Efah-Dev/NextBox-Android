@@ -9,12 +9,25 @@ import android.util.Log
 import dev.efah.nextbox.libbox.Libbox
 import dev.efah.nextbox.libbox.RoutePrefix
 import dev.efah.nextbox.libbox.TunOptions
+import dev.efah.nextbox.nbcore.Nbcore
+import dev.efah.nextbox.nbcore.SocketProtector
 import android.net.IpPrefix
 import java.net.InetAddress
 
 /** VPN mode: sing-box's TUN inbound is backed by Android's VpnService. */
 class VpnBoxService : VpnService(), Platform {
     private val runner = BoxRunner(this, this, isVpn = true)
+
+    // The app itself runs inside this VPN: the route tester's DNS lookups
+    // go around it (see nbcore.SetSocketProtector).
+    private val protector = object : SocketProtector {
+        override fun protect(fd: Int): Boolean = this@VpnBoxService.protect(fd)
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        Nbcore.setSocketProtector(protector)
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = runner.onStartCommand()
 
@@ -23,6 +36,7 @@ class VpnBoxService : VpnService(), Platform {
     override fun onRevoke() = runner.stop()
 
     override fun onDestroy() {
+        Nbcore.setSocketProtector(null)
         runner.destroy()
         super.onDestroy()
     }
