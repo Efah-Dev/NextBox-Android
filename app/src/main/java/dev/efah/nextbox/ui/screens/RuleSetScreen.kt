@@ -227,7 +227,7 @@ fun RuleSetScreen(index: Int, onClose: () -> Unit) {
                                         }
                                     },
                                 ) { Text(T("检查（现在下载一次）"), color = c.accentInk) }
-                                Text(T("只支持 sing-box 的 .srs 或 .json 规则集，Clash 规则不兼容。连接时下载，「更新规则集」时重新下载。"), style = NbType.small, color = c.muted)
+                                Text(T("规则集网址支持 sing-box 的 .srs、.json 规则集，以及 Clash 规则源（YAML 或文本，不支持 mrs）。连接时下载，「更新规则集」时重新下载。"), style = NbType.small, color = c.muted)
                             }
                         }
                     }

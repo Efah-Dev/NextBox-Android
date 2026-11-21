@@ -588,7 +588,7 @@ private fun RuleEditSheet(index: Int, onDismiss: () -> Unit) {
             ) { Text(T("删除"), color = c.bad) }
             Button(
                 onClick = {
-                    val v = values().map { RuleUi.normalize(rule.kind, it) }.distinct()
+                    val v = values().map { RuleUi.normalize(rule.kind, it) }.filter { it.isNotEmpty() }.distinct()
                     if (v.isEmpty() && rule.kind != "process") { toast(T("还没填内容")); return@Button }
                     val next = state.settings.rules.toMutableList()
                     if (index < next.size) next[index] = rule.copy(name = name.trim(), values = if (rule.kind == "process") rule.values else v, target = target)

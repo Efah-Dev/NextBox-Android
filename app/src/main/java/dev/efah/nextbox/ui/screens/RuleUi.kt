@@ -152,7 +152,7 @@ object RuleUi {
         return when (kind) {
             "suffix" -> t.lowercase().trimStart('.')
             "domain", "keyword", "geosite", "geoip" -> t.lowercase()
-            "cidr" -> if ('/' in t) t else if (':' in t) "$t/128" else "$t/32"
+            "cidr" -> if (t.isEmpty() || '/' in t) t else if (':' in t) "$t/128" else "$t/32"
             else -> t
         }
     }
