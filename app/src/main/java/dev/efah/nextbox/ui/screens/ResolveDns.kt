@@ -1,6 +1,7 @@
 package dev.efah.nextbox.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,8 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -102,40 +101,78 @@ fun ResolveDnsChoice(value: String) {
 
 /**
  * The choice as a small tag between "bypass mainland China" and its switch
- * on the home page, opening a menu with both and what they mean.
+ * on the home page. It opens a bottom sheet with both choices as cards; the
+ * direct one shows its warning inside the sheet and needs a second tap.
  */
 @Composable
 fun ResolveDnsChip(value: String, modifier: Modifier = Modifier) {
     val c = Nb.c
     var open by remember { mutableStateOf(false) }
-    ResolveDnsPicker(value) { selected, pick ->
-        Box(modifier) {
-            Row(
-                Modifier.height(28.dp).clip(RoundedCornerShape(14.dp)).background(c.accentSoft)
-                    .clickable { open = true }.padding(start = 10.dp, end = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    Row(
+        modifier.height(28.dp).clip(RoundedCornerShape(14.dp)).background(c.accentSoft)
+            .clickable { open = true }.padding(start = 10.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(ResolveDns.short(value), color = c.accentInk, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Icon(NbIcons.Chevron, null, tint = c.accentInk, modifier = Modifier.padding(start = 2.dp).size(14.dp).rotate(90f))
+    }
+    if (open) ResolveDnsSheet(value) { open = false }
+}
+
+@Composable
+private fun ResolveDnsSheet(value: String, onDismiss: () -> Unit) {
+    val c = Nb.c
+    val scope = rememberCoroutineScope()
+    // the direct DNS waits for the second tap, below its warning
+    var pendingDirect by remember { mutableStateOf(false) }
+    fun save(v: String) {
+        scope.launch { Repo.updateSettings(buildJsonObject { put("bypassDns", v) }) }
+        onDismiss()
+    }
+    NbSheet(onDismiss) {
+        Text(T("绕过中国大陆 · 解析方式"), style = NbType.bodyBold.copy(fontSize = 17.sp), color = c.text)
+        Text(T("只影响既不在国内网站名单、也不在境外网站名单里的网站"), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+        val shown = if (pendingDirect) "direct" else value
+        ResolveDns.values.forEach { v ->
+            val on = shown == v
+            Box(
+                Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(14.dp))
+                    .border(1.5.dp, if (on) c.accentStrong else c.line, RoundedCornerShape(14.dp))
+                    .background(if (on) c.accentSoft else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable {
+                        when {
+                            v == "direct" && value != "direct" -> pendingDirect = true
+                            v != value -> save(v)
+                            else -> { pendingDirect = false }
+                        }
+                    }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
-                Text(ResolveDns.short(value), color = c.accentInk, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                Icon(NbIcons.Chevron, null, tint = c.accentInk, modifier = Modifier.padding(start = 2.dp).size(14.dp).rotate(90f))
-            }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = c.card) {
-                ResolveDns.labels().forEachIndexed { i, label ->
-                    DropdownMenuItem(
-                        text = {
-                            Column(Modifier.padding(vertical = 4.dp).widthIn(max = 240.dp)) {
-                                Text(label, color = if (i == selected) c.accentInk else c.text, fontSize = 14.sp, fontWeight = if (i == selected) FontWeight.Bold else FontWeight.Normal)
-                                Text(ResolveDns.hint(ResolveDns.values[i]), style = NbType.small, color = c.muted)
-                            }
-                        },
-                        leadingIcon = {
-                            Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
-                                if (i == selected) Icon(NbIcons.Check, null, tint = c.accentInk, modifier = Modifier.size(16.dp))
-                            }
-                        },
-                        onClick = { open = false; pick(i) },
-                    )
+                RadioTitle(on, ResolveDns.labels()[ResolveDns.values.indexOf(v)], ResolveDns.desc(v)) {
+                    if (v == "remote") {
+                        Text(
+                            T("推荐"), color = c.accentInk, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(6.dp)).background(c.accentSoft).padding(horizontal = 6.dp, vertical = 1.dp),
+                        )
+                    }
                 }
             }
+        }
+        if (pendingDirect) {
+            Text(
+                T("被封锁的网站可能拿到错误的地址，表现为已连接却打不开网页。只有国内网站被误判走代理、又确实需要直连时再用。"),
+                style = NbType.small.copy(fontSize = 13.sp), color = c.text,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.mid.copy(alpha = 0.14f)).padding(12.dp),
+            )
+            androidx.compose.material3.Button(
+                onClick = { save("direct") },
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = c.accentStrong),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(46.dp),
+                shape = RoundedCornerShape(14.dp),
+            ) { Text(T("仍然使用直连"), fontWeight = FontWeight.Bold) }
+            TextButton(onClick = { pendingDirect = false }, modifier = Modifier.fillMaxWidth()) { Text(T("取消"), color = c.muted) }
+        } else {
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text(T("完成"), color = c.muted) }
         }
     }
 }

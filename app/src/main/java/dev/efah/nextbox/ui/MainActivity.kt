@@ -99,6 +99,17 @@ import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NextBoxTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.snapshotFlow
+
+/**
+ * Whether swiping between the pages is paused: while the nodes page is
+ * sorted by dragging or in multi-select mode, a sideways move belongs to it.
+ */
+internal object PageSwipe {
+    var blocked by mutableStateOf(false)
+}
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Home("首页", NbIcons.Home), // i18n:skip (translated where shown)
@@ -157,6 +168,11 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
+    val pager = rememberPagerState(initialPage = tab.ordinal) { Tab.entries.size }
+    // the bar (and anything else setting tab) moves the pager; a swipe that
+    // settles on a page sets tab
+    LaunchedEffect(tab) { if (pager.currentPage != tab.ordinal) pager.animateScrollToPage(tab.ordinal) }
+    LaunchedEffect(pager) { snapshotFlow { pager.settledPage }.collect { tab = Tab.entries[it] } }
     // pages opened on top of the tabs, last one shown; Back closes the top one
     val stack = remember { androidx.compose.runtime.mutableStateListOf<Overlay>() }
     val overlay = stack.lastOrNull()
@@ -341,15 +357,14 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                         Box(Modifier.fillMaxSize().backdropSource(backdrop)) {
                             GlowBackground()
                             CompositionLocalProvider(LocalBottomInset provides barSpace) {
-                                AnimatedContent(
-                                    targetState = tab,
-                                    transitionSpec = {
-                                        val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                                        (fadeIn(tween(220)) + slideInHorizontally(tween(260)) { dir * it / 12 }) togetherWith fadeOut(tween(120))
-                                    },
-                                    label = "tab",
-                                ) { t ->
-                                    when (t) {
+                                // the five pages side by side: swipe between them, or
+                                // tap the bar (the pages between flash by)
+                                HorizontalPager(
+                                    state = pager,
+                                    userScrollEnabled = !PageSwipe.blocked,
+                                    key = { it },
+                                ) { page ->
+                                    when (Tab.entries[page]) {
                                         Tab.Home -> HomeScreen(
                                             onConnect = ::connect, onOpenNodes = { tab = Tab.Nodes },
                                             onImport = ::importClipboard, onPickApps = { open(Overlay.PerApp) },
@@ -376,7 +391,7 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                             }
                         }
                         GlassNavBar(
-                            tab, backdrop, onSelect = { tab = it },
+                            Tab.entries[pager.currentPage], backdrop, onSelect = { tab = it },
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .padding(start = 16.dp, end = 16.dp, bottom = navInset + 10.dp),

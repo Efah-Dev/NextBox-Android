@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"nextbox/internal/clash"
 	"os"
 	"path/filepath"
 	"sort"
@@ -165,6 +166,27 @@ func EditGroup(id int64, name, url, userAgent string) error {
 	return s.UpdateGroup(g)
 }
 
+// SetGroupDNS sets the subscription's own DNS by hand (Settings → DNS →
+// 订阅专属 DNS); empty values use the global DNS. Updates of the
+// subscription no longer replace it.
+func SetGroupDNS(id int64, remote, resolver string) error {
+	s, err := current()
+	if err != nil {
+		return err
+	}
+	return s.SetGroupDNS(id, &store.GroupDNS{Remote: remote, Resolver: resolver})
+}
+
+// UseSubscriptionDNS switches a subscription between the DNS it names and
+// the global one.
+func UseSubscriptionDNS(id int64, on bool) error {
+	s, err := current()
+	if err != nil {
+		return err
+	}
+	return s.UseSubscriptionDNS(id, on)
+}
+
 func DeleteGroup(id int64) error {
 	s, err := current()
 	if err != nil {
@@ -230,13 +252,19 @@ func UpdateSubscription(groupID int64, proxy string) (string, error) {
 	// copies within one subscription are left out, as on Windows
 	all := len(profiles)
 	profiles = store.DedupeList(profiles)
-	if err := s.ReplaceGroupProfiles(groupID, profiles, g.ManualOrder); err != nil {
+	// the nodes keep their order; new ones are added at the end
+	if err := s.ReplaceGroupProfiles(groupID, profiles, true); err != nil {
 		return "", err
 	}
 	g, _ = s.Group(groupID)
 	g.UpdatedAt = time.Now().Unix()
 	if res.Usage != nil {
 		g.Usage = res.Usage
+	}
+	// the DNS the subscription names, offered in Settings → DNS
+	g.SuggestedDNS = nil
+	if res.Clash != nil {
+		g.SuggestedDNS = res.Clash.SubDNS
 	}
 	if err := s.UpdateGroup(g); err != nil {
 		return "", err
@@ -245,7 +273,16 @@ func UpdateSubscription(groupID int64, proxy string) (string, error) {
 	if n := all - len(profiles); n > 0 {
 		msg += fmt.Sprintf(i18n.T("（去掉了 %d 个重复节点）"), n)
 	}
-	return msg + skipNote(res.Skipped), nil
+	msg += skipNote(res.Skipped)
+	if res.Clash != nil {
+		setClashExtras(groupID, res.Clash)
+		if g.Clash != nil {
+			if sum, err := clash.Apply(s, res.Clash, g, *g.Clash); err == nil {
+				msg += "；" + sum.String()
+			}
+		}
+	}
+	return msg, nil
 }
 
 // FindDuplicates lists the nodes of all groups that connect the same way as

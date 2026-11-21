@@ -46,10 +46,10 @@ var appearanceSettings = []string{
 
 // Other settings that mean the same on every platform (as in the desktop app).
 var portableSettings = []string{
-	"remoteDns", "directDns", "enableIpv6", "sniff",
+	"remoteDns", "directDns", "dnsOverrides", "enableIpv6", "sniff",
 	"testUrl", "testTimeout", "testConcurrency",
 	"subUserAgent", "subUpdateByProxy", "subAutoUpdate", "subUpdateHours",
-	"countrySource", "autoCheckUpdate",
+	"countrySource", "autoCheckUpdate", "sortAfterTest",
 }
 
 // Settings that make up the routing rules (分流规则), as in the desktop app.

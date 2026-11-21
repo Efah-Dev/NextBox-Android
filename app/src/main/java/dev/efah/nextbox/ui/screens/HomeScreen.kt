@@ -36,10 +36,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -82,9 +84,12 @@ import dev.efah.nextbox.R
 import dev.efah.nextbox.bg.Box
 import dev.efah.nextbox.bg.Speed
 import dev.efah.nextbox.bg.Status
+import dev.efah.nextbox.data.ExitInfo
 import dev.efah.nextbox.data.Prefs
 import dev.efah.nextbox.data.Profile
 import dev.efah.nextbox.data.Repo
+import dev.efah.nextbox.ui.LocalToast
+import dev.efah.nextbox.ui.NbAlertDialog
 import dev.efah.nextbox.data.protocolName
 import dev.efah.nextbox.ui.BarIcon
 import dev.efah.nextbox.ui.LocalBottomInset
@@ -218,71 +223,30 @@ fun HomeScreen(onConnect: () -> Unit, onOpenNodes: () -> Unit, onImport: () -> U
             BarIcon(NbIcons.Clipboard, T("从剪贴板导入"), onImport)
         }
 
-        // The connect button takes whatever height is left, so the page fills
-        // any screen exactly. In a small window (split screen, a floating
-        // window) too little is left for it: the page then scrolls instead
-        // and the button keeps a usable size.
+        // One fixed screen, never scrolled: everything below the connect
+        // button has a fixed height (the status always two lines, whatever it
+        // says), and the button takes the height left. In a small window
+        // (split screen, a floating window) the traffic chart goes first, then
+        // the button shrinks.
         BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = LocalBottomInset.current)) {
             val compact = maxHeight < 560.dp
+            val tiny = maxHeight < 480.dp
             val gap = if (compact) 8.dp else 12.dp
-            val page = maxHeight
-            // the disc takes 78% of the height left at most, so its lights
-            // have room around it and are not cut off at the top
-            val smallest = 88.dp
-            // the page height below which the button would get smaller than that
-            var scrollBelow by remember { mutableStateOf(0.dp) }
-            val scroll = page < scrollBelow
-        Column(
-            Modifier.fillMaxSize().let { if (scroll) it.verticalScroll(rememberScrollState()) else it },
-            verticalArrangement = Arrangement.spacedBy(gap),
-        ) {
-            if (scroll) {
-                Box(Modifier.fillMaxWidth().height(smallest / 0.78f), contentAlignment = Alignment.Center) {
-                    ConnectButton(status, smallest, onConnect)
-                }
-            } else {
-                BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                    val left = maxHeight
-                    LaunchedEffect(left, page) {
-                        if (left * 0.78f < smallest) scrollBelow = page + (smallest / 0.78f - left)
-                    }
-                    val size = minOf(maxHeight * 0.78f, maxWidth * 0.5f, 176.dp)
-                    ConnectButton(status, size, onConnect)
-                }
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
+            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                // the disc takes 78% of the height left at most, so its lights
+                // have room around it and are not cut off at the top
+                val size = minOf(maxHeight * 0.78f, maxWidth * 0.5f, 176.dp)
+                if (size >= 40.dp) ConnectButton(status, size, onConnect)
             }
 
-            AnimatedContent(
-                targetState = status,
-                transitionSpec = {
-                    (fadeIn(tween(220)) + slideInVertically { it / 3 }) togetherWith (fadeOut(tween(160)) + slideOutVertically { -it / 3 })
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = "status",
-            ) { st ->
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    val (title, sub) = when (st) {
-                        Status.Started -> T("已连接") to fmtDuration((now - startedAt).coerceAtLeast(0) / 1000) + T(" · 点击断开")
-                        Status.Starting -> T("正在连接…") to T("正在启动内核")
-                        Status.Stopping -> T("正在断开…") to ""
-                        Status.Stopped -> T("未连接") to (error ?: T("点击连接"))
-                    }
-                    Text(title, style = NbType.title, color = c.text)
-                    if (sub.isNotEmpty()) {
-                        Text(
-                            sub, style = NbType.small.copy(fontSize = 13.sp),
-                            color = if (st == Status.Stopped && error != null) c.bad else c.muted,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 24.dp),
-                        )
-                    }
-                }
-            }
+            StatusBlock(status, now - startedAt, startedAt, error, state.selectedId, compact)
 
             NodeCard(selected, onOpenNodes)
 
             RouteSection(onPickApps)
 
-            TrafficCard(speed, session, history, status == Status.Started, sparkHeight = if (compact) 32.dp else 48.dp)
+            TrafficCard(speed, session, history, status == Status.Started, sparkHeight = if (tiny) 0.dp else if (compact) 32.dp else 48.dp)
         }
         }
     }
@@ -468,7 +432,7 @@ private fun TrafficCard(speed: Speed, session: Speed, history: List<Speed>, on: 
             SpeedValue(T("下载"), fmtSpeed(speed.down), Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
-        Sparkline(history, Modifier.fillMaxWidth().height(sparkHeight))
+        if (sparkHeight > 0.dp) Sparkline(history, Modifier.fillMaxWidth().height(sparkHeight))
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth()) {
             Text(T("本次 %s", fmtBytes(session.up + session.down)), style = NbType.small, color = c.muted, modifier = Modifier.weight(1f))
@@ -515,3 +479,126 @@ private fun Sparkline(history: List<Speed>, modifier: Modifier) {
         drawPath(line(history.map { it.down }), c.accent, style = Stroke(width = 4.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
 }
+
+/**
+ * The status under the connect button, always two lines high so that nothing
+ * below moves: the state (and how long it has been connected), then where the
+ * traffic leaves while connected, otherwise what to do or what went wrong. A
+ * long error is cut to one line; tapping it shows all of it.
+ */
+@Composable
+private fun StatusBlock(status: Status, connectedMs: Long, session: Long, error: String?, nodeId: Long, compact: Boolean) {
+    val c = Nb.c
+    var showError by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().height(if (compact) 46.dp else 52.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        AnimatedContent(
+            targetState = status,
+            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+            label = "status",
+        ) { st ->
+            Text(
+                when (st) {
+                    Status.Started -> T("已连接") + " · " + fmtDuration(connectedMs.coerceAtLeast(0) / 1000)
+                    Status.Starting -> T("正在连接…")
+                    Status.Stopping -> T("正在断开…")
+                    Status.Stopped -> T("未连接")
+                },
+                style = if (compact) NbType.title.copy(fontSize = 19.sp) else NbType.title, color = c.text, maxLines = 1,
+            )
+        }
+        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            when (status) {
+                Status.Started -> ExitLine(nodeId, session)
+                Status.Starting -> Text(T("正在启动内核"), style = NbType.small.copy(fontSize = 13.sp), color = c.muted, maxLines = 1)
+                Status.Stopping -> {}
+                Status.Stopped -> Text(
+                    error ?: T("点击连接"), style = NbType.small.copy(fontSize = 13.sp), color = if (error != null) c.bad else c.muted,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 24.dp).let { if (error != null) it.clickable { showError = true } else it },
+                )
+            }
+        }
+    }
+    if (showError && error != null) {
+        NbAlertDialog(
+            onDismissRequest = { showError = false },
+            title = { Text(T("连接失败")) },
+            text = { Text(error) },
+            confirmButton = { TextButton(onClick = { showError = false }) { Text(T("知道了")) } },
+        )
+    }
+}
+
+/**
+ * Where the connected node's traffic leaves (落地 IP, its network and the
+ * latency), as on the desktop. The result is kept in Repo: coming back to the
+ * page shows it; a check runs after connecting or switching nodes and when
+ * the last one is 5 minutes old (30 seconds after a failure), only while the
+ * page is shown. Tap: show or hide the full IP (or check again after a
+ * failure); long press: copy it.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun ExitLine(nodeId: Long, session: Long) {
+    val c = Nb.c
+    val toast = LocalToast.current
+    val scope = rememberCoroutineScope()
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val all by Repo.exit.collectAsState()
+    val state = all?.takeIf { it.nodeId == nodeId && it.session == session }
+    var reveal by remember { mutableStateOf(false) }
+    LaunchedEffect(nodeId, session) {
+        // a new connection or node: let the core settle first
+        if (Repo.exitDueIn(nodeId, session) == 0L && state?.info == null) delay(1500)
+        while (true) {
+            Repo.refreshExit(nodeId, session)
+            delay(Repo.exitDueIn(nodeId, session).coerceAtLeast(1000))
+        }
+    }
+    val e = state?.info
+    val ok = state?.ok == true
+    val checking = state == null || (state.checking && e == null)
+    val dot = when {
+        checking -> c.muted
+        !ok -> c.bad
+        e!!.latency < 300 -> c.good
+        else -> c.mid
+    }
+    val text = when {
+        checking -> T("检测落地 IP…")
+        !ok -> if (e?.failed == "test") T("无法访问测速地址，点击重试") else T("落地检测失败，点击重试")
+        else -> listOfNotNull(
+            (dev.efah.nextbox.ui.flagOf(e!!.country) + " " + if (reveal) e.ip else maskIp(e.ip)).trim(),
+            e.asn.takeIf { it > 0 }?.let { "AS$it" + if (e.org.isNotEmpty()) " " + shortOrg(e.org) else "" },
+            T("%d ms", e.latency),
+        ).joinToString(" · ")
+    }
+    Row(
+        Modifier.clip(RoundedCornerShape(10.dp))
+            .combinedClickable(
+                onClick = { if (ok) reveal = !reveal else scope.launch { Repo.refreshExit(nodeId, session, force = true) } },
+                onLongClick = { if (ok) { clipboard.setText(androidx.compose.ui.text.AnnotatedString(e!!.ip)); toast(T("已复制")) } },
+            )
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(7.dp).clip(CircleShape).background(dot))
+        Text(
+            text, style = NbType.small.copy(fontSize = 13.sp), color = if (ok || checking) c.muted else c.bad,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp),
+        )
+    }
+}
+
+/** 103.151.12.21 → 103.•.•.21; IPv6 keeps its first and last group. */
+private fun maskIp(ip: String): String {
+    val v4 = ip.split(".")
+    if (v4.size == 4) return v4[0] + ".•.•." + v4[3]
+    val v6 = ip.split(":").filter { it.isNotEmpty() }
+    return if (v6.size >= 2) v6.first() + ":•:" + v6.last() else ip
+}
+
+/** "Cloudflare, Inc." → "Cloudflare": the company forms are left out (as on the desktop). */
+private fun shortOrg(org: String): String =
+    org.replace(Regex("[,.]?s+(inc|llc|ltd|limited|co|corp|corporation|gmbh|s.?a|b.?v|pte|plc|ag|oy|ab|srl|sas|kk).?", RegexOption.IGNORE_CASE), "")
+        .trimEnd(',', '.', ' ')

@@ -120,24 +120,79 @@
   </defs>
 </svg>
 
+<style>
+  /* 2.1: the home page and the route path (drawn after the app's own screens) */
+  .p1 { left: 860px; top: 64px; transform: scale(1.14) rotate(-4deg); z-index: 2; }
+  .p2 { left: 1370px; top: 150px; transform: scale(1.0) rotate(5deg); }
+  .flag { display: inline-block; width: 18px; height: 12px; border-radius: 2.5px; position: relative; vertical-align: -1px;
+    box-shadow: 0 0 0 .6px rgba(0,0,0,.18); flex: none; }
+  .flag.jp { background: #fff; }
+  .flag.jp::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6.5px; height: 6.5px; margin: -3.25px 0 0 -3.25px; border-radius: 50%; background: #d7263d; }
+  .flag.hk { background: #d7263d; }
+  .flag.hk::after { content: ""; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: #fff; }
+  .state2 { position: relative; text-align: center; height: 50px; }
+  .state2 b { display: block; font-size: 20px; font-weight: 700; }
+  .exitline { display: inline-flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 12px; color: var(--muted); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+  .node .ava .flag { width: 22px; height: 15px; }
+  .route { margin-top: 10px; overflow: hidden; }
+  .route .seg { padding: 4px; }
+  .route .row { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-top: 1px solid var(--line); font-size: 14px; }
+  .route .row .g { flex: 1; }
+  .route .row .v { font-size: 12.5px; color: var(--muted); }
+  .dnschip { font-size: 11.5px; font-weight: 700; color: var(--ink); background: var(--soft); border-radius: 13px; padding: 4px 9px 4px 10px; white-space: nowrap; }
+  .toggle.small { width: 44px; height: 26px; }
+  .toggle.small::after { width: 20px; height: 20px; }
+  .speed2 { padding: 10px 14px 9px; }
+  .speed2 .row { display: flex; }
+  .speed2 .row div { flex: 1; }
+  .speed2 small { display: block; font-size: 11px; color: var(--muted); }
+  .speed2 .row b { font-size: 17px; font-weight: 700; }
+  .speed2 svg { display: block; width: 100%; height: 40px; margin-top: 2px; }
+  /* the route path */
+  .rtop { position: relative; display: flex; align-items: center; gap: 10px; padding: 18px 20px 4px; font-size: 20px; font-weight: 700; }
+  .rmode { margin: 8px 16px 0; }
+  .plabel { position: relative; display: flex; justify-content: space-between; padding: 14px 22px 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .path { position: relative; margin: 0 16px; }
+  .rail { position: absolute; left: 13px; top: 18px; bottom: 18px; width: 2px; background: var(--line); }
+  .step { position: relative; display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+  .num { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
+    background: var(--soft); color: var(--ink); flex: none; }
+  .num.fixed { background: var(--line); color: var(--muted); }
+  .num.hit { background: #f472b6; color: #fff; box-shadow: 0 0 0 4px rgba(244,114,182,.25); }
+  .scard { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 15px; background: var(--card); border: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .scard.hit { border-color: rgba(244,114,182,.7); box-shadow: 0 0 0 1px rgba(244,114,182,.35); }
+  .scard .t { flex: 1; min-width: 0; }
+  .scard b { display: block; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scard span { font-size: 11px; color: var(--muted); }
+  .to { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 9px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+  .to.proxy { background: var(--soft); color: var(--ink); }
+  .to.direct { background: rgba(74,222,128,.16); color: var(--good); }
+  .to.block { background: rgba(240,100,106,.18); color: #f0646a; }
+  .tester { position: absolute; left: 16px; right: 16px; bottom: 22px; padding: 11px 13px; border-radius: 18px; background: var(--card); border: 1px solid var(--border); }
+  .tester .in { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 8px 11px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid var(--line); font-family: Consolas, monospace; }
+  .tester .res { margin-top: 8px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .tester .res b { color: var(--text); font-weight: 600; }
+</style>
 <div class="copy">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 100 100" width="58" height="58" fill="#f472b6"><use href="#paw"/></svg></div>
     <span>NextBox</span>
   </div>
   <h1>NextBox<br><em>for Android</em></h1>
-  <p class="tag" data-t="tag">基于 sing-box 内核的轻量 Android 代理客户端</p>
+  <p class="tag" data-t="tag">基于 sing-box 内核的 Android 代理客户端，<br>和 Windows 版规则互通</p>
   <div class="chips">
-    <span class="chip" data-t="c1">玻璃质感界面</span>
-    <span class="chip" data-t="c2">通知栏实时网速</span>
-    <span class="chip" data-t="c3">节点流量统计</span>
-    <span class="chip" data-t="c4">一键绕过中国大陆</span>
-    <span class="chip" data-t="c5">扫码导入</span>
-    <span class="chip" data-t="c6">安装包约 22 MB</span>
+    <span class="chip" data-t="c1">路由路径 · 试一试</span>
+    <span class="chip" data-t="c2">规则集</span>
+    <span class="chip" data-t="c3">Clash 订阅转换</span>
+    <span class="chip" data-t="c4">落地 IP · ASN</span>
+    <span class="chip" data-t="c5">DNS 复写</span>
+    <span class="chip" data-t="c6">左右滑动切换页面</span>
   </div>
 </div>
 
-<template id="phone">
+<!-- the home page, connected -->
+<div class="phone p1 light">
   <div class="screen">
     <div class="glow"></div>
     <div class="cam"></div>
@@ -147,26 +202,31 @@
       <span>NextBox</span>
       <svg class="i" viewBox="0 0 24 24"><path d="M8 4.5H6.5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-12a2 2 0 0 0-2-2H16"/><path d="M9 3.5h6v3H9z"/></svg>
     </div>
-    <div class="btnwrap">
+    <div class="btnwrap" style="height:178px">
       <div class="halo"></div>
-      <div class="btn"><svg viewBox="0 0 100 100" width="62" height="62"><use href="#paw"/></svg></div>
+      <div class="btn on"><svg viewBox="0 0 100 100" width="62" height="62" fill="#fff"><use href="#paw"/></svg></div>
     </div>
-    <div class="state"><b data-t="state"></b><span data-t="sub"></span></div>
+    <div class="state2">
+      <b data-t="on">已连接 · 00:42:18</b>
+      <span class="exitline"><span class="dot"></span><span class="flag jp"></span>103.•.•.21 · AS906 DMIT · 48 ms</span>
+    </div>
     <div class="card node">
-      <div class="ava"></div>
-      <div class="n"><b class="name"></b><span class="proto"></span></div>
-      <span class="ms"></span>
+      <div class="ava"><span class="flag jp"></span></div>
+      <div class="n"><b>Tokyo 01</b><span>VLESS · Reality</span></div>
+      <span class="ms">48 ms</span>
       <svg class="i" viewBox="0 0 24 24" style="color:var(--muted);width:16px;height:16px"><path d="m9 6 6 6-6 6"/></svg>
     </div>
-    <div class="card seg"><div class="sel" data-t="global">全局代理</div><div data-t="apps">指定应用</div><div data-t="direct">全部直连</div></div>
-    <div class="card sw"><div class="t"><b data-t="bypass">绕过中国大陆</b><span data-t="bypassSub">国内网站和 IP 直连，其余走代理</span></div><div class="toggle"></div></div>
-    <div class="card speed">
-      <div class="row"><div><small data-t="up">上传</small><b class="u"></b></div><div><small data-t="down">下载</small><b class="d"></b></div></div>
-      <svg viewBox="0 0 300 54" preserveAspectRatio="none">
-        <defs><linearGradient id="fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f472b6" stop-opacity=".34"/><stop offset="1" stop-color="#f472b6" stop-opacity="0"/></linearGradient></defs>
-        <path class="area" fill="url(#fill)"/><path class="curve" fill="none" stroke="#f472b6" stroke-width="2"/>
+    <div class="card route">
+      <div class="seg"><div data-t="global">全局代理</div><div class="sel" data-t="rule">规则分流</div><div data-t="direct">全部直连</div></div>
+      <div class="row"><span class="g" data-t="bypass">绕过中国大陆</span><span class="dnschip" data-t="remote">接管 DNS ▾</span><span class="toggle small"></span></div>
+      <div class="row"><span class="g" data-t="scope">代理范围</span><span class="v" data-t="allApps">所有应用</span><svg class="i" viewBox="0 0 24 24" style="color:var(--muted);width:15px;height:15px"><path d="m9 6 6 6-6 6"/></svg></div>
+    </div>
+    <div class="card speed2">
+      <div class="row"><div><small data-t="down">下载</small><b>6.4 MB/s</b></div><div><small data-t="up">上传</small><b>182 KB/s</b></div></div>
+      <svg viewBox="0 0 300 40" preserveAspectRatio="none">
+        <defs><linearGradient id="fillA" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f472b6" stop-opacity=".34"/><stop offset="1" stop-color="#f472b6" stop-opacity="0"/></linearGradient></defs>
+        <path class="area" fill="url(#fillA)"/><path class="curve" fill="none" stroke="#f472b6" stroke-width="2"/>
       </svg>
-      <div class="foot"><span class="session"></span><span class="total"></span></div>
     </div>
     <div class="nav">
       <div class="sel"><svg class="i" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg><span data-t="home">首页</span></div>
@@ -177,72 +237,70 @@
     </div>
     <div class="home"></div>
   </div>
-</template>
+</div>
 
-<div class="phone p1 light" data-on="1"></div>
-<div class="phone p2 dark" data-on="0"></div>
-
+<!-- the route path, with the tester -->
+<div class="phone p2 dark">
+  <div class="screen">
+    <div class="glow"></div>
+    <div class="cam"></div>
+    <div class="status"><span>9:41</span><span class="r"><span>5G</span><span class="bat"></span></span></div>
+    <div class="rtop">
+      <svg class="i" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>
+      <span data-t="rules">分流规则</span>
+    </div>
+    <div class="card seg rmode"><div data-t="global">全局代理</div><div class="sel" data-t="rule">规则分流</div><div data-t="direct">全部直连</div></div>
+    <div class="plabel"><span data-t="path">路由路径 · 从上往下</span><span data-t="drag">按住拖动排序</span></div>
+    <div class="path">
+      <div class="rail"></div>
+      <div class="step"><span class="num fixed">1</span><div class="scard"><div class="t"><b data-t="lan">局域网</b><span data-t="lanSub">家里的路由器、本机地址</span></div><span class="to direct" data-t="toDirect">直连</span></div></div>
+      <div class="step"><span class="num">2</span><div class="scard"><div class="t"><b data-t="ads">屏蔽广告</b><span data-t="adsSub">广告域名</span></div><span class="to block" data-t="toBlock">拦截</span></div></div>
+      <div class="step"><span class="num hit">3</span><div class="scard hit"><div class="t"><b data-t="set">规则集「流媒体」</b><span data-t="setSub">域名 · 网站分类 · 规则集网址</span></div><span class="to proxy"><span class="flag hk"></span><span data-t="hk">香港</span></span></div></div>
+      <div class="step"><span class="num">4</span><div class="scard"><div class="t"><b data-t="ai">AI 服务</b><span data-t="aiSub">常用场景</span></div><span class="to proxy" data-t="toNode">当前节点</span></div></div>
+      <div class="step"><span class="num">5</span><div class="scard"><div class="t"><b data-t="cn">绕过中国大陆</b><span data-t="cnSub">接管 DNS 解析</span></div><span class="to direct" data-t="toDirect">直连</span></div></div>
+      <div class="step"><span class="num fixed">6</span><div class="scard"><div class="t"><b data-t="final">其余流量</b><span data-t="finalSub">前面都没匹配到</span></div><span class="to proxy" data-t="toNode">当前节点</span></div></div>
+    </div>
+    <div class="tester">
+      <div class="in"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>www.youtube.com</div>
+      <div class="res"><span class="dot" style="background:#f472b6"></span><span data-t="hit">在第 3 步被接住：</span><b data-t="hitWhat">规则集「流媒体」→ 香港</b></div>
+    </div>
+    <div class="home"></div>
+  </div>
+</div>
 <script>
 const en = new URLSearchParams(location.search).get("lang") === "en";
-const zh = {
-  on: "已连接", onSub: "00:42:18 · 点击断开", off: "未连接", offSub: "点击连接",
-  session: "本次 286 MB", total: "今日 1.9 GB · 本月 23.4 GB", session0: "本次 0 B",
-};
 const dict = {
-  tag: "A lightweight Android proxy client powered by sing-box",
-  c1: "Glass interface", c2: "Live speed in the notification", c3: "Usage per node",
-  c4: "Bypass mainland China", c5: "QR code import", c6: "About 22 MB per APK",
-  global: "Global", apps: "Selected apps", direct: "All direct",
-  bypass: "Bypass mainland China", bypassSub: "Chinese sites and IPs go direct",
-  up: "Upload", down: "Download", home: "Home", nodes: "Nodes", usage: "Usage", activity: "Activity", settings: "Settings",
-  on: "Connected", onSub: "00:42:18 · tap to disconnect", off: "Not connected", offSub: "Tap to connect",
-  session: "Session 286 MB", total: "Today 1.9 GB · month 23.4 GB", session0: "Session 0 B",
+  tag: "An Android proxy client powered by sing-box, with rules shared with the Windows app",
+  c1: "Route path · tester", c2: "Rule sets", c3: "Clash subscriptions", c4: "Exit IP · ASN", c5: "DNS overrides", c6: "Swipe between pages",
+  on: "Connected · 00:42:18", global: "Global", rule: "Rules", direct: "Direct",
+  bypass: "Bypass China", remote: "Remote DNS ▾", scope: "Proxy scope", allApps: "All apps",
+  down: "Download", up: "Upload", home: "Home", nodes: "Nodes", usage: "Usage", activity: "Activity", settings: "Settings",
+  rules: "Routing rules", path: "Route path · top to bottom", drag: "Drag to reorder",
+  lan: "LAN", lanSub: "Router, this device", ads: "Block ads", adsSub: "Ad domains",
+  set: "Rule set “Streaming”", setSub: "Domains · categories · URLs", hk: "Hong Kong",
+  ai: "AI services", aiSub: "Scene", cn: "Bypass mainland China", cnSub: "Remote DNS",
+  final: "Everything else", finalSub: "Nothing above matched", toDirect: "Direct", toBlock: "Block", toNode: "Current node",
+  hit: "Step 3:", hitWhat: "“Streaming” → Hong Kong",
 };
-const t = k => (en ? dict[k] : zh[k]);
-if (en) document.documentElement.lang = "en";
-
-function curve(seed, flat) {
-  const pts = [];
-  let v = 30;
-  for (let i = 0; i <= 30; i++) {
-    seed = (seed * 9301 + 49297) % 233280;
-    v = flat ? 52 : Math.max(8, Math.min(46, v + (seed / 233280 - 0.5) * 22));
-    pts.push([i * 10, v]);
-  }
-  let d = `M${pts[0][0]},${pts[0][1]}`;
-  for (let i = 1; i < pts.length; i++) {
-    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
-    d += ` C${x0 + 5},${y0} ${x1 - 5},${y1} ${x1},${y1}`;
-  }
-  return d;
+if (en) {
+  document.documentElement.lang = "en";
+  document.querySelectorAll("[data-t]").forEach(el => { if (dict[el.dataset.t]) el.textContent = dict[el.dataset.t]; });
 }
-
-document.querySelectorAll(".phone").forEach((p, i) => {
-  p.appendChild(document.getElementById("phone").content.cloneNode(true));
-  const on = p.dataset.on === "1";
-  const q = s => p.querySelector(s);
-  const btn = q(".btn");
-  btn.classList.add(on ? "on" : "off");
-  btn.querySelector("svg").setAttribute("fill", on ? "#fff" : "#f472b6");
-  if (!on) q(".halo").style.opacity = ".38";
-  q("[data-t=state]").textContent = t(on ? "on" : "off");
-  q("[data-t=sub]").textContent = t(on ? "onSub" : "offSub");
-  q(".ava").textContent = on ? "TY" : "SG";
-  q(".name").textContent = on ? "Tokyo 01" : "Singapore 02";
-  q(".proto").textContent = on ? "VLESS · Reality" : "Hysteria2";
-  q(".ms").textContent = on ? "48 ms" : "76 ms";
-  q(".u").textContent = on ? "182 KB/s" : "0 B/s";
-  q(".d").textContent = on ? "6.4 MB/s" : "0 B/s";
-  q(".session").textContent = t(on ? "session" : "session0");
-  q(".total").textContent = t("total");
-  if (!on) q(".toggle").classList.add("off");
-  const d = curve(7 + i * 13, !on);
-  q(".curve").setAttribute("d", d);
-  q(".area").setAttribute("d", d + " L300,54 L0,54 Z");
-  // unique gradient ids per phone
-  const g = q("linearGradient"); g.id = "fill" + i; q(".area").setAttribute("fill", `url(#fill${i})`);
-});
-document.querySelectorAll("[data-t]").forEach(el => { if (en && dict[el.dataset.t]) el.textContent = dict[el.dataset.t]; });
+// the speed chart
+let seed = 7, v = 24;
+const pts = [];
+for (let i = 0; i <= 30; i++) {
+  seed = (seed * 9301 + 49297) % 233280;
+  v = Math.max(6, Math.min(34, v + (seed / 233280 - 0.5) * 18));
+  pts.push([i * 10, v]);
+}
+let d = `M${pts[0][0]},${pts[0][1]}`;
+for (let i = 1; i < pts.length; i++) {
+  const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+  d += ` C${x0 + 5},${y0} ${x1 - 5},${y1} ${x1},${y1}`;
+}
+document.querySelector(".curve").setAttribute("d", d);
+document.querySelector(".area").setAttribute("d", d + " L300,40 L0,40 Z");
 </script>
 </body>
 </html>

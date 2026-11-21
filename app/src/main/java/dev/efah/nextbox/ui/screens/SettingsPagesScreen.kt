@@ -200,6 +200,16 @@ private fun ColumnScope.TestPage() {
         NavRow(T("超时时间"), T("超过这个时间算作失败"), T("%d 毫秒", s.testTimeout)) { edit = "timeout" }
         RowDivider()
         NavRow(T("同时测试数"), T("一次并行测试的节点数"), s.testConcurrency.toString()) { edit = "concurrency" }
+        RowDivider()
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(T("测速后"), style = NbType.body, color = c.text, modifier = Modifier.padding(start = 4.dp))
+            val order = listOf("", "latency", "none")
+            Segmented(
+                listOf(T("每次询问"), T("按延迟排序"), T("保持顺序")), order.indexOf(s.sortAfterTest).coerceAtLeast(0),
+                onSelect = { i -> patch(false) { put("sortAfterTest", order[i]) } },
+            )
+            Text(T("测试整个分组之后节点怎么排"), style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp))
+        }
     }
     when (edit) {
         "url" -> TestUrlDialog(s.testUrl, { edit = null }) { v -> edit = null; patch(false) { put("testUrl", v) } }
@@ -300,6 +310,10 @@ private fun ColumnScope.AdvancedPage() {
         NavRow(T("远程 DNS"), T("通过代理查询"), s.remoteDns) { edit = "remoteDns" }
         RowDivider()
         NavRow(T("直连 DNS"), T("国内域名和直连流量使用"), s.directDns) { edit = "directDns" }
+        RowDivider()
+        DnsOverridesRow(s.dnsOverrides)
+        RowDivider()
+        SubscriptionDnsRow(state.groups)
         RowDivider()
         SwitchRow("FakeIP", T("代理的域名立即返回虚拟地址，省去一次经代理的 DNS 查询，打开网页更快"), fakeIp, { on ->
             Prefs.setFakeIp(on)

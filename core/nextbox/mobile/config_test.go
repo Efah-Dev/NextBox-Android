@@ -23,12 +23,37 @@ func buildAndroid(t *testing.T, s store.Settings, opt androidOptions) map[string
 	return cfg
 }
 
+// inboundTypes lists the inbounds apps can use: the exit check's own
+// (loopback, with a password, see probeInbound) is left out.
 func inboundTypes(cfg map[string]any) []string {
 	var out []string
 	for _, in := range cfg["inbounds"].([]any) {
-		out = append(out, in.(map[string]any)["type"].(string))
+		m := in.(map[string]any)
+		if m["tag"] == "probe-in" {
+			continue
+		}
+		out = append(out, m["type"].(string))
 	}
 	return out
+}
+
+// The exit check's inbound only listens on loopback and needs a password.
+func TestProbeInbound(t *testing.T) {
+	s := store.DefaultSettings()
+	s.TunEnabled = true
+	cfg := buildAndroid(t, s, androidOptions{})
+	for _, in := range cfg["inbounds"].([]any) {
+		m := in.(map[string]any)
+		if m["tag"] != "probe-in" {
+			continue
+		}
+		users, _ := m["users"].([]any)
+		if m["listen"] != "127.0.0.1" || m["listen_port"] == 0 || len(users) != 1 || users[0].(map[string]any)["password"] == "" {
+			t.Fatalf("probe inbound %v", m)
+		}
+		return
+	}
+	t.Fatal("no probe inbound")
 }
 
 func TestAndroidVPNMode(t *testing.T) {

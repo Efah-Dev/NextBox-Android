@@ -16,6 +16,7 @@ import (
 	"net"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -206,14 +207,19 @@ func TestRoute(ruleSetDir, input, pkg string) (string, error) {
 		addrs = []net.IP{ip}
 	}
 	var notes []string
-	for _, e := range config.Entries(set) {
+	entries := config.Entries(set)
+	china := slices.Contains(config.RuleSets(entries), config.ChinaSites)
+	for _, e := range entries {
 		if !resolved && e.HasIP() {
 			// like the core: the name is resolved before the first step that
-			// matches IP addresses, except known foreign sites
+			// matches IP addresses, except known foreign sites and the sites of
+			// the mainland China list
 			resolved = true
 			switch {
 			case setMatches(filepath.Join(ruleSetDir, config.ForeignSites+".srs"), host):
 				notes = append(notes, i18n.T("已知的境外网站不做解析，按域名交给后面的规则，按 IP 判断的规则（IP 段、IP 归属地）不会命中"))
+			case china && setMatches(filepath.Join(ruleSetDir, config.ChinaSites+".srs"), host):
+				notes = append(notes, i18n.T("国内网站名单里的域名不做解析，按域名判断，按 IP 判断的规则（IP 段、IP 归属地）不会命中"))
 			case set.ResolveDNS == store.ResolveRemote:
 				// the remote DNS goes through the proxy, which the tester does not use
 				notes = append(notes, i18n.T("解析方式是「接管 DNS 解析」，试一试不经过代理查询，按 IP 判断的规则（IP 段、IP 归属地）已跳过"))

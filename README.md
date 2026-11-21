@@ -5,136 +5,101 @@
 <h1 align="center">NextBox for Android</h1>
 
 <p align="center">
-  基于 sing-box 内核的轻量 Android 代理客户端
+  基于 sing-box 内核的 Android 代理客户端，和 Windows 版规则互通
 </p>
 
 <p align="center">
   <a href="https://github.com/Efah-Dev/NextBox-Android/releases/latest"><img src="https://img.shields.io/github/v/release/Efah-Dev/NextBox-Android?label=Release&color=f472b6" alt="Release"></a>
   <a href="https://github.com/Efah-Dev/NextBox-Android/releases"><img src="https://img.shields.io/github/downloads/Efah-Dev/NextBox-Android/total?label=Downloads&color=8b8cf8" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/Platform-Android%2010%2B-3DDC84?logo=android&logoColor=white" alt="Platform">
-  <img src="https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
-  <img src="https://img.shields.io/badge/Go-core-00ADD8?logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/sing--box-1.14.4-5B6678" alt="sing-box">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License"></a>
 </p>
 
 <p align="center">
-  <b>简体中文</b> · <a href="README_EN.md">English</a> · <a href="https://nextbox.efah.dev">官网</a> · <a href="https://github.com/Efah-Dev/NextBox-Android/releases/latest">下载</a>
+  <b>简体中文</b> · <a href="README_EN.md">English</a> · <a href="https://nextbox.efah.dev">官网</a> · <a href="https://github.com/Efah-Dev/NextBox-Android/releases/latest">下载</a> · <a href="https://github.com/Efah-Dev/NextBox">Windows 版</a>
 </p>
 
 <p align="center">
-  <img src="docs/preview.png" alt="NextBox for Android 主页">
+  <img src="docs/preview.png" alt="NextBox for Android 首页与路由路径">
 </p>
+
+NextBox for Android 和 [NextBox for Windows](https://github.com/Efah-Dev/NextBox) 共用同一套规则和配置生成代码，
+同样的规则在两端分流结果一样，加密备份可以双向导入。
 
 > NextBox 是独立项目，与 SagerNet / sing-box 以及 MatsuriDayo / nekoray **没有任何隶属或背书关系**。
 
-## ✨ 功能
+## ✨ 亮点
 
-- 🔌 **协议**：Shadowsocks（含 obfs、v2ray-plugin、ShadowTLS）、VMess、VLESS（含 Reality / Vision）、Trojan、Hysteria2、TUIC、AnyTLS、NaiveProxy（HTTPS 和 QUIC）、SOCKS、HTTP；链式代理
-- 📡 **订阅**：Base64 链接列表、Clash / Clash.Meta YAML、sing-box JSON；显示已用流量和到期时间；自动更新，同一个订阅里的重复节点自动去掉，连接中更新时节点有变化会立即生效
-- 📥 **导入**：扫描二维码、剪贴板、点击其他应用里的分享链接（导入前会确认）；扫到或复制的订阅地址会添加为订阅，也认识 `clash://`、`sing-box://` 一键导入链接
-- 🗂️ **节点**：表单或 JSON 编辑、搜索、多选批量删除和测速、二维码分享；一键删除所有分组里的重复节点；节点名前显示地区国旗；拖动调整顺序，或一键按延迟、名称、地区排列（更新订阅后保持顺序）；链式代理（2 到 8 个节点依次中转，选节点时可按订阅和地区筛选、一次多选，拖动调整顺序，也可以在节点上长按「经过其他节点连接」）
-- 🔀 **自动选择节点**（可选，默认关闭）：连接时当前节点不通，就换成同组里最快的可用节点；都不通时不连接并说明原因；也可以在连接期间定时检查
-- 🧭 **路由**：全局代理 / 规则分流 / 全部直连，和 Windows 版相同；首页的「绕过中国大陆」开关（内置中国域名和中国 IP 规则，无需下载）；屏蔽广告
-- 📐 **分流规则**：和 Windows 版相同的「路由路径」：每个连接从上往下依次判断，在哪一步命中就从哪一步出去。第一步「局域网」和最后一步「其余流量」固定，中间的屏蔽广告、常用场景（绕过中国大陆、AI 服务、流媒体、游戏下载直连）、规则和规则集可以按住把手拖动排序，未开启的步骤可以隐藏；添加规则时选「加什么」和「去哪」：网站（常用服务一点即加，Steam 分为商店和下载两项）、应用（可搜索、可手动输入包名）、IP 和 IP 归属地（全部国家和地区，可按名称、代码或简拼搜索）；规则可以起名称；可选的文本模式，每行一条规则
-- 🗂️ **规则集**：把域名、IP、应用、网站分类、IP 归属地，以及网上的 sing-box 规则集（.srs / .json 网址）放进一个有名称的规则集，统一指定去向，支持批量粘贴；规则集网址可以当场下载检查
-- 🔍 **试一试**：输入网址或选一个应用，路径上标出它在哪一步被接住、为什么；和内核一样，按 IP 判断的步骤之前会先用直连 DNS 解析域名；「活动」页显示每个连接命中的规则名称和出口节点，点一条连接可以直接把它的网站或应用加进规则
-- 🧩 **策略组**：按地区（直接列出你的节点所在的地区和数量）、关键字或手动挑选一组节点，自动用最快的或手动选择，规则可以指向它
-- 📱 **代理范围**：所有应用、只代理选中的应用，或排除选中的应用（其余都走 VPN），支持搜索、全选、反选
-- ⚡ **测速**：URL 测试（真实请求）和 TCP 测试；Hysteria2、TUIC 等 UDP 协议始终使用 URL 测试；可配置测试地址、超时、并发数
-- 🔔 **通知栏**：常驻通知显示实时网速、本次 / 今日 / 本月流量，可直接断开、切换节点、切换「绕过大陆」
-- 🎛️ **快捷开关**：控制中心的快捷设置磁贴，一键连接 / 断开；未连接时显示「NextBox 未连接」，连接后显示节点名称
-- 📊 **用量**：今日、本月（可设结算日）、最近 30 天，以及每个节点实际走代理的流量
-- 📜 **活动**：实时连接列表、内核日志（带时间，往上翻看时不会被新日志打断，长按可复制一行）
-- 🛡️ **模式**：VPN 模式，或「仅代理」（只开本地 HTTP + SOCKS5 端口）
-- 🎨 **外观**：浅色 / 深色 / 跟随系统，主题色可选预设或自定义（取色板、HEX，和 Windows 版通过备份互通）；玻璃效果（Android 12 起模糊，Android 13 起带折射，可关闭）
-- 🌐 **语言**：简体中文、繁體中文、English
-- 💾 **备份**：和 NextBox for Windows 互通——两边导出的加密备份都能互相导入；导出时可以选节点与订阅、分流规则、其他设置；导入前预览内容，勾选要导入的部分，节点可以合并或替换；规则顺序、规则集和规则名称两边一致，电脑上按程序名的规则原样保留，再导回电脑不会变；端口、TUN、开机自启这类本机设置不会被覆盖
-- 🔄 **更新**：在「关于」里手动检查，与 GitHub Releases 的最新版本比对；也可以打开「自动检查更新」（默认关闭），有新版本时提醒
-- ⚙️ **其他**：打开 App 时自动连接（可选）；异常退出后可以复制错误信息反馈
+| 亮点 | 说明 |
+|---|---|
+| 🧭 **看得懂的分流** | 路由路径把判断顺序画成一条线，可以拖动排序；「试一试」告诉你一个网址或应用在哪一步被接住 |
+| 🗂️ **规则集** | 域名、IP、应用、网站分类、IP 归属地和网上的规则集放进一个规则集，统一指定去向 |
+| 📡 **订阅** | Base64、Clash、sing-box 格式；Clash 订阅的分组、规则和 DNS 可以按需一起转换；扫码、剪贴板、分享链接导入 |
+| 🌍 **DNS** | 绕过中国大陆不怕 DNS 污染；DNS 复写；订阅自带的专属 DNS 只用于它自己的节点 |
+| 📍 **落地信息** | 首页显示落地 IP、国家和所属网络（ASN）；测速后可以自动按延迟排序 |
+| 🪶 **轻量顺手** | 单进程、FakeIP；通知栏实时网速、快捷开关、流量统计；左右滑动切换页面 |
 
-## 🪶 轻量
-
-- 单进程运行，只编译用到的协议
-- FakeIP 减少一次经代理的 DNS 往返
-- 默认不查询连接所属的应用，内核日志只记警告
-- 灭屏时停止刷新网速
-- 单个架构的安装包约 27 MB（arm64-v8a）
+完整功能列表和常见问题见 **[功能与常见问题](FEATURES.md)**。
 
 ## 📦 下载
 
-在 [Releases](https://github.com/Efah-Dev/NextBox-Android/releases/latest) 页面下载对应 CPU 架构的安装包，一般手机选 `arm64-v8a`：
+在 [Releases](https://github.com/Efah-Dev/NextBox-Android/releases/latest) 下载对应 CPU 架构的安装包，一般手机选 `arm64-v8a`：
 
 | 文件 | 适用 |
 |---|---|
-| `NextBox-<版本>-arm64-v8a.apk` | 绝大多数手机（64 位 ARM） |
+| `NextBox-<版本>-arm64-v8a.apk` | 绝大多数手机（64 位 ARM），约 27 MB |
 | `NextBox-<版本>-armeabi-v7a.apk` | 老旧的 32 位 ARM 手机 |
 | `NextBox-<版本>-x86_64.apk` | 模拟器、x86 平板 |
 
-**系统要求**：Android 10 及以上。
+需要 Android 10 及以上。可以直接覆盖安装旧版本，节点和设置会保留。
 
-版本号为 `主版本.功能版本.修复版本`：第一位在重构或有重要变更时增加，第二位代表重大功能更新，第三位代表小功能和修复。
-
-## 🚀 快速上手
+## 🚀 快速开始
 
 1. 「节点」页 → 右下角「+」→ 添加订阅、扫描二维码，或从剪贴板导入分享链接。
 2. 点一个节点选中它，可以先点右上角的闪电图标测速。
 3. 回到「首页」点连接按钮。第一次会请求 VPN 权限；Android 13 及以上还会询问是否允许通知（用于显示网速）。
-4. 想让国内网站直连：打开首页的「绕过中国大陆」（会切换到规则分流）。只想让部分应用走代理：首页的「代理范围」→「只代理选中的」。
+4. 想让国内网站直连：打开首页的「绕过中国大陆」。只想让部分应用走代理：首页的「代理范围」→「只代理选中的」。
 
 ## 🛠️ 从源码编译
 
-需要：Go 1.25+、Android SDK（Platform 36+）、Android NDK（r28+）、JDK 17+（Android Studio 自带即可）。
+需要 Go 1.25+、Android SDK（Platform 36+）、Android NDK（r28+）、JDK 17+（Android Studio 自带即可）。
 
 ```bash
 git clone https://github.com/Efah-Dev/NextBox-Android.git
 cd NextBox-Android
 go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.12
 go install github.com/sagernet/gomobile/cmd/gobind@v0.1.12
+powershell -ExecutionPolicy Bypass -File core/build-core.ps1        # 内核库 app/libs/libbox.aar
+powershell -ExecutionPolicy Bypass -File build-apk.ps1 -Release     # APK
 ```
 
-编译内核库（输出 `app/libs/libbox.aar`），再编译 APK：
+Linux / macOS 用 `bash core/build-core.sh` 和 `./gradlew assembleRelease`。正式版签名：在仓库根目录放 `keystore.properties`
+（`storeFile`、`storePassword`、`keyAlias`、`keyPassword`），没有时使用调试密钥。
 
-```bash
-powershell -ExecutionPolicy Bypass -File core/build-core.ps1
-powershell -ExecutionPolicy Bypass -File build-apk.ps1 -Release
-```
-
-Linux / macOS 用 `bash core/build-core.sh` 和 `./gradlew assembleRelease`。
-
-正式版签名：在仓库根目录放 `keystore.properties`（`storeFile`、`storePassword`、`keyAlias`、`keyPassword`），
-没有时使用调试密钥签名。也可以用 Android Studio 直接打开本目录。
+sing-box 直接使用官方模块 `github.com/sagernet/sing-box v1.14.4`，**未做修改**，编译标签 `with_gvisor, with_quic, with_utls, with_naive_outbound`。
 
 <details>
 <summary>目录结构</summary>
 
 ```
 core/             把 sing-box libbox、nbcore、nbtest 编译成一个 AAR
-  nextbox/        Go 模块：mobile/ 是给 App 用的接口（nbcore），internal/ 是数据存储、
-                  分享链接解析、订阅下载、sing-box 配置生成
+  nextbox/        Go 模块：mobile/ 是给 App 用的接口（nbcore）；internal/ 是和 Windows 版
+                  共用的代码（规则、配置生成、订阅、Clash 转换、备份格式），由 Windows 仓库的
+                  scripts/sync-android.ps1 同步
   nbtest/         URL 测速（进程内临时 sing-box 实例）、代理流量统计
 app/src/main/java/dev/efah/nextbox/
   bg/             VPN / 代理服务、平台接口、通知、快捷磁贴
   data/           数据仓库（封装 nbcore）、本地设置、更新检查
   ui/             Jetpack Compose 界面、玻璃效果、多语言
-docs/render/      README 主页渲染图的源文件
+docs/render/      README 主页图的源文件（HTML 绘制，用无头 Chrome / Edge 渲染）
 ```
 
 </details>
 
-sing-box 内核直接使用官方模块 `github.com/sagernet/sing-box v1.14.4`，**未做修改**，
-编译标签：`with_gvisor, with_quic, with_utls, with_naive_outbound`（NaiveProxy 需要把 Chromium 网络库 cronet 编进内核）。
-
-## ⚠️ 已知问题
-
-- 订阅自动更新只在打开 App 或连接期间进行，App 完全没运行时不会更新。
-- 表单只覆盖各协议的常用字段，其余字段需要切到 JSON 编辑。
-- 未连接时检查更新是直连 GitHub，网络不通时会失败，连接后再检查即可。
-
 ## 🙏 致谢
 
-- [SagerNet/sing-box](https://github.com/SagerNet/sing-box)：代理内核；部分 Android 平台代码参考
-  [sing-box-for-android](https://github.com/SagerNet/sing-box-for-android)
+- [SagerNet/sing-box](https://github.com/SagerNet/sing-box)：代理内核；部分 Android 平台代码参考 [sing-box-for-android](https://github.com/SagerNet/sing-box-for-android)
 - [MatsuriDayo/nekoray](https://github.com/MatsuriDayo/nekoray)：NextBox 的原项目
 - [SagerNet/sing-geosite](https://github.com/SagerNet/sing-geosite)、[sing-geoip](https://github.com/SagerNet/sing-geoip)：规则集
 - 由 Claude（Anthropic）协助开发
@@ -143,6 +108,4 @@ sing-box 内核直接使用官方模块 `github.com/sagernet/sing-box v1.14.4`�
 
 ## 📄 许可证
 
-[GPL-3.0-or-later](LICENSE)。
-
-请在遵守您所在国家或地区法律法规的前提下使用本软件。
+[GPL-3.0-or-later](LICENSE)。请在遵守您所在国家或地区法律法规的前提下使用本软件。

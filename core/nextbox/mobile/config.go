@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"nextbox/internal/clash"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,6 +64,7 @@ func BuildConfig(ruleSetDir, options string) (string, error) {
 		Policies:            policyInputs(s, set),
 		RuleSetDir:          ruleSetDir,
 		SkipMissingRuleSets: true,
+		GroupDNS:            s.GroupDNS(),
 	})
 	if err != nil {
 		return "", err
@@ -143,7 +145,7 @@ func BuildTestConfig(ids string, port int32, secret string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cfg, err := config.BuildTest(s.Settings(), s.ProfilesByIDs(parseIDs(ids)), s.Profile, "", secret, int(port))
+	cfg, err := config.BuildTest(s.Settings(), s.ProfilesByIDs(parseIDs(ids)), s.Profile, s.GroupDNS(), "", secret, int(port))
 	if err != nil {
 		return "", err
 	}
@@ -201,7 +203,8 @@ func adaptForAndroid(cfg map[string]any, s store.Settings, opt androidOptions) {
 			// works everywhere.
 			m["stack"] = "gvisor"
 		}
-		cfg["inbounds"] = kept
+		// the exit check's own way in (see exit.go)
+		cfg["inbounds"] = append(kept, probeInbound())
 	}
 	usesPackages := false
 	if route, ok := cfg["route"].(map[string]any); ok {
@@ -455,7 +458,15 @@ func fetchURLRuleSet(client *http.Client, u, dest string) error {
 	}
 	defer os.Remove(src)
 	if err := compile(src, dest); err != nil {
-		return errors.New(i18n.T("不是 sing-box 规则集（.srs 或 .json）: ") + err.Error())
+		// not a sing-box rule-set: a Clash rule provider?
+		if conv, cerr := clash.ProviderToSource(b); cerr == nil {
+			if cerr = os.WriteFile(src, conv, 0o644); cerr == nil {
+				if cerr = compile(src, dest); cerr == nil {
+					return nil
+				}
+			}
+		}
+		return errors.New(i18n.T("不是 sing-box 规则集（.srs 或 .json），也不是 Clash 规则源: ") + err.Error())
 	}
 	return nil
 }

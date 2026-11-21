@@ -167,6 +167,75 @@ object Repo {
     }
 
     /**
+     * What the Clash parts of a subscription would make; null when it has none.
+     * Without [fetch] only its last update is looked at.
+     */
+    suspend fun clashPreview(groupId: Long, fetch: Boolean = false): Result<ClashInfo?> = withContext(Dispatchers.IO) {
+        runCatching { Nbcore.clashPreview(groupId, fetch, Box.subscriptionProxy()).takeIf { it.isNotEmpty() }?.let { NbJson.decodeFromString<ClashInfo>(it) } }
+    }
+
+    /** The subscription's own DNS (empty values: the global DNS). */
+    suspend fun setGroupDns(groupId: Long, remote: String, resolver: String): Result<Unit> {
+        val r = call { Nbcore.setGroupDNS(groupId, remote, resolver) }
+        if (r.isSuccess) Box.reloadIfRunning()
+        return r
+    }
+
+    /** Switches a subscription between the DNS it names and the global one. */
+    suspend fun useSubscriptionDns(groupId: Long, on: Boolean): Result<Unit> {
+        val r = call { Nbcore.useSubscriptionDNS(groupId, on) }
+        if (r.isSuccess) Box.reloadIfRunning()
+        return r
+    }
+
+    /** Takes over the chosen parts of a Clash subscription, now and on every update. */
+    suspend fun applyClash(groupId: Long, opt: ClashImport): Result<String> = reloadIfConfigChanges {
+        call { Nbcore.applyClash(groupId, NbJson.encodeToString(ClashImport.serializer(), opt), Box.subscriptionProxy()) }
+    }
+
+    /** Where the connected node's traffic leaves; takes a few seconds. */
+    suspend fun checkExit(): Result<ExitInfo> = withContext(Dispatchers.IO) {
+        runCatching { NbJson.decodeFromString<ExitInfo>(Nbcore.checkExit()) }
+    }
+
+    /**
+     * The last exit check, kept here rather than on the home page, so that
+     * coming back to the page (from settings, or into the app) shows it
+     * instead of checking again. [session] is the connection it belongs to
+     * (Box.startedAt): a new connection checks anew.
+     */
+    data class ExitState(val nodeId: Long, val session: Long, val info: ExitInfo?, val checking: Boolean, val at: Long) {
+        val ok: Boolean get() = info != null && info.error.isEmpty()
+        /** How long a result stands: 5 minutes, 30 seconds after a failure. */
+        val validFor: Long get() = if (ok) 5 * 60_000L else 30_000L
+    }
+
+    private val _exit = MutableStateFlow<ExitState?>(null)
+    val exit: StateFlow<ExitState?> = _exit.asStateFlow()
+    private val exitLock = kotlinx.coroutines.sync.Mutex()
+
+    /** Milliseconds until the result for this node and connection is due again; 0 = now. */
+    fun exitDueIn(nodeId: Long, session: Long): Long {
+        val e = _exit.value ?: return 0
+        if (e.nodeId != nodeId || e.session != session || e.info == null) return 0
+        return (e.at + e.validFor - System.currentTimeMillis()).coerceAtLeast(0)
+    }
+
+    /** Checks again when the result is due (or [force]); one check at a time. */
+    suspend fun refreshExit(nodeId: Long, session: Long, force: Boolean = false) {
+        exitLock.lock()
+        try {
+            if (!force && exitDueIn(nodeId, session) > 0) return
+            val prev = _exit.value?.takeIf { it.nodeId == nodeId && it.session == session }
+            _exit.value = ExitState(nodeId, session, prev?.info, checking = true, at = prev?.at ?: 0)
+            val info = checkExit().getOrElse { ExitInfo(latency = -1, error = it.message ?: T("检测失败")) }
+            _exit.value = ExitState(nodeId, session, info, checking = false, at = System.currentTimeMillis())
+        } finally {
+            exitLock.unlock()
+        }
+    }
+
+    /**
      * Runs an update of the node list (a subscription) and, while connected,
      * reloads the core when the configuration it would now build differs: a
      * node's address, port or password changed, or the node servers the route
@@ -250,8 +319,9 @@ object Repo {
     /**
      * Tests the given nodes with the configured method; UDP based protocols
      * always use the URL test. Results show up in [profiles] as they arrive.
+     * [sortAfter] sorts the current group by latency once the test is done.
      */
-    fun testLatency(ids: List<Long>) {
+    fun testLatency(ids: List<Long>, sortAfter: Boolean = false) {
         if (ids.isEmpty()) return
         val byId = _profiles.value.associateBy { it.id }
         val (urlIds, tcpIds) = if (Prefs.latencyMode.value == Prefs.TEST_URL) {
@@ -261,6 +331,7 @@ object Repo {
         }
         val s = _state.value.settings
         _testing.value = ids.toSet()
+        cancelled = false
         fun onResult(id: Long, latency: Int, message: String) {
             _testing.update { it - id }
             _profiles.update { list -> list.map { if (it.id == id) it.copy(latency = latency, latencyError = message) else it } }
@@ -285,12 +356,18 @@ object Repo {
                 },
             )
             jobs.forEach { it.join() }
+            val stopped = cancelled
+            cancelled = false
             _testing.value = emptySet()
+            if (sortAfter && !stopped) runCatching { Nbcore.sortGroup(_state.value.currentGroupId, "latency") }
             runCatching { refreshNow() }
         }
     }
 
+    @Volatile private var cancelled = false
+
     fun cancelTest() {
+        cancelled = true
         Nbcore.cancelTest()
         Nbtest.cancel()
     }

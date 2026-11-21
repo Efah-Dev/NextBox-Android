@@ -47,6 +47,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.Group
 import dev.efah.nextbox.data.Profile
+import dev.efah.nextbox.data.ClashInfo
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.protocolName
 import dev.efah.nextbox.ui.BarIcon
@@ -127,7 +130,16 @@ fun NodesScreen(
     var sorting by remember { mutableStateOf<List<Profile>?>(null) }
     // the nodes the delete confirmation is about
     var deleting by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    // the nodes of a group test waiting for the "sort afterwards?" answer
+    var sortAsk by remember { mutableStateOf<List<Long>?>(null) }
+    // a Clash subscription: which of its parts to take over
+    var clashAsk by remember { mutableStateOf<Pair<Long, ClashInfo>?>(null) }
     val drag = rememberDragState()
+    // dragging nodes into order and picking several: sideways moves are ours,
+    // not a swipe to the next page
+    val busy = sorting != null || picked != null
+    LaunchedEffect(busy) { dev.efah.nextbox.ui.PageSwipe.blocked = busy }
+    DisposableEffect(Unit) { onDispose { dev.efah.nextbox.ui.PageSwipe.blocked = false } }
 
     val shown = remember(profiles, query) {
         val q = query?.trim()?.lowercase().orEmpty()
@@ -138,16 +150,31 @@ fun NodesScreen(
         }
     }
 
+    // asks once, after adding or updating, about a Clash subscription's other parts
+    suspend fun askClash(groupId: Long) {
+        Repo.clashPreview(groupId).getOrNull()?.takeIf { it.current == null }?.let { clashAsk = groupId to it }
+    }
+
+    fun testGroup(ids: List<Long>) {
+        when {
+            ids.size < 2 || state.settings.sortAfterTest == "none" -> Repo.testLatency(ids)
+            state.settings.sortAfterTest == "latency" -> Repo.testLatency(ids, sortAfter = true)
+            else -> sortAsk = ids
+        }
+    }
+
     fun updateSub(g: Group) {
         if (updating) return
         updating = true
         fetching = T("正在更新“%s”…", g.name)
         scope.launch {
-            Repo.updateSubscription(g.id)
+            val ok = Repo.updateSubscription(g.id)
                 .onSuccess { toast(it) }
                 .onFailure { toast(T("更新失败：") + (it.message ?: T("未知错误"))) }
+                .isSuccess
             updating = false
             fetching = null
+            if (ok) askClash(g.id)
         }
     }
 
@@ -223,7 +250,7 @@ fun NodesScreen(
                     if (testing.isNotEmpty()) {
                         BarIcon(NbIcons.Close, T("停止测速"), { Repo.cancelTest() })
                     } else {
-                        BarIcon(NbIcons.Bolt, T("全部测速"), { Repo.testLatency(shown.map { it.id }) })
+                        BarIcon(NbIcons.Bolt, T("全部测速"), { testGroup(shown.map { it.id }) })
                     }
                     BarIcon(NbIcons.Search, T("搜索节点"), { query = if (query == null) "" else null })
                     Box {
@@ -234,6 +261,16 @@ fun NodesScreen(
                             DropdownMenuItem(text = { Text(T("删除重复节点")) }, onClick = { menu = false; dialog = "duplicates" })
                             if (group != null && !group.default) {
                                 DropdownMenuItem(text = { Text(T("编辑分组")) }, onClick = { menu = false; dialog = "edit-group" })
+                                if (group.isSubscription) DropdownMenuItem(text = { Text(T("Clash 订阅内容…")) }, onClick = {
+                                    menu = false
+                                    fetching = T("正在读取订阅…")
+                                    scope.launch {
+                                        Repo.clashPreview(group.id, fetch = true)
+                                            .onSuccess { info -> if (info == null) toast(T("这个订阅不是 Clash 格式，没有分组和规则可以导入")) else clashAsk = group.id to info }
+                                            .onFailure { toast(it.message ?: T("读取失败")) }
+                                        fetching = null
+                                    }
+                                })
                                 DropdownMenuItem(text = { Text(T("删除分组"), color = c.bad) }, onClick = { menu = false; dialog = "delete-group" })
                             }
                         }
@@ -404,6 +441,8 @@ fun NodesScreen(
     }
 
     qr?.let { (name, link) -> QrDialog(name, link) { qr = null } }
+    sortAsk?.let { ids -> SortAfterTestDialog(ids.size, { sortAsk = null }) { sort -> sortAsk = null; Repo.testLatency(ids, sortAfter = sort) } }
+    clashAsk?.let { (id, info) -> ClashImportDialog(id, info) { clashAsk = null } }
 
     when (dialog) {
         "sub" -> TwoFieldDialog(
@@ -414,9 +453,10 @@ fun NodesScreen(
             updating = true
             fetching = T("正在获取订阅节点…")
             scope.launch {
-                Repo.addSubscription(name, url).onSuccess { toast(it) }.onFailure { toast(T("获取订阅失败：") + (it.message ?: T("未知错误"))) }
+                val ok = Repo.addSubscription(name, url).onSuccess { toast(it) }.onFailure { toast(T("获取订阅失败：") + (it.message ?: T("未知错误"))) }.isSuccess
                 updating = false
                 fetching = null
+                if (ok) askClash(Repo.state.value.currentGroupId)
             }
         }
         "group" -> TwoFieldDialog(
@@ -666,6 +706,7 @@ fun TwoFieldDialog(
     initialSecond: String,
     confirm: String,
     onDismiss: () -> Unit,
+    note: String? = null,
     onConfirm: (String, String) -> Unit,
 ) {
     var a by remember { mutableStateOf(initialFirst) }
@@ -675,6 +716,7 @@ fun TwoFieldDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (note != null) Text(note, style = NbType.small, color = Nb.c.muted)
                 OutlinedTextField(a, { a = it }, label = { Text(first) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (second != null) {
                     OutlinedTextField(b, { b = it }, label = { Text(second) }, singleLine = true, modifier = Modifier.fillMaxWidth())

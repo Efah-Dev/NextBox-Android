@@ -30,6 +30,12 @@ data class Group(
     val updatedAt: Long = 0,
     val usage: SubUsage? = null,
     val default: Boolean = false,
+    /** The parts of a Clash subscription taken over on updates; null until asked. */
+    val clash: ClashImport? = null,
+    /** The subscription's own DNS (订阅专属 DNS); null = the global one. */
+    val dns: GroupDns? = null,
+    /** The DNS the subscription names, as of its last update (offered in Settings → 高级 → DNS). */
+    val suggestedDns: GroupDns? = null,
 ) {
     val isSubscription: Boolean get() = url.isNotEmpty()
     val displayName: String get() = if (default) T("默认分组") else name
@@ -73,6 +79,8 @@ data class Rule(
     val name: String = "",
     /** A rule set's contents: values of several kinds, any of which matches; all go to [target]. */
     val items: List<SetItem> = emptyList(),
+    /** The subscription whose Clash rules made this rule set (0 = the user); its updates replace it. */
+    val from: Long = 0,
 ) {
     val isStep: Boolean get() = kind == "ads" || kind == "scene"
     val isSet: Boolean get() = kind == "set"
@@ -103,6 +111,8 @@ data class Policy(
     val groupId: Long = 0,
     val mode: String = "auto", // auto | select
     val selected: Long = 0,
+    /** The subscription whose Clash proxy group made it (0 = the user). */
+    val from: Long = 0,
 )
 
 @Serializable
@@ -207,9 +217,64 @@ data class Settings(
     val testUrl: String = "https://www.google.com/generate_204",
     val testTimeout: Int = 5000,
     val testConcurrency: Int = 16,
+    /** After a speed test of a whole group: "" asks, "latency" sorts, "none" keeps the order. */
+    val sortAfterTest: String = "",
+    /** DNS 复写: domains answered by a DNS server of their own, or with fixed IPs. */
+    val dnsOverrides: List<DnsOverride> = emptyList(),
 ) {
     val bypassCn: Boolean get() = scenes.firstOrNull { it.id == "cn" }?.enabled == true
 }
+
+/** DNS 复写 (store.DNSOverride): domains are suffixes with [server], full names with [ips]. */
+@Serializable
+data class DnsOverride(
+    val domains: List<String> = emptyList(),
+    val server: String = "",
+    val viaProxy: Boolean = false,
+    val ips: List<String> = emptyList(),
+    val disabled: Boolean = false,
+    /** the subscription whose Clash DNS settings made it (0 = the user) */
+    val from: Long = 0,
+)
+
+/** Which parts of a Clash subscription besides its nodes are taken over. */
+@Serializable
+data class ClashImport(val groups: Boolean = false, val rules: Boolean = false, val dns: Boolean = false, val subDns: Boolean = false)
+
+/** A subscription's own DNS: [remote] while one of its nodes is connected, [resolver] for its nodes' addresses. */
+@Serializable
+data class GroupDns(val remote: String = "", val resolver: String = "") {
+    val isSet: Boolean get() = remote.isNotEmpty() || resolver.isNotEmpty()
+}
+
+@Serializable
+data class ClashPreview(
+    val groups: List<String>? = null,
+    val rules: Int = 0,
+    val ruleTotal: Int = 0,
+    val sets: Int = 0,
+    val dns: Int = 0,
+    val skipped: List<String>? = null,
+    /** the subscription's own DNS servers, when its config names some */
+    val subDns: GroupDns? = null,
+)
+
+/** What a Clash import would make, for the dialog that asks. */
+@Serializable
+data class ClashInfo(val nodes: Int = 0, val preview: ClashPreview = ClashPreview(), val current: ClashImport? = null)
+
+/** Where the connected node's traffic leaves (the home page). */
+@Serializable
+data class ExitInfo(
+    val ip: String = "",
+    val country: String = "",
+    val asn: Int = 0,
+    val org: String = "",
+    val latency: Int = 0,
+    val error: String = "",
+    /** "test" (the test address) or "trace" (Cloudflare) when it failed */
+    val failed: String = "",
+)
 
 @Serializable
 data class AppState(
