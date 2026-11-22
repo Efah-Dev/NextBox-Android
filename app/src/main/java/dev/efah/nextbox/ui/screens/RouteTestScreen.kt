@@ -6,17 +6,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -25,22 +25,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -48,20 +47,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.efah.nextbox.data.Prefs
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.RouteMatch
 import dev.efah.nextbox.ui.BarIcon
+import dev.efah.nextbox.ui.flagged
 import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.LocalBottomInset
 import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.NbButton
 import dev.efah.nextbox.ui.NbCard
+import dev.efah.nextbox.ui.NbField
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.T
-import dev.efah.nextbox.ui.flagged
-import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
 import kotlinx.coroutines.delay
 
 /**
@@ -102,7 +102,7 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
     GlassScreen(header = {
         TopBar(T("试一试"), leading = { BarIcon(NbIcons.Back, T("返回"), onClose) })
         Row(Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
+            NbField(
                 input, { input = it }, singleLine = true,
                 placeholder = { Text(T("输入网址或 IP")) },
                 leadingIcon = { Icon(NbIcons.Search, null, tint = c.muted) },
@@ -139,26 +139,29 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
                 )
             }
             // the route as the rules page shows it: LAN, the steps in order, everything else
-            data class Step(val title: String, val on: Boolean)
+            // (the scenes the phone does not show are left out; index is the rule's place in Settings.rules)
+            data class Step(val title: String, val on: Boolean, val index: Int)
             val steps = buildList {
-                add(Step(T("局域网和本机地址"), true))
-                s.rules.forEach { rule ->
+                add(Step(T("局域网和本机地址"), true, -1))
+                s.rules.forEachIndexed { i, rule ->
+                    if (Route.hiddenStep(rule)) return@forEachIndexed
                     val title = when (rule.kind) {
                         "ads" -> T("屏蔽广告")
                         "scene" -> Route.sceneTitle(rule.values.firstOrNull().orEmpty())
                         else -> Route.title(rule, appName)
                     }
-                    add(Step(title, Route.active(s, rule)))
+                    add(Step(title, Route.active(s, rule), i))
                 }
-                add(Step(T("其余流量"), true))
+                add(Step(T("其余流量"), true, -1))
             }
             val last = steps.lastIndex
+            fun stepOf(rule: Int) = steps.indexOfFirst { it.index == rule }.takeIf { it > 0 } ?: last
             val hit = when (r?.step) {
                 null -> -1
                 "lan" -> 0
-                "rule" -> r.rule + 1
-                "ads" -> s.rules.indexOfFirst { it.kind == "ads" } + 1
-                "scene" -> s.rules.indexOfFirst { it.kind == "scene" && it.values.firstOrNull() == r.scene } + 1
+                "rule" -> stepOf(r.rule)
+                "ads" -> stepOf(s.rules.indexOfFirst { it.kind == "ads" })
+                "scene" -> stepOf(s.rules.indexOfFirst { it.kind == "scene" && it.values.firstOrNull() == r.scene })
                 else -> last
             }
             steps.forEachIndexed { i, st ->
@@ -238,7 +241,7 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
                 val reason = when (r.step) {
                     "ads" -> T("在广告域名列表里，被「屏蔽广告」拦下。")
                     "lan" -> T("这是局域网地址（比如家里的路由器），总是直连。")
-                    "scene" -> T("被常用场景「%s」接住。", Route.sceneTitle(r.scene))
+                    "scene" -> T("被「%s」接住。", Route.sceneTitle(r.scene))
                     "final" -> when (s.routeMode) {
                         "direct" -> T("现在是全部直连。")
                         "global" -> T("现在是全局代理，规则不生效，走首页选中的节点。")
@@ -276,7 +279,7 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
                     )
                 }
             },
-            confirmButton = { TextButton(onClick = { pkg = ""; pickApp = false }) { Text(T("不指定应用")) } },
+            confirmButton = { NbButton(T("不指定应用"), { pkg = ""; pickApp = false }) },
         )
     }
     adding?.let { d -> AddRuleSheet(d, onDismiss = { adding = null }) }

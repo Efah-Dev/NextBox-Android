@@ -1,8 +1,8 @@
 package dev.efah.nextbox.ui
 
-import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.Manifest
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
@@ -13,11 +13,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,44 +27,48 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -74,34 +78,28 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.efah.nextbox.App
 import dev.efah.nextbox.bg.Box as Core
-import dev.efah.nextbox.data.Prefs
 import dev.efah.nextbox.BuildConfig
+import dev.efah.nextbox.data.Prefs
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.Updater
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import dev.efah.nextbox.ui.screens.ActivityScreen
+import dev.efah.nextbox.ui.screens.ChainEditorScreen
 import dev.efah.nextbox.ui.screens.HomeScreen
 import dev.efah.nextbox.ui.screens.NodeEditorScreen
 import dev.efah.nextbox.ui.screens.NodesScreen
 import dev.efah.nextbox.ui.screens.PerAppScreen
-import dev.efah.nextbox.ui.screens.RulesScreen
-import dev.efah.nextbox.ui.screens.RuleSetScreen
-import dev.efah.nextbox.ui.screens.ScanScreen
-import dev.efah.nextbox.ui.screens.SettingsScreen
-import dev.efah.nextbox.ui.screens.UsageScreen
-import dev.efah.nextbox.ui.screens.ChainEditorScreen
 import dev.efah.nextbox.ui.screens.PolicyEditorScreen
 import dev.efah.nextbox.ui.screens.RouteTestScreen
+import dev.efah.nextbox.ui.screens.RuleSetScreen
+import dev.efah.nextbox.ui.screens.RulesScreen
+import dev.efah.nextbox.ui.screens.ScanScreen
 import dev.efah.nextbox.ui.screens.SettingsPageScreen
+import dev.efah.nextbox.ui.screens.SettingsScreen
+import dev.efah.nextbox.ui.screens.UsageScreen
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NextBoxTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.runtime.snapshotFlow
 
 /**
  * Whether swiping between the pages is paused: while the nodes page is
@@ -165,7 +163,7 @@ class MainActivity : ComponentActivity() {
 private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
     val c = Nb.c
     val activity = LocalContext.current as ComponentActivity
-    val snackbar = remember { SnackbarHostState() }
+    val toasts = remember { ToastState() }
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     val pager = rememberPagerState(initialPage = tab.ordinal) { Tab.entries.size }
@@ -176,6 +174,9 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
     // pages opened on top of the tabs, last one shown; Back closes the top one
     val stack = remember { androidx.compose.runtime.mutableStateListOf<Overlay>() }
     val overlay = stack.lastOrNull()
+    // the state of the tabs (where each page was scrolled to) and of the pages
+    // under the top one is kept while a page is opened on top of them
+    val saved = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
     var forward by remember { mutableStateOf(true) }
     fun open(o: Overlay) {
         forward = true
@@ -183,12 +184,12 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
     }
     fun close() {
         forward = false
-        if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex)
+        if (stack.isNotEmpty()) saved.removeState(stack.removeAt(stack.lastIndex).toString())
     }
     var subDialog by remember { mutableStateOf<dev.efah.nextbox.data.Classified?>(null) }
     var notifyGuide by remember { mutableStateOf(false) }
     var externalImport by remember { mutableStateOf<String?>(null) }
-    val toast: (String) -> Unit = { msg -> scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(msg) } }
+    val toast = toasts.toaster
 
     // Glass effects: the setting, and off while the system saves power.
     val glassPref by Prefs.glass.collectAsState()
@@ -239,7 +240,7 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
 
     fun importNodes(text: String) {
         scope.launch {
-            Repo.importText(text).onSuccess { toast(it); stack.clear(); tab = Tab.Nodes }.onFailure { toast(it.message ?: T("导入失败")) }
+            Repo.importText(text).onSuccess { toast.ok(it); stack.clear(); tab = Tab.Nodes }.onFailure { toast.error(it.message ?: T("导入失败")) }
         }
     }
 
@@ -295,7 +296,7 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
     }
 
     val error by Core.error.collectAsState()
-    LaunchedEffect(error) { error?.let { toast(T("连接失败：") + it) } }
+    LaunchedEffect(error) { error?.let { toast.error(T("连接失败：") + it) } }
     val notice by Core.notice.collectAsState()
     LaunchedEffect(notice) {
         notice?.let {
@@ -304,6 +305,17 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
         }
     }
     val noNode by Core.noNode.collectAsState()
+    // results of work that goes on in the background (subscription updates)
+    LaunchedEffect(Unit) {
+        Repo.notices.collect { n ->
+            when (n.ok) {
+                true -> toast.ok(n.text)
+                false -> toast.error(n.text)
+                null -> toast(n.text)
+            }
+        }
+    }
+    val clashAsk by Repo.clashAsk.collectAsState()
 
     BackHandler(enabled = overlay != null || tab != Tab.Home) {
         if (overlay != null) close() else tab = Tab.Home
@@ -325,83 +337,85 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                 },
                 label = "overlay",
             ) { ov ->
-                if (ov != null) {
-                    Box(Modifier.fillMaxSize()) {
-                        GlowBackground(strength = 0.6f)
-                        CompositionLocalProvider(LocalBottomInset provides navInset) {
-                            when (ov) {
-                                is Overlay.Editor -> NodeEditorScreen(ov.id, ov.type) { close() }
-                                Overlay.PerApp -> PerAppScreen { close() }
-                                Overlay.Rules -> RulesScreen(
-                                    onClose = { close() },
-                                    onTest = { open(Overlay.RouteTest("", "")) },
-                                    onPerApp = { open(Overlay.PerApp) },
-                                    onEditSet = { open(Overlay.RuleSet(it)) },
-                                    onEditPolicy = { open(Overlay.Policy(it)) },
-                                )
-                                is Overlay.RuleSet -> RuleSetScreen(ov.index) { close() }
-                                is Overlay.RouteTest -> RouteTestScreen(ov.host, ov.pkg) { close() }
-                                is Overlay.Policy -> PolicyEditorScreen(ov.id) { close() }
-                                is Overlay.Chain -> ChainEditorScreen(ov.id, ov.exit) { close() }
-                                is Overlay.Page -> SettingsPageScreen(ov.key) { close() }
-                                Overlay.Scan -> ScanScreen(
-                                    onResult = { text -> close(); import(text) },
-                                    onClose = { close() },
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    val backdrop = rememberBackdrop()
-                    Box(Modifier.fillMaxSize()) {
-                        Box(Modifier.fillMaxSize().backdropSource(backdrop)) {
-                            GlowBackground()
-                            CompositionLocalProvider(LocalBottomInset provides barSpace) {
-                                // the five pages side by side: swipe between them, or
-                                // tap the bar (the pages between flash by)
-                                HorizontalPager(
-                                    state = pager,
-                                    userScrollEnabled = !PageSwipe.blocked,
-                                    key = { it },
-                                ) { page ->
-                                    when (Tab.entries[page]) {
-                                        Tab.Home -> HomeScreen(
-                                            onConnect = ::connect, onOpenNodes = { tab = Tab.Nodes },
-                                            onImport = ::importClipboard, onPickApps = { open(Overlay.PerApp) },
-                                        )
-                                        Tab.Nodes -> NodesScreen(
-                                            onEdit = { id ->
-                                                val chain = Repo.profiles.value.firstOrNull { it.id == id }?.isChain == true
-                                                open(if (chain) Overlay.Chain(id) else Overlay.Editor(id))
-                                            },
-                                            onNew = { type -> open(Overlay.Editor(0, type)) },
-                                            onImportClipboard = ::importClipboard,
-                                            onScan = { open(Overlay.Scan) },
-                                            onNewChain = { exit -> open(Overlay.Chain(0, exit)) },
-                                        )
-                                        Tab.Usage -> UsageScreen()
-                                        Tab.Activity -> ActivityScreen(onShowPath = { host, pkg -> open(Overlay.RouteTest(host, pkg)) })
-                                        Tab.Settings -> SettingsScreen(
-                                            onPerApp = { open(Overlay.PerApp) },
-                                            onRules = { open(Overlay.Rules) },
-                                            onOpen = { open(Overlay.Page(it)) },
-                                        )
-                                    }
+                saved.SaveableStateProvider(ov?.toString() ?: "main") {
+                    if (ov != null) {
+                        Box(Modifier.fillMaxSize()) {
+                            GlowBackground(strength = 0.6f)
+                            CompositionLocalProvider(LocalBottomInset provides navInset) {
+                                when (ov) {
+                                    is Overlay.Editor -> NodeEditorScreen(ov.id, ov.type) { close() }
+                                    Overlay.PerApp -> PerAppScreen { close() }
+                                    Overlay.Rules -> RulesScreen(
+                                        onClose = { close() },
+                                        onTest = { open(Overlay.RouteTest("", "")) },
+                                        onPerApp = { open(Overlay.PerApp) },
+                                        onEditSet = { open(Overlay.RuleSet(it)) },
+                                        onEditPolicy = { open(Overlay.Policy(it)) },
+                                    )
+                                    is Overlay.RuleSet -> RuleSetScreen(ov.index) { close() }
+                                    is Overlay.RouteTest -> RouteTestScreen(ov.host, ov.pkg) { close() }
+                                    is Overlay.Policy -> PolicyEditorScreen(ov.id) { close() }
+                                    is Overlay.Chain -> ChainEditorScreen(ov.id, ov.exit) { close() }
+                                    is Overlay.Page -> SettingsPageScreen(ov.key) { close() }
+                                    Overlay.Scan -> ScanScreen(
+                                        onResult = { text -> close(); import(text) },
+                                        onClose = { close() },
+                                    )
                                 }
                             }
                         }
-                        GlassNavBar(
-                            Tab.entries[pager.currentPage], backdrop, onSelect = { tab = it },
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(start = 16.dp, end = 16.dp, bottom = navInset + 10.dp),
-                        )
+                    } else {
+                        val backdrop = rememberBackdrop()
+                        Box(Modifier.fillMaxSize()) {
+                            Box(Modifier.fillMaxSize().backdropSource(backdrop)) {
+                                GlowBackground()
+                                CompositionLocalProvider(LocalBottomInset provides barSpace) {
+                                    // the five pages side by side: swipe between them, or
+                                    // tap the bar (the pages between flash by)
+                                    HorizontalPager(
+                                        state = pager,
+                                        userScrollEnabled = !PageSwipe.blocked,
+                                        key = { it },
+                                    ) { page ->
+                                        when (Tab.entries[page]) {
+                                            Tab.Home -> HomeScreen(
+                                                onConnect = ::connect, onOpenNodes = { tab = Tab.Nodes },
+                                                onImport = ::importClipboard, onPickApps = { open(Overlay.PerApp) },
+                                            )
+                                            Tab.Nodes -> NodesScreen(
+                                                onEdit = { id ->
+                                                    val chain = Repo.profiles.value.firstOrNull { it.id == id }?.isChain == true
+                                                    open(if (chain) Overlay.Chain(id) else Overlay.Editor(id))
+                                                },
+                                                onNew = { type -> open(Overlay.Editor(0, type)) },
+                                                onImportClipboard = ::importClipboard,
+                                                onScan = { open(Overlay.Scan) },
+                                                onNewChain = { exit -> open(Overlay.Chain(0, exit)) },
+                                            )
+                                            Tab.Usage -> UsageScreen()
+                                            Tab.Activity -> ActivityScreen(onShowPath = { host, pkg -> open(Overlay.RouteTest(host, pkg)) })
+                                            Tab.Settings -> SettingsScreen(
+                                                onPerApp = { open(Overlay.PerApp) },
+                                                onRules = { open(Overlay.Rules) },
+                                                onOpen = { open(Overlay.Page(it)) },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            GlassNavBar(
+                                Tab.entries[pager.currentPage], backdrop, onSelect = { tab = it },
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(start = 16.dp, end = 16.dp, bottom = navInset + 10.dp),
+                            )
+                        }
                     }
                 }
             }
-            SnackbarHost(
-                snackbar,
-                Modifier.align(Alignment.BottomCenter).padding(bottom = if (overlay == null) barSpace else navInset),
+            ToastHost(
+                toasts,
+                Modifier.align(Alignment.BottomCenter).padding(bottom = (if (overlay == null) barSpace else navInset) + 12.dp),
             )
         }
 
@@ -415,12 +429,12 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                     Text(T("要把收到的内容导入到分组「%s」吗？", group) + "\n\n" + text.take(120) + if (text.length > 120) "…" else "")
                 },
                 confirmButton = {
-                    TextButton(onClick = {
+                    NbButton(T("导入"), {
                         externalImport = null
                         import(text)
-                    }) { Text(T("导入")) }
+                    })
                 },
-                dismissButton = { TextButton(onClick = { externalImport = null }) { Text(T("取消")) } },
+                dismissButton = { NbButton(T("取消"), { externalImport = null }, kind = BtnKind.Secondary) },
             )
         }
 
@@ -436,36 +450,36 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
+                    NbButton(T("下载"), {
                         Updater.close(later = false)
                         runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(r.apk))) }
-                            .onFailure { toast(T("没有可以打开链接的应用")) }
-                    }) { Text(T("下载")) }
+                            .onFailure { toast.error(T("没有可以打开链接的应用")) }
+                    })
                 },
-                dismissButton = { TextButton(onClick = { Updater.close(later = true) }) { Text(T("以后再说")) } },
+                dismissButton = { NbButton(T("以后再说"), { Updater.close(later = true) }, kind = BtnKind.Secondary) },
             )
         }
 
         subDialog?.let { sub -> SubscriptionDialog(sub, onDismiss = { subDialog = null }, onAsNode = { subDialog = null; importNodes(sub.url) }) { name ->
             subDialog = null
-            scope.launch {
-                toast(T("正在下载订阅…"))
-                Repo.addSubscription(name, sub.url).onSuccess { toast(it); stack.clear(); tab = Tab.Nodes }.onFailure { toast(it.message ?: T("添加失败")) }
-            }
+            Repo.addInBackground(name, sub.url)
+            stack.clear()
+            tab = Tab.Nodes
         } }
+        clashAsk?.let { (id, info) -> dev.efah.nextbox.ui.screens.ClashImportDialog(id, info) { Repo.clashAnswered() } }
 
         noNode?.let { msg ->
             NbAlertDialog(
                 onDismissRequest = { Core.clearNoNode() },
                 title = { Text(T("没有可用的节点")) },
                 text = { Text(msg) },
-                confirmButton = { TextButton(onClick = { Core.clearNoNode() }) { Text(T("知道了")) } },
+                confirmButton = { NbButton(T("知道了"), { Core.clearNoNode() }) },
                 dismissButton = {
-                    TextButton(onClick = {
+                    NbButton(T("去节点页"), {
                         Core.clearNoNode()
                         stack.clear()
                         tab = Tab.Nodes
-                    }) { Text(T("去节点页")) }
+                    }, kind = BtnKind.Secondary)
                 },
             )
         }
@@ -476,14 +490,14 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                 title = { Text(T("NextBox 上次异常退出了")) },
                 text = { Text(T("可以复制错误信息，反馈到 GitHub Issues，帮助我们修复。")) },
                 confirmButton = {
-                    TextButton(onClick = {
+                    NbButton(T("复制"), {
                         dev.efah.nextbox.ui.screens.copyToClipboard(report)
                         dev.efah.nextbox.CrashLog.clear()
                         crash = null
-                        toast(T("已复制错误信息"))
-                    }) { Text(T("复制")) }
+                        toast.ok(T("已复制错误信息"))
+                    })
                 },
-                dismissButton = { TextButton(onClick = { dev.efah.nextbox.CrashLog.clear(); crash = null }) { Text(T("忽略")) } },
+                dismissButton = { NbButton(T("忽略"), { dev.efah.nextbox.CrashLog.clear(); crash = null }, kind = BtnKind.Secondary) },
             )
         }
 
@@ -493,18 +507,18 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
                 title = { Text(T("在通知栏查看网速")) },
                 text = { Text(T("允许 NextBox 发送通知后，连接时通知栏会常驻显示实时网速和今日、本月的流量，还可以在通知里直接断开或切换节点。")) },
                 confirmButton = {
-                    TextButton(onClick = {
+                    NbButton(T("允许通知"), {
                         notifyGuide = false
                         Prefs.markShown("notify_guide")
                         notifyLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }) { Text(T("允许通知")) }
+                    })
                 },
                 dismissButton = {
-                    TextButton(onClick = {
+                    NbButton(T("以后再说"), {
                         notifyGuide = false
                         Prefs.markShown("notify_guide")
                         connectNow()
-                    }) { Text(T("以后再说")) }
+                    }, kind = BtnKind.Secondary)
                 },
             )
         }
@@ -566,25 +580,31 @@ private fun GlassNavBar(tab: Tab, backdrop: Backdrop, onSelect: (Tab) -> Unit, m
 private fun SubscriptionDialog(sub: dev.efah.nextbox.data.Classified, onDismiss: () -> Unit, onAsNode: () -> Unit, onAdd: (String) -> Unit) {
     val c = Nb.c
     var name by remember { mutableStateOf(sub.name) }
-    NbAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (sub.likelyProxy) T("这是订阅还是 HTTP 代理？") else T("识别到订阅链接")) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(sub.url, style = dev.efah.nextbox.ui.theme.NbType.small, color = c.muted, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                androidx.compose.material3.OutlinedTextField(
-                    name, { name = it }, singleLine = true, label = { Text(T("订阅名称")) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(T("添加后会马上下载节点，之后按「自动更新订阅」的设置定期更新。"), style = dev.efah.nextbox.ui.theme.NbType.small, color = c.muted)
-                if (sub.url.startsWith("http://") || sub.url.startsWith("https://")) {
-                    TextButton(onClick = onAsNode, modifier = Modifier.fillMaxWidth()) {
-                        Text(T("这是一个 HTTP 代理，作为单个节点导入"), color = c.accentInk)
-                    }
-                }
+    dev.efah.nextbox.ui.screens.NbSheet(onDismiss = onDismiss) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(c.accentSoft), contentAlignment = Alignment.Center) {
+                Icon(NbIcons.Rss, null, tint = c.accentInk, modifier = Modifier.size(22.dp))
             }
-        },
-        confirmButton = { TextButton(onClick = { onAdd(name.trim()) }) { Text(T("添加订阅"), fontWeight = FontWeight.Bold) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(T("取消")) } },
-    )
+            Column(Modifier.padding(start = 12.dp)) {
+                Text(if (sub.likelyProxy) T("这是订阅还是 HTTP 代理？") else T("识别到订阅链接"), style = dev.efah.nextbox.ui.theme.NbType.big, color = c.text)
+                Text(
+                    sub.url, style = dev.efah.nextbox.ui.theme.NbType.small, color = c.muted, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.MiddleEllipsis,
+                )
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        dev.efah.nextbox.ui.NbField(name, { name = it }, singleLine = true, label = { Text(T("订阅名称")) }, modifier = Modifier.fillMaxWidth())
+        Text(
+            T("添加后马上下载节点，之后按设置自动更新。"), style = dev.efah.nextbox.ui.theme.NbType.small, color = c.muted,
+            modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+        )
+        Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            NbButton(T("取消"), onDismiss, Modifier.weight(1f), kind = BtnKind.Secondary)
+            NbButton(T("添加订阅"), { onAdd(name.trim()) }, Modifier.weight(1f))
+        }
+        if (sub.likelyProxy) {
+            NbButton(T("这是一个 HTTP 代理，作为单个节点导入"), onAsNode, Modifier.fillMaxWidth().padding(top = 8.dp), kind = BtnKind.Text)
+        }
+    }
 }

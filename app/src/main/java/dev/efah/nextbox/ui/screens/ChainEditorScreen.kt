@@ -3,67 +3,67 @@ package dev.efah.nextbox.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.Profile
-import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.protocolName
+import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.ui.BarIcon
+import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.Chip
-import dev.efah.nextbox.ui.GlassScreen
-import dev.efah.nextbox.ui.LocalBottomInset
-import dev.efah.nextbox.ui.LocalToast
-import dev.efah.nextbox.ui.flagged
-import dev.efah.nextbox.ui.label
-import dev.efah.nextbox.ui.NbCard
-import dev.efah.nextbox.ui.NbIcons
-import dev.efah.nextbox.ui.T
-import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.dragHandle
 import dev.efah.nextbox.ui.dragRow
+import dev.efah.nextbox.ui.flagged
+import dev.efah.nextbox.ui.GlassScreen
+import dev.efah.nextbox.ui.label
+import dev.efah.nextbox.ui.LocalBottomInset
+import dev.efah.nextbox.ui.LocalToast
+import dev.efah.nextbox.ui.NbButton
+import dev.efah.nextbox.ui.NbCard
+import dev.efah.nextbox.ui.NbField
+import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.rememberDragState
-import androidx.compose.runtime.key
+import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
 import kotlinx.coroutines.launch
 
 /** Creates (id 0) or edits a chain proxy: traffic passes its nodes in order. */
@@ -118,7 +118,7 @@ fun ChainEditorScreen(id: Long, exit: Long = 0, onClose: () -> Unit) {
                 .padding(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = LocalBottomInset.current + 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            OutlinedTextField(name, { name = it; autoName = false }, label = { Text(T("名称")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            NbField(name, { name = it; autoName = false }, label = { Text(T("名称")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Text(
                 T("流量从上往下依次经过这些节点，网站看到的是最后一个节点的 IP。需要 2 到 8 个节点，按住右边的把手拖动调整顺序。"),
                 style = NbType.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp),
@@ -143,7 +143,7 @@ fun ChainEditorScreen(id: Long, exit: Long = 0, onClose: () -> Unit) {
                                     },
                                     style = NbType.small.copy(fontSize = 11.sp), color = c.muted,
                                 )
-                                Text(p?.label ?: T("节点已不存在"), style = NbType.body, color = if (p == null) c.bad else c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                dev.efah.nextbox.ui.FlagText(p?.label ?: T("节点已不存在"), style = NbType.body, color = if (p == null) c.bad else c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 if (p != null) Text(protocolName(p.type), style = NbType.small, color = c.muted)
                             }
                             IconButton(onClick = { hops = hops.filterIndexed { j, _ -> j != i } }) {
@@ -173,18 +173,13 @@ fun ChainEditorScreen(id: Long, exit: Long = 0, onClose: () -> Unit) {
                 Connector()
                 Endpoint(NbIcons.Globe, if (hops.isEmpty()) T("网站") else T("网站看到：%s 的 IP", byId[hops.last()]?.label ?: "?"))
             }
-            Button(
-                onClick = {
+            NbButton(T("保存"), {
                     scope.launch {
                         Repo.saveChain(id, groupId, name, hops)
-                            .onSuccess { toast(T("已保存链式代理")); onClose() }
-                            .onFailure { toast(it.message ?: T("保存失败")) }
+                            .onSuccess { toast.ok(T("已保存链式代理")); onClose() }
+                            .onFailure { toast.error(it.message ?: T("保存失败")) }
                     }
-                },
-                enabled = hops.size >= 2,
-                colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-            ) { Text(T("保存"), fontWeight = FontWeight.Bold) }
+                }, Modifier.fillMaxWidth().height(50.dp), enabled = hops.size >= 2)
         }
     }
 
@@ -265,7 +260,7 @@ fun NodePicker(
 
     NbSheet(onDismiss) {
         Text(title, style = NbType.big, color = c.text, modifier = Modifier.padding(bottom = 10.dp))
-        OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text(T("搜索节点")) }, modifier = Modifier.fillMaxWidth())
+        NbField(query, { query = it }, singleLine = true, placeholder = { Text(T("搜索节点")) }, modifier = Modifier.fillMaxWidth())
         if (groups.size > 1) {
             Text(T("订阅 / 分组"), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -327,7 +322,7 @@ fun NodePicker(
                             }
                         }
                         Column(Modifier.weight(1f)) {
-                            Text(p.label, style = NbType.body, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            dev.efah.nextbox.ui.FlagText(p.label, style = NbType.body, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 listOfNotNull(
                                     protocolName(p.type),
@@ -343,21 +338,11 @@ fun NodePicker(
             }
         }
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TextButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp)) { Text(T("取消")) }
-            Button(
-                onClick = { onDone(picked) },
-                enabled = ordered.not() || picked.isNotEmpty(),
-                colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-                modifier = Modifier.weight(2f).height(48.dp),
-            ) {
-                Text(
-                    when {
+            NbButton(T("取消"), onDismiss, Modifier.weight(1f).height(48.dp), kind = BtnKind.Secondary)
+            NbButton(when {
                         ordered -> if (picked.isEmpty()) T("选择节点") else T("加入 %d 个节点", picked.size)
                         else -> T("确定（%d 个）", picked.size)
-                    },
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+                    }, { onDone(picked) }, Modifier.weight(2f).height(48.dp), enabled = ordered.not() || picked.isNotEmpty())
         }
     }
 }

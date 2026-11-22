@@ -68,6 +68,10 @@ func Open(dir string) error {
 		if err := s.SaveSettings(set); err != nil {
 			return err
 		}
+	} else if set := s.Settings(); foldScenes(&set) {
+		if err := s.SaveSettings(set); err != nil {
+			return err
+		}
 	}
 	st = s
 	dataDir = dir

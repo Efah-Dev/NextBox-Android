@@ -1,22 +1,22 @@
 package dev.efah.nextbox.data
 
 import android.os.Build
-import dev.efah.nextbox.BuildConfig
 import dev.efah.nextbox.bg.Box
 import dev.efah.nextbox.bg.Status
+import dev.efah.nextbox.BuildConfig
+import java.net.HttpURLConnection
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.URL
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.net.HttpURLConnection
-import java.net.InetSocketAddress
-import java.net.Proxy
-import java.net.URL
 
 /** Looks for a newer release by comparing this build with the latest GitHub release. */
 object Updater {

@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -155,6 +155,37 @@ object RuleUi {
             "cidr" -> if (t.isEmpty() || '/' in t) t else if (':' in t) "$t/128" else "$t/32"
             else -> t
         }
+    }
+
+    private val ipv4 = Regex("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})(/(\\d{1,2}))?$")
+    private val ipv6 = Regex("^[0-9a-f:.]*:[0-9a-f:.]*(/(\\d{1,3}))?$")
+    private val siteName = Regex("^[a-z0-9*_-]+(\\.[a-z0-9*_-]+)*$")
+    private val geositeName = Regex("^[a-z0-9!@_.-]+$")
+
+    /**
+     * Reads typed or pasted values of a kind: the usable ones, normalized, and
+     * the parts that are not a value of that kind (an IP range that is not
+     * one, a malformed address, a regular expression that does not compile).
+     * Domains may be pasted as web addresses: their host is taken.
+     */
+    fun parseValues(kind: String, text: String): Pair<List<String>, List<String>> {
+        val parts = if (kind == "regex") text.split('\n') else text.split('\n', ',', '，', ' ', ';', '；', '\t')
+        val ok = mutableListOf<String>()
+        val bad = mutableListOf<String>()
+        for (raw in parts.map { it.trim() }.filter { it.isNotEmpty() }) {
+            val v = normalize(kind, if (kind == "suffix" || kind == "domain") hostOf(raw) else raw)
+            val valid = when (kind) {
+                "cidr" -> ipv4.matchEntire(v)?.groupValues?.let { g -> (1..4).all { g[it].toInt() <= 255 } && (g[6].isEmpty() || g[6].toInt() <= 32) }
+                    ?: ipv6.matchEntire(v)?.groupValues?.let { g -> g[2].isEmpty() || g[2].toInt() <= 128 } ?: false
+                "suffix", "domain" -> siteName.matches(v)
+                "geosite" -> geositeName.matches(v)
+                "url" -> Regex("^https?://[^\\s/]+", RegexOption.IGNORE_CASE).containsMatchIn(v)
+                "regex" -> runCatching { Regex(v) }.isSuccess
+                else -> v.isNotEmpty()
+            }
+            if (valid) ok += v else bad += raw
+        }
+        return ok.distinct() to bad
     }
 
     /** The rules without these values of this kind (rules left empty are dropped). */

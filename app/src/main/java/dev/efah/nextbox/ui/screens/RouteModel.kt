@@ -14,36 +14,25 @@ import dev.efah.nextbox.ui.T
  * values[0] is the id), rules and rule sets ("set").
  */
 object Route {
+    /** The scenes of NextBox for Windows, all kept in the settings. */
     val sceneIds = listOf("ai", "media", "games", "cn")
 
     /**
-     * Scenes of NextBox for Windows that the phone neither shows nor routes
-     * by (game downloads). They stay in the settings, so backups carry them
-     * back to Windows unchanged (see phoneSettings in the core).
+     * The scenes the phone neither shows nor routes by: only bypassing
+     * mainland China is a fixed step here; AI services and streaming are rule
+     * sets of the user's (the core turned the ones that were on into rule
+     * sets), game downloads do nothing on a phone. They stay in the settings,
+     * so backups carry them back to Windows unchanged (see phoneSettings and
+     * foldScenes in the core).
      */
-    private val pcOnlyScenes = setOf("games")
+    private val hiddenScenes = setOf("ai", "media", "games")
 
-    fun pcOnly(r: Rule): Boolean = r.kind == "scene" && r.values.firstOrNull() in pcOnlyScenes
+    fun hiddenStep(r: Rule): Boolean = r.kind == "scene" && r.values.firstOrNull() in hiddenScenes
 
-    fun sceneTitle(id: String): String = when (id) {
-        "cn" -> T("绕过中国大陆")
-        "ai" -> T("AI 服务")
-        "media" -> T("流媒体")
-        "games" -> T("游戏下载直连")
-        else -> id
-    }
+    fun sceneTitle(id: String): String = if (id == "cn") T("绕过中国大陆") else id
 
-    fun sceneDesc(id: String): String = when (id) {
-        "cn" -> T("国内网站和国内 IP")
-        "ai" -> "ChatGPT · Claude · Gemini"
-        "media" -> "YouTube · Netflix · Disney+"
-        "games" -> T("Steam 等国内下载节点")
-        else -> ""
-    }
+    fun sceneDesc(id: String): String = if (id == "cn") T("国内网站和国内 IP") else ""
 
-    /** Where a scene goes: "bypass mainland China" always direct. */
-    fun sceneTarget(s: Settings, id: String): String =
-        if (id == "cn") "direct" else s.scenes.firstOrNull { it.id == id }?.target?.ifEmpty { "proxy" } ?: "proxy"
 
     fun sceneOn(s: Settings, id: String): Boolean = s.scenes.firstOrNull { it.id == id }?.enabled == true
 
@@ -98,13 +87,13 @@ object Route {
     /** Where a step's traffic goes. */
     fun target(s: Settings, r: Rule): String = when (r.kind) {
         "ads" -> "block"
-        "scene" -> sceneTarget(s, r.values.firstOrNull().orEmpty())
+        "scene" -> "direct" // only bypassing mainland China is shown
         else -> r.target
     }
 
     /** The steps the "hide steps that are off" switch hides: ad blocking and scenes while off. */
     fun hidden(s: Settings, r: Rule): Boolean =
-        pcOnly(r) || s.routeHideOff && ((r.kind == "ads" && !s.blockAds) || (r.kind == "scene" && !sceneOn(s, r.values.firstOrNull().orEmpty())))
+        hiddenStep(r) || s.routeHideOff && ((r.kind == "ads" && !s.blockAds) || (r.kind == "scene" && !sceneOn(s, r.values.firstOrNull().orEmpty())))
 
     /** The rules where a new one goes: before "bypass mainland China", so that it applies. */
     fun insertAt(rules: List<Rule>): Int =
@@ -156,19 +145,16 @@ object Route {
         return policies.firstOrNull { it.id == RuleUi.policyId(t) }?.let { "policy:" + it.name } ?: "proxy"
     }
 
-    fun toText(rules: List<Rule>, s: Settings, policies: List<PolicyView>): String = buildList {
+    fun toText(rules: List<Rule>, policies: List<PolicyView>): String = buildList {
         add(T("# 每行一条：类型:值, 去向（proxy 当前节点 / direct 直连 / block 拦截 / policy:分组代理名称）"))
-        add(T("# ads 是屏蔽广告的位置，scene:… 是常用场景的位置，可以上下移动"))
+        add(T("# ads 是屏蔽广告的位置，scene:cn 是「绕过中国大陆」的位置，可以上下移动"))
         add(T("# 规则集：set:名称, 去向，下面缩进的行是它的内容；行首加 ! 表示停用"))
         for (r in rules) {
             val off = if (r.disabled) "!" else ""
             when {
                 r.kind == "ads" -> add("ads")
-                pcOnly(r) -> Unit
-                r.kind == "scene" -> {
-                    val id = r.values.firstOrNull().orEmpty()
-                    add(if (id == "cn") "scene:cn" else "scene:$id, " + targetText(sceneTarget(s, id), policies))
-                }
+                hiddenStep(r) -> Unit
+                r.kind == "scene" -> add("scene:" + r.values.firstOrNull().orEmpty())
                 r.isSet -> {
                     add("${off}set:${r.name}, " + targetText(r.target, policies))
                     r.items.forEach { it.values.forEach { v -> add("  ${it.kind}:$v") } }
@@ -189,12 +175,11 @@ object Route {
         return (if (ipLike.matches(t)) "cidr" else "suffix") to t
     }
 
-    class Parsed(val rules: List<Rule>, val sceneTargets: Map<String, String>, val errors: List<String>)
+    class Parsed(val rules: List<Rule>, val errors: List<String>)
 
     fun fromText(text: String, policies: List<PolicyView>, before: List<Rule>): Parsed {
         val rules = mutableListOf<Rule>()
         val errors = mutableListOf<String>()
-        val sceneTargets = mutableMapOf<String, String>()
         var set: Int = -1
         fun target(raw: String, n: Int): String? {
             val l = raw.lowercase()
@@ -227,14 +212,8 @@ object Route {
             if (off) line = line.substring(1).trim()
             if (line.lowercase() == "ads") { rules += Rule(kind = "ads", target = ""); return@forEachIndexed }
             if (line.lowercase().startsWith("scene:")) {
-                val parts = line.substring(6).split(',')
-                val id = parts[0].trim().lowercase()
-                if (id !in sceneIds) { errors += T("第 %d 行：没有叫“%s”的常用场景", n, parts[0].trim()); return@forEachIndexed }
-                if (parts.size > 1 && parts[1].isNotBlank() && id != "cn") {
-                    val t = target(parts[1].trim(), n) ?: return@forEachIndexed
-                    if (t == "block") { errors += T("第 %d 行：常用场景不能设为拦截", n); return@forEachIndexed }
-                    sceneTargets[id] = t
-                }
+                val id = line.substring(6).substringBefore(',').trim().lowercase()
+                if (id != "cn") { errors += T("第 %d 行：不认识“%s”", n, line); return@forEachIndexed }
                 rules += Rule(kind = "scene", values = listOf(id), target = "")
                 return@forEachIndexed
             }
@@ -266,8 +245,8 @@ object Route {
         val out = rules.map { r ->
             if (r.isSet || r.isStep) r else labels["${r.kind}|${r.target}|${r.values.sorted()}"]?.let { r.copy(name = it.name, app = it.app) } ?: r
         }.toMutableList()
-        // the PC-only scenes are not in the text: they keep their places
-        before.forEachIndexed { i, r -> if (pcOnly(r) && out.none { it == r }) out.add(i.coerceAtMost(out.size), r) }
-        return Parsed(out, sceneTargets, errors)
+        // the hidden scenes are not in the text: they keep their places
+        before.forEachIndexed { i, r -> if (hiddenStep(r) && out.none { it == r }) out.add(i.coerceAtMost(out.size), r) }
+        return Parsed(out, errors)
     }
 }

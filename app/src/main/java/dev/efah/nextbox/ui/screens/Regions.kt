@@ -3,8 +3,8 @@ package dev.efah.nextbox.ui.screens
 import android.icu.text.Transliterator
 import dev.efah.nextbox.ui.Lang
 import dev.efah.nextbox.ui.T
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Locale
 
 /**
  * IP regions for "IP 归属地" rules: every country and region sing-geoip has a

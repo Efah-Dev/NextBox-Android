@@ -2,9 +2,9 @@ package dev.efah.nextbox.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Android-only preferences. Everything shared with the Windows app (nodes,

@@ -18,12 +18,12 @@ import dev.efah.nextbox.App
 import dev.efah.nextbox.libbox.ExchangeContext
 import dev.efah.nextbox.libbox.InterfaceUpdateListener
 import dev.efah.nextbox.libbox.LocalDNSTransport
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asExecutor
 import java.net.InetAddress
 import java.net.NetworkInterface
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.CountDownLatch
+import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.Dispatchers
 
 /** Follows the underlying (non-VPN) default network and reports it to sing-box. */
 object DefaultNetworkMonitor {

@@ -202,6 +202,7 @@ func adaptForAndroid(cfg map[string]any, s store.Settings, opt androidOptions) {
 			// handshake on recent Android builds; the user space gVisor stack
 			// works everywhere.
 			m["stack"] = "gvisor"
+			excludeLAN(m, s.EnableIPv6)
 		}
 		// the exit check's own way in (see exit.go)
 		cfg["inbounds"] = append(kept, probeInbound())

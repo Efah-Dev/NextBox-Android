@@ -1,50 +1,47 @@
 package dev.efah.nextbox.ui.screens
 
-import dev.efah.nextbox.ui.T
-import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.Manifest
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,29 +51,32 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
+import com.google.zxing.common.BitMatrix
+import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.DecodeHintType
 import com.google.zxing.EncodeHintType
 import com.google.zxing.LuminanceSource
 import com.google.zxing.PlanarYUVLuminanceSource
-import com.google.zxing.RGBLuminanceSource
-import com.google.zxing.common.BitMatrix
-import com.google.zxing.common.HybridBinarizer
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.google.zxing.qrcode.QRCodeReader
 import com.google.zxing.qrcode.QRCodeWriter
-import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import com.google.zxing.RGBLuminanceSource
 import dev.efah.nextbox.ui.BarIcon
+import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.LocalBottomInset
 import dev.efah.nextbox.ui.LocalToast
 import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.NbButton
 import dev.efah.nextbox.ui.NbIcons
-import dev.efah.nextbox.ui.TopBar
+import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.Executors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 
 private val decodeHints = mapOf(DecodeHintType.TRY_HARDER to true, DecodeHintType.CHARACTER_SET to "UTF-8")
 
@@ -144,7 +144,7 @@ fun ScanScreen(onResult: (String) -> Unit, onClose: () -> Unit) {
                     decode(RGBLuminanceSource(bmp.width, bmp.height, px))
                 }.getOrNull()
             }
-            if (text == null) toast(T("没有在图片里找到二维码")) else result(text)
+            if (text == null) toast.error(T("没有在图片里找到二维码")) else result(text)
         }
     }
 
@@ -181,7 +181,7 @@ fun ScanScreen(onResult: (String) -> Unit, onClose: () -> Unit) {
                             runCatching {
                                 provider.unbindAll()
                                 provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                            }.onFailure { toast(T("无法打开相机")) }
+                            }.onFailure { toast.error(T("无法打开相机")) }
                         }, ContextCompat.getMainExecutor(ctx))
                         onDispose {
                             runCatching { future.get().unbindAll() }
@@ -203,10 +203,7 @@ fun ScanScreen(onResult: (String) -> Unit, onClose: () -> Unit) {
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(T("需要相机权限才能扫码"), color = Color.White, style = NbType.body)
-                        Button(
-                            onClick = { permission.launch(Manifest.permission.CAMERA) },
-                            colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-                        ) { Text(T("允许使用相机")) }
+                        NbButton(T("允许使用相机"), { permission.launch(Manifest.permission.CAMERA) })
                     }
                 }
             }
@@ -261,7 +258,7 @@ fun QrDialog(name: String, link: String, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { copyToClipboard(link); toast(T("已复制分享链接")); onDismiss() }) { Text(T("复制链接")) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(T("关闭")) } },
+        confirmButton = { NbButton(T("复制链接"), { copyToClipboard(link); toast.ok(T("已复制分享链接")); onDismiss() }) },
+        dismissButton = { NbButton(T("关闭"), onDismiss, kind = BtnKind.Secondary) },
     )
 }

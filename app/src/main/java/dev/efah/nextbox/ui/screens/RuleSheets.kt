@@ -7,63 +7,56 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.Rule
-import dev.efah.nextbox.ui.Chip
+import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.LocalGlass
 import dev.efah.nextbox.ui.LocalToast
 import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.NbButton
+import dev.efah.nextbox.ui.NbField
+import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
-import dev.efah.nextbox.ui.WindowBlurBehind
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.WindowBlurBehind
 import kotlinx.coroutines.launch
 
 /** A bottom sheet with the app's surface and, with glass effects on, a blurred background. */
@@ -182,8 +175,8 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
         onDismiss()
         scope.launch {
             Repo.saveRules(next)
-                .onSuccess { toast(T("已添加，走「%s」", RuleUi.targetLabel(target, policies))) }
-                .onFailure { toast(it.message ?: T("保存失败")) }
+                .onSuccess { toast.ok(T("已添加，走「%s」", RuleUi.targetLabel(target, policies))) }
+                .onFailure { toast.error(it.message ?: T("保存失败")) }
         }
     }
 
@@ -208,7 +201,7 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
         Spacer(Modifier.height(14.dp))
         when (tab) {
             0 -> {
-                OutlinedTextField(
+                NbField(
                     siteText, { siteText = it }, minLines = 3, maxLines = 6,
                     label = { Text(T("输入域名，一行一个")) },
                     placeholder = { Text("example.com\nnews.example.org") },
@@ -219,14 +212,14 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
                     Box {
                         var open by remember { mutableStateOf(false) }
                         TextButton(onClick = { open = true }) { Text(RuleUi.siteKindLabel(siteKind), color = c.accentInk) }
-                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                            RuleUi.siteKinds.forEach { k -> DropdownMenuItem(text = { Text(RuleUi.siteKindLabel(k)) }, onClick = { open = false; siteKind = k }) }
+                        dev.efah.nextbox.ui.NbMenu(open, { open = false }) {
+                            RuleUi.siteKinds.forEach { k -> dev.efah.nextbox.ui.NbMenuItem(RuleUi.siteKindLabel(k), if (k == siteKind) NbIcons.Check else null, { open = false; siteKind = k }) }
                         }
                     }
                 }
                 Text(
                     when (siteKind) {
-                        "suffix" -> T("example.com 也会匹配 www.example.com、api.example.com")
+                        "suffix" -> T("example.com 也会匹配 *.example.com")
                         "domain" -> T("只匹配完全相同的域名")
                         "keyword" -> T("域名里包含这段文字就匹配")
                         else -> T("用正则表达式匹配域名")
@@ -246,7 +239,7 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
                 AppsField(apps, installed) { pickApps = true }
             }
             else -> {
-                OutlinedTextField(
+                NbField(
                     ipText, { ipText = it }, minLines = 3, maxLines = 6,
                     label = { Text(T("IP 地址或 IP 段，一行一个")) },
                     placeholder = { Text("10.0.0.0/8\n1.1.1.1") },
@@ -264,12 +257,8 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
         TargetChips(target, policies) { target = it }
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TextButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp)) { Text(T("取消")) }
-            Button(
-                onClick = ::submit,
-                colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-                modifier = Modifier.weight(2f).height(48.dp),
-            ) { Text(if (total > 0) T("添加 %d 项", total) else T("添加"), fontWeight = FontWeight.Bold) }
+            NbButton(T("取消"), onDismiss, Modifier.weight(1f).height(48.dp), kind = BtnKind.Secondary)
+            NbButton(if (total > 0) T("添加 %d 项", total) else T("添加"), ::submit, Modifier.weight(2f).height(48.dp))
         }
     }
 
@@ -286,8 +275,8 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
                     } + if (clash.size > 6) "\n…" else "",
                 )
             },
-            confirmButton = { TextButton(onClick = { confirm = null; apply(list) }) { Text(T("移过来")) } },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text(T("取消")) } },
+            confirmButton = { NbButton(T("移过来"), { confirm = null; apply(list) }) },
+            dismissButton = { NbButton(T("取消"), { confirm = null }, kind = BtnKind.Secondary) },
         )
     }
 }
@@ -313,8 +302,8 @@ fun ConnectionRuleSheet(host: String, pkg: String, appLabel: String, proxied: Bo
         onDismiss()
         scope.launch {
             Repo.saveRules(RuleUi.place(state.settings.rules, kind, listOf(value), target))
-                .onSuccess { toast(T("已添加：%s 走「%s」", what, RuleUi.targetLabel(target, policies))) }
-                .onFailure { toast(it.message ?: T("保存失败")) }
+                .onSuccess { toast.ok(T("已添加：%s 走「%s」", what, RuleUi.targetLabel(target, policies))) }
+                .onFailure { toast.error(it.message ?: T("保存失败")) }
         }
     }
     val siteKind = if (isIp) "cidr" else if (byMain) "suffix" else "domain"
@@ -377,7 +366,7 @@ fun ConnectionRuleSheet(host: String, pkg: String, appLabel: String, proxied: Bo
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { pickPolicy = null }) { Text(T("取消")) } },
+            confirmButton = { NbButton(T("取消"), { pickPolicy = null }) },
         )
     }
 }

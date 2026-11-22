@@ -1,70 +1,69 @@
 package dev.efah.nextbox.ui.screens
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -72,40 +71,37 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.lerp
-import kotlin.math.cos
-import kotlin.math.sin
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
-import dev.efah.nextbox.R
 import dev.efah.nextbox.bg.Box
 import dev.efah.nextbox.bg.Speed
 import dev.efah.nextbox.bg.Status
-import dev.efah.nextbox.data.ExitInfo
 import dev.efah.nextbox.data.Prefs
 import dev.efah.nextbox.data.Profile
-import dev.efah.nextbox.data.Repo
-import dev.efah.nextbox.ui.LocalToast
-import dev.efah.nextbox.ui.NbAlertDialog
 import dev.efah.nextbox.data.protocolName
-import dev.efah.nextbox.ui.BarIcon
-import dev.efah.nextbox.ui.LocalBottomInset
-import dev.efah.nextbox.ui.T
+import dev.efah.nextbox.data.Repo
+import dev.efah.nextbox.R
 import dev.efah.nextbox.ui.backdropSource
-import dev.efah.nextbox.ui.glass
-import dev.efah.nextbox.ui.rememberBackdrop
-import dev.efah.nextbox.ui.NbCard
-import dev.efah.nextbox.ui.NbIcons
-import dev.efah.nextbox.ui.Segmented
-import dev.efah.nextbox.ui.TopBar
+import dev.efah.nextbox.ui.BarIcon
 import dev.efah.nextbox.ui.fmtBytes
 import dev.efah.nextbox.ui.fmtDuration
 import dev.efah.nextbox.ui.fmtSpeed
+import dev.efah.nextbox.ui.glass
+import dev.efah.nextbox.ui.LocalBottomInset
+import dev.efah.nextbox.ui.LocalToast
+import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.NbButton
+import dev.efah.nextbox.ui.NbCard
+import dev.efah.nextbox.ui.NbIcons
+import dev.efah.nextbox.ui.rememberBackdrop
+import dev.efah.nextbox.ui.Segmented
+import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -210,44 +206,56 @@ fun HomeScreen(onConnect: () -> Unit, onOpenNodes: () -> Unit, onImport: () -> U
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        TopBar(
-            title = "NextBox",
-            leading = {
-                Icon(
-                    painterResource(R.drawable.ic_stat_paw), null, tint = c.accent,
-                    modifier = Modifier.padding(start = 16.dp, end = 10.dp).size(30.dp),
-                )
-            },
-        ) {
-            BarIcon(NbIcons.Clipboard, T("从剪贴板导入"), onImport)
-        }
-
-        // One fixed screen, never scrolled: everything below the connect
-        // button has a fixed height (the status always two lines, whatever it
-        // says), and the button takes the height left. In a small window
-        // (split screen, a floating window) the traffic chart goes first, then
-        // the button shrinks.
-        BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = LocalBottomInset.current)) {
-            val compact = maxHeight < 560.dp
-            val tiny = maxHeight < 480.dp
-            val gap = if (compact) 8.dp else 12.dp
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
-            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                // the disc takes 78% of the height left at most, so its lights
-                // have room around it and are not cut off at the top
-                val size = minOf(maxHeight * 0.78f, maxWidth * 0.5f, 176.dp)
-                if (size >= 40.dp) ConnectButton(status, size, onConnect)
+    // One fixed screen, never scrolled: everything below the connect button
+    // has a fixed height (the status always two lines, whatever it says), and
+    // the button takes the height left. In a small window (split screen, a
+    // floating window) the top bar goes first (the clipboard import is also
+    // under Nodes → 添加), then the traffic chart, the traffic card becomes
+    // one line, and only then do the lower cards go: the button stays.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val small = maxHeight < 620.dp
+        Column(Modifier.fillMaxSize()) {
+            if (small) {
+                Spacer(Modifier.statusBarsPadding().height(8.dp))
+            } else {
+                TopBar(
+                    title = "NextBox",
+                    leading = {
+                        Icon(
+                            painterResource(R.drawable.ic_stat_paw), null, tint = c.accent,
+                            modifier = Modifier.padding(start = 16.dp, end = 10.dp).size(30.dp),
+                        )
+                    },
+                ) {
+                    BarIcon(NbIcons.Clipboard, T("从剪贴板导入"), onImport)
+                }
             }
+            BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = LocalBottomInset.current)) {
+                val h = maxHeight
+                val compact = h < 560.dp
+                val gap = if (compact) 8.dp else 12.dp
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
+                    BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                        // the disc takes 78% of the height left at most, so its
+                        // lights have room around it and are not cut off at the top
+                        val size = minOf(maxHeight * 0.78f, maxWidth * 0.5f, 176.dp)
+                        ConnectButton(status, size.coerceAtLeast(56.dp), onConnect)
+                    }
 
-            StatusBlock(status, now - startedAt, startedAt, error, state.selectedId, compact)
+                    StatusBlock(status, now - startedAt, startedAt, error, state.selectedId, compact)
 
-            NodeCard(selected, onOpenNodes)
+                    NodeCard(selected, onOpenNodes)
 
-            RouteSection(onPickApps)
+                    if (h >= 380.dp) RouteSection(onPickApps)
 
-            TrafficCard(speed, session, history, status == Status.Started, sparkHeight = if (tiny) 0.dp else if (compact) 32.dp else 48.dp)
-        }
+                    val on = status == Status.Started
+                    when {
+                        h >= 560.dp -> TrafficCard(speed, session, history, on, sparkHeight = 48.dp)
+                        h >= 500.dp -> TrafficCard(speed, session, history, on, sparkHeight = 32.dp)
+                        h >= 416.dp -> TrafficLine(speed, session)
+                    }
+                }
+            }
         }
     }
 }
@@ -364,7 +372,7 @@ private fun NodeCard(node: Profile?, onClick: () -> Unit) {
                 // the flag of the node's region, else two letters from its name
                 val flag = nameFlag.ifEmpty { node?.let { dev.efah.nextbox.ui.flagOf(it.region) }.orEmpty() }
                 if (flag.isNotEmpty()) {
-                    Text(flag, fontSize = 24.sp)
+                    dev.efah.nextbox.ui.FlagText(flag, fontSize = 24.sp)
                 } else {
                     Text(
                         node?.let { badge(it.name) } ?: "?",
@@ -437,6 +445,19 @@ private fun TrafficCard(speed: Speed, session: Speed, history: List<Speed>, on: 
         Row(Modifier.fillMaxWidth()) {
             Text(T("本次 %s", fmtBytes(session.up + session.down)), style = NbType.small, color = c.muted, modifier = Modifier.weight(1f))
             Text(T("今日 %s · 本月 %s", fmtBytes(today), fmtBytes(period)), style = NbType.small, color = c.muted)
+        }
+    }
+}
+
+/** The traffic card in one line, for a small window. */
+@Composable
+private fun TrafficLine(speed: Speed, session: Speed) {
+    val c = Nb.c
+    NbCard(padding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("↑ " + fmtSpeed(speed.up), style = NbType.bodyBold, color = c.text, modifier = Modifier.weight(1f))
+            Text("↓ " + fmtSpeed(speed.down), style = NbType.bodyBold, color = c.text, modifier = Modifier.weight(1f))
+            Text(T("本次 %s", fmtBytes(session.up + session.down)), style = NbType.small, color = c.muted)
         }
     }
 }
@@ -524,7 +545,7 @@ private fun StatusBlock(status: Status, connectedMs: Long, session: Long, error:
             onDismissRequest = { showError = false },
             title = { Text(T("连接失败")) },
             text = { Text(error) },
-            confirmButton = { TextButton(onClick = { showError = false }) { Text(T("知道了")) } },
+            confirmButton = { NbButton(T("知道了"), { showError = false }) },
         )
     }
 }
@@ -577,13 +598,13 @@ private fun ExitLine(nodeId: Long, session: Long) {
         Modifier.clip(RoundedCornerShape(10.dp))
             .combinedClickable(
                 onClick = { if (ok) reveal = !reveal else scope.launch { Repo.refreshExit(nodeId, session, force = true) } },
-                onLongClick = { if (ok) { clipboard.setText(androidx.compose.ui.text.AnnotatedString(e!!.ip)); toast(T("已复制")) } },
+                onLongClick = { if (ok) { clipboard.setText(androidx.compose.ui.text.AnnotatedString(e!!.ip)); toast.ok(T("已复制")) } },
             )
             .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(dot))
-        Text(
+        dev.efah.nextbox.ui.FlagText(
             text, style = NbType.small.copy(fontSize = 13.sp), color = if (ok || checking) c.muted else c.bad,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp),
         )

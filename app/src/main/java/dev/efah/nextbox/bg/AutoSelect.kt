@@ -8,11 +8,11 @@ import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.nbtest.LatencyHandler
 import dev.efah.nextbox.nbtest.Nbtest
 import dev.efah.nextbox.ui.T
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * "Automatically select a node": before connecting (and, if asked for, now

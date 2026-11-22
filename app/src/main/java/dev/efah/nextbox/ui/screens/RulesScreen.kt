@@ -1,62 +1,62 @@
 package dev.efah.nextbox.ui.screens
 
-import androidx.compose.foundation.Image
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.PolicyView
 import dev.efah.nextbox.data.Prefs
@@ -64,23 +64,23 @@ import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.Rule
 import dev.efah.nextbox.data.Settings
 import dev.efah.nextbox.ui.BarIcon
+import dev.efah.nextbox.ui.BtnKind
+import dev.efah.nextbox.ui.dragAbove
+import dev.efah.nextbox.ui.dragHandle
+import dev.efah.nextbox.ui.dragRow
 import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.LocalBottomInset
 import dev.efah.nextbox.ui.LocalToast
+import dev.efah.nextbox.ui.NbButton
 import dev.efah.nextbox.ui.NbCard
+import dev.efah.nextbox.ui.NbField
 import dev.efah.nextbox.ui.NbIcons
+import dev.efah.nextbox.ui.rememberDragState
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
-import dev.efah.nextbox.ui.TopBar
-import dev.efah.nextbox.ui.dragHandle
-import dev.efah.nextbox.ui.dragRow
-import dev.efah.nextbox.ui.dragAbove
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.animation.animateColorAsState
-import dev.efah.nextbox.ui.rememberDragState
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -120,7 +120,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
     LaunchedEffect(drag.key) {
         val moved = local
         if (drag.key == null && moved != null) {
-            Repo.saveRules(moved).onFailure { toast(it.message ?: T("保存失败")) }
+            Repo.saveRules(moved).onFailure { toast.error(it.message ?: T("保存失败")) }
             local = null
         }
     }
@@ -129,7 +129,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
     var sceneSheet by remember { mutableStateOf<String?>(null) }
     var confirmReset by remember { mutableStateOf(false) }
 
-    fun save(next: List<Rule>) = scope.launch { Repo.saveRules(next).onFailure { toast(it.message ?: T("保存失败")) } }
+    fun save(next: List<Rule>) = scope.launch { Repo.saveRules(next).onFailure { toast.error(it.message ?: T("保存失败")) } }
 
     val exitLabel = { t: String ->
         when {
@@ -164,8 +164,8 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                 // what this mode does, and the way to the mode the path is for
                 NbCard(Modifier.fillMaxWidth().padding(bottom = 12.dp), padding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp), color = c.accentSoft.copy(alpha = 0.6f)) {
                     Text(
-                        if (s.routeMode == "global") T("全局代理：除了局域网和屏蔽广告，所有流量都走当前节点，下面的规则和场景暂不生效。")
-                        else T("全部直连：不使用代理，下面的规则和场景暂不生效。"),
+                        if (s.routeMode == "global") T("全局代理：除了局域网和屏蔽广告，所有流量都走当前节点，下面的步骤暂不生效。")
+                        else T("全部直连：不使用代理，下面的步骤暂不生效。"),
                         style = NbType.small.copy(fontSize = 13.sp, lineHeight = 19.sp), color = c.text,
                     )
                     Text(
@@ -233,12 +233,11 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                                 val id = r.values.firstOrNull().orEmpty()
                                 StepCard(
                                     number = k + 2, active = on, last = false, handle = handle, cardModifier = card,
-                                    title = Route.sceneTitle(id), tag = T("场景"),
+                                    title = Route.sceneTitle(id), tag = T("内置"),
                                     sub = when {
                                         !Route.sceneOn(s, id) -> T("已关闭")
                                         s.routeMode != "rule" -> T("规则分流时生效")
-                                        id == "cn" -> Route.sceneDesc(id) + " · " + ResolveDns.label(s.bypassDns)
-                                        else -> Route.sceneDesc(id)
+                                        else -> Route.sceneDesc(id) + " · " + ResolveDns.label(s.bypassDns)
                                     },
                                     exit = exitLabel(target), exitTarget = target,
                                     checked = Route.sceneOn(s, id),
@@ -273,24 +272,8 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                 )
 
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = { adding = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-                        modifier = Modifier.weight(1f).height(46.dp),
-                    ) {
-                        Icon(NbIcons.Plus, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(T("添加规则"), fontWeight = FontWeight.Bold)
-                    }
-                    Button(
-                        onClick = { onEditSet(-1) },
-                        colors = ButtonDefaults.buttonColors(containerColor = c.accentSoft, contentColor = c.accentInk),
-                        modifier = Modifier.weight(1f).height(46.dp),
-                    ) {
-                        Icon(NbIcons.Archive, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(T("添加规则集"), fontWeight = FontWeight.Bold)
-                    }
+                    NbButton(T("添加规则"), { adding = true }, Modifier.weight(1f), icon = NbIcons.Plus)
+                    NbButton(T("添加规则集"), { onEditSet(-1) }, Modifier.weight(1f), kind = BtnKind.Secondary, icon = NbIcons.Archive)
                 }
                 Text(
                     T("从上往下依次判断，在哪一步命中就从哪一步出去。按住左边的把手拖动，调整先后顺序。"),
@@ -326,7 +309,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
             Spacer(Modifier.height(12.dp))
             NbCard(padding = PaddingValues(0.dp)) {
                 if (!textMode) {
-                    dev.efah.nextbox.ui.SwitchRow(T("隐藏未开启的步骤"), T("关闭的屏蔽广告和常用场景不显示"), s.routeHideOff, { v ->
+                    dev.efah.nextbox.ui.SwitchRow(T("隐藏未开启的步骤"), T("关闭的步骤不显示"), s.routeHideOff, { v ->
                         scope.launch { Repo.updateSettings(buildJsonObject { put("routeHideOff", v) }, reload = false) }
                     })
                 }
@@ -342,32 +325,23 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
         NbSheet(onDismiss = { sceneSheet = null }) {
             Text(Route.sceneTitle(id), style = NbType.big, color = c.text)
             Text(Route.sceneDesc(id), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 2.dp, bottom = 14.dp))
-            if (id == "cn") {
-                // always direct; what can be chosen is how names are resolved
-                ResolveDnsChoice(s.bypassDns)
-            } else {
-                Text(T("走哪里"), style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
-                Spacer(Modifier.height(8.dp))
-                TargetChips(Route.sceneTarget(s, id), policies, withBlock = false) { t ->
-                    sceneSheet = null
-                    scope.launch { Repo.saveRules(s.rules, s.scenes.map { if (it.id == id) it.copy(target = t) else it }) }
-                }
-            }
+            // always direct; what can be chosen is how names are resolved
+            ResolveDnsChoice(s.bypassDns)
         }
     }
     if (confirmReset) {
         dev.efah.nextbox.ui.NbAlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text(T("恢复默认分流规则")) },
-            text = { Text(T("会删除你添加的所有规则和规则集，常用场景和步骤顺序恢复成刚安装时的样子（只开启「绕过中国大陆」）。路由模式、屏蔽广告开关和分组代理不受影响。")) },
+            text = { Text(T("会删除你添加的所有规则和规则集，步骤顺序恢复成刚安装时的样子，并开启「绕过中国大陆」。路由模式、屏蔽广告和分组代理不变。")) },
             confirmButton = {
-                TextButton(onClick = {
+                NbButton(T("恢复默认"), {
                     confirmReset = false
                     val (r, sc) = Route.defaults()
-                    scope.launch { Repo.saveRules(r, sc).onSuccess { toast(T("已恢复默认分流规则")) } }
-                }) { Text(T("恢复默认"), color = c.bad) }
+                    scope.launch { Repo.saveRules(r, sc).onSuccess { toast.ok(T("已恢复默认分流规则")) } }
+                }, kind = BtnKind.Danger)
             },
-            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(T("取消")) } },
+            dismissButton = { NbButton(T("取消"), { confirmReset = false }, kind = BtnKind.Secondary) },
         )
     }
 }
@@ -377,20 +351,16 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
 private fun RulesText(s: Settings, policies: List<PolicyView>) {
     val c = Nb.c
     val scope = rememberCoroutineScope()
-    var text by remember { mutableStateOf(Route.toText(s.rules, s, policies)) }
+    var text by remember { mutableStateOf(Route.toText(s.rules, policies)) }
     var errors by remember { mutableStateOf(emptyList<String>()) }
     LaunchedEffect(text) {
         kotlinx.coroutines.delay(600)
         val p = Route.fromText(text, policies, s.rules)
         errors = p.errors
         if (p.errors.isNotEmpty()) return@LaunchedEffect
-        val changed = p.rules != s.rules || p.sceneTargets.any { (id, t) -> Route.sceneTarget(s, id) != t }
-        if (changed) {
-            val scenes = s.scenes.map { sc -> p.sceneTargets[sc.id]?.let { sc.copy(target = it) } ?: sc }
-            scope.launch { Repo.saveRules(p.rules, scenes) }
-        }
+        if (p.rules != s.rules) scope.launch { Repo.saveRules(p.rules, s.scenes) }
     }
-    OutlinedTextField(
+    NbField(
         text, { text = it },
         textStyle = NbType.small.copy(fontFamily = FontFamily.Monospace, fontSize = 12.5.sp, lineHeight = 18.sp),
         minLines = 12,
@@ -551,13 +521,13 @@ private fun RuleEditSheet(index: Int, onDismiss: () -> Unit) {
 
     fun save(next: List<Rule>, msg: String) {
         onDismiss()
-        scope.launch { Repo.saveRules(next).onSuccess { toast(msg) }.onFailure { toast(it.message ?: T("保存失败")) } }
+        scope.launch { Repo.saveRules(next).onSuccess { toast.ok(msg) }.onFailure { toast.error(it.message ?: T("保存失败")) } }
     }
 
     NbSheet(onDismiss) {
         Text(T("编辑规则"), style = NbType.big, color = c.text)
         Text(Route.kindLabel(rule.kind), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
-        OutlinedTextField(
+        NbField(
             name, { name = it }, singleLine = true,
             label = { Text(T("名称（可选）")) },
             supportingText = { Text(T("活动页会用这个名称显示命中这条规则的连接")) },
@@ -570,7 +540,7 @@ private fun RuleEditSheet(index: Int, onDismiss: () -> Unit) {
                 AppsField(apps, installed) { picking = true }
             }
             "process" -> Text(T("电脑程序，只在 Windows 版生效"), style = NbType.small, color = c.muted)
-            else -> OutlinedTextField(
+            else -> NbField(
                 text, { text = it }, minLines = 3, maxLines = 8,
                 label = { Text(T("一行一个")) },
                 modifier = Modifier.fillMaxWidth(),
@@ -582,21 +552,14 @@ private fun RuleEditSheet(index: Int, onDismiss: () -> Unit) {
         TargetChips(target, policies) { target = it }
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TextButton(
-                onClick = { save(state.settings.rules.filterIndexed { i, _ -> i != index }, T("已删除")) },
-                modifier = Modifier.weight(1f).height(48.dp),
-            ) { Text(T("删除"), color = c.bad) }
-            Button(
-                onClick = {
+            NbButton(T("删除"), { save(state.settings.rules.filterIndexed { i, _ -> i != index }, T("已删除")) }, Modifier.weight(1f).height(48.dp), kind = BtnKind.Danger)
+            NbButton(T("保存"), {
                     val v = values().map { RuleUi.normalize(rule.kind, it) }.filter { it.isNotEmpty() }.distinct()
-                    if (v.isEmpty() && rule.kind != "process") { toast(T("还没填内容")); return@Button }
+                    if (v.isEmpty() && rule.kind != "process") { toast.error(T("还没填内容")); return@NbButton }
                     val next = state.settings.rules.toMutableList()
                     if (index < next.size) next[index] = rule.copy(name = name.trim(), values = if (rule.kind == "process") rule.values else v, target = target)
                     save(next, T("已保存"))
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-                modifier = Modifier.weight(2f).height(48.dp),
-            ) { Text(T("保存"), fontWeight = FontWeight.Bold) }
+                }, Modifier.weight(2f).height(48.dp))
         }
     }
     if (picking) AppPicker(apps, onDone = { apps = it; picking = false }, onDismiss = { picking = false })
@@ -643,12 +606,12 @@ fun AppIcon(pkg: String, apps: List<AppItem>, size: Dp) {
 /** Direct, proxy, block and the policy groups as chips. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TargetChips(selected: String, policies: List<PolicyView>, withBlock: Boolean = true, onPick: (String) -> Unit) {
+fun TargetChips(selected: String, policies: List<PolicyView>, onPick: (String) -> Unit) {
     val c = Nb.c
     val options = buildList {
         add("direct")
         add("proxy")
-        if (withBlock) add("block")
+        add("block")
         policies.forEach { add("policy:${it.id}") }
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

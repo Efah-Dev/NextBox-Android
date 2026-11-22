@@ -1,7 +1,5 @@
 package dev.efah.nextbox.ui.screens
 
-import dev.efah.nextbox.ui.T
-import dev.efah.nextbox.ui.flagged
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -9,53 +7,54 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.items
-import dev.efah.nextbox.ui.NbAlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.bg.Box as Core
 import dev.efah.nextbox.bg.Status
 import dev.efah.nextbox.data.Prefs
+import dev.efah.nextbox.data.protocolName
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.UsageReport
-import dev.efah.nextbox.data.protocolName
 import dev.efah.nextbox.ui.BarIcon
+import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.EmptyHint
+import dev.efah.nextbox.ui.flagged
+import dev.efah.nextbox.ui.fmtBytes
 import dev.efah.nextbox.ui.GlassScreen
+import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.NbButton
 import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.SectionTitle
-import dev.efah.nextbox.ui.TopBar
-import dev.efah.nextbox.ui.UsageBar
-import dev.efah.nextbox.ui.fmtBytes
+import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
+import dev.efah.nextbox.ui.UsageBar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -80,8 +79,8 @@ fun UsageScreen() {
         TopBar(T("用量")) {
             Box {
                 BarIcon(NbIcons.More, T("更多"), { menu = true })
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text(T("清空用量统计"), color = c.bad) }, onClick = { menu = false; confirmReset = true })
+                dev.efah.nextbox.ui.NbMenu(menu, { menu = false }) {
+                    dev.efah.nextbox.ui.NbMenuItem(T("清空用量统计"), NbIcons.Trash, { menu = false; confirmReset = true }, danger = true)
                 }
             }
         }
@@ -147,12 +146,12 @@ fun UsageScreen() {
             title = { Text(T("清空用量统计")) },
             text = { Text(T("每日统计和所有节点的流量记录都会清零。")) },
             confirmButton = {
-                TextButton(onClick = {
+                NbButton(T("清空"), {
                     confirmReset = false
                     scope.launch { Repo.resetUsage(); reload++ }
-                }) { Text(T("清空"), color = c.bad) }
+                }, kind = BtnKind.Danger)
             },
-            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(T("取消")) } },
+            dismissButton = { NbButton(T("取消"), { confirmReset = false }, kind = BtnKind.Secondary) },
         )
     }
 }

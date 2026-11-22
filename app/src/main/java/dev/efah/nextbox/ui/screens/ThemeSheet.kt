@@ -11,21 +11,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,19 +32,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
+import dev.efah.nextbox.ui.BtnKind
+import dev.efah.nextbox.ui.NbButton
+import dev.efah.nextbox.ui.NbField
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
@@ -147,7 +147,7 @@ fun ThemeSheet(theme: String, accent: String, recent: List<String>, onDismiss: (
                 }
                 Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(current))
-                    OutlinedTextField(
+                    NbField(
                         hexText,
                         { t ->
                             hexText = t.uppercase().take(7)
@@ -196,12 +196,8 @@ fun ThemeSheet(theme: String, accent: String, recent: List<String>, onDismiss: (
                     }
                 }
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TextButton(onClick = { custom = false }, modifier = Modifier.weight(1f).height(48.dp)) { Text(T("取消")) }
-                    Button(
-                        onClick = ::finishCustom,
-                        colors = ButtonDefaults.buttonColors(containerColor = current),
-                        modifier = Modifier.weight(2f).height(48.dp),
-                    ) { Text(T("使用这个颜色"), color = Color.White, fontWeight = FontWeight.Bold) }
+                    NbButton(T("取消"), { custom = false }, Modifier.weight(1f).height(48.dp), kind = BtnKind.Secondary)
+                    NbButton(T("使用这个颜色"), ::finishCustom, Modifier.weight(2f).height(48.dp))
                 }
             }
         }

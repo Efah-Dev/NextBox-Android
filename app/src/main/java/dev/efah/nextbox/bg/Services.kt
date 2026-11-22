@@ -3,6 +3,7 @@ package dev.efah.nextbox.bg
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.IpPrefix
 import android.net.VpnService
 import android.os.IBinder
 import android.util.Log
@@ -11,7 +12,6 @@ import dev.efah.nextbox.libbox.RoutePrefix
 import dev.efah.nextbox.libbox.TunOptions
 import dev.efah.nextbox.nbcore.Nbcore
 import dev.efah.nextbox.nbcore.SocketProtector
-import android.net.IpPrefix
 import java.net.InetAddress
 
 /** VPN mode: sing-box's TUN inbound is backed by Android's VpnService. */

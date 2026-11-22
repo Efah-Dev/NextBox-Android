@@ -109,8 +109,9 @@ func TestWindowsBackup(t *testing.T) {
 	if !set.Scenes[slices.IndexFunc(set.Scenes, func(sc store.Scene) bool { return sc.ID == "cn" })].Enabled {
 		t.Error("the bypass step of the backup is on")
 	}
-	// the order and places are kept, scenes included (2.0 routes like Windows)
-	want := "scene:cn> | suffix:a.com>proxy | ads:> | process:chrome.exe>direct | scene:ai> | suffix:b.com>direct | scene:media> | scene:games>"
+	// the order and places are kept, scenes included (2.0 routes like
+	// Windows); the AI scene that was on is a rule set in its place now
+	want := "scene:cn> | suffix:a.com>proxy | ads:> | process:chrome.exe>direct | set:>proxy | scene:ai> | suffix:b.com>direct | scene:media> | scene:games>"
 	if got := ruleList(set.Rules); got != want {
 		t.Fatalf("rules:\n%s\nwant:\n%s", got, want)
 	}
@@ -177,7 +178,7 @@ func TestSaveRulesOrder(t *testing.T) {
 	if err := SaveRules(string(mustJSON(rules)), ""); err != nil {
 		t.Fatal(err)
 	}
-	want := "domain:x.com>block | scene:cn> | suffix:a.com>proxy | ads:> | process:chrome.exe>direct | scene:ai> | suffix:b.com>direct | scene:media> | scene:games>"
+	want := "domain:x.com>block | scene:cn> | suffix:a.com>proxy | ads:> | process:chrome.exe>direct | set:>proxy | scene:ai> | suffix:b.com>direct | scene:media> | scene:games>"
 	if got := ruleList(s.Settings().Rules); got != want {
 		t.Fatalf("rules:\n%s\nwant:\n%s", got, want)
 	}

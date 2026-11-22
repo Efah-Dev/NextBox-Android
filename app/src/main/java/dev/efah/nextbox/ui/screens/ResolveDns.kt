@@ -4,22 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.text.font.FontWeight
-import dev.efah.nextbox.ui.NbIcons
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,11 +19,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.Repo
+import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.NbButton
+import dev.efah.nextbox.ui.NbIcons
+import dev.efah.nextbox.ui.RadioTitle
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.theme.Nb
@@ -79,11 +78,11 @@ private fun ResolveDnsPicker(value: String, content: @Composable (Int, (Int) -> 
             title = { Text(T("改用直连 DNS 解析？")) },
             text = {
                 Text(
-                    T("直连 DNS 会把一些被封锁的网站解析成错误的地址，代理随后连到这些地址，表现为已连接却打不开网页。已知的境外网站不受影响，冷门网站可能受影响。只有在国内网站被误判走代理、又确实需要直连时再用。"),
+                    T("直连 DNS 可能把被封锁的网站解析成错误的地址，表现为已连接却打不开网页（已知的境外网站不受影响）。只在国内网站被误判走代理、又确实需要直连时使用。"),
                 )
             },
-            confirmButton = { TextButton(onClick = { warn = false; save("direct") }) { Text(T("仍然使用"), color = Nb.c.bad) } },
-            dismissButton = { TextButton(onClick = { warn = false }) { Text(T("取消")) } },
+            confirmButton = { NbButton(T("仍然使用"), { warn = false; save("direct") }, kind = BtnKind.Danger) },
+            dismissButton = { NbButton(T("取消"), { warn = false }, kind = BtnKind.Secondary) },
         )
     }
 }
@@ -164,15 +163,10 @@ private fun ResolveDnsSheet(value: String, onDismiss: () -> Unit) {
                 style = NbType.small.copy(fontSize = 13.sp), color = c.text,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.mid.copy(alpha = 0.14f)).padding(12.dp),
             )
-            androidx.compose.material3.Button(
-                onClick = { save("direct") },
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(46.dp),
-                shape = RoundedCornerShape(14.dp),
-            ) { Text(T("仍然使用直连"), fontWeight = FontWeight.Bold) }
-            TextButton(onClick = { pendingDirect = false }, modifier = Modifier.fillMaxWidth()) { Text(T("取消"), color = c.muted) }
+            NbButton(T("仍然使用直连"), { save("direct") }, Modifier.fillMaxWidth().padding(top = 12.dp))
+            NbButton(T("取消"), { pendingDirect = false }, Modifier.fillMaxWidth().padding(top = 8.dp), kind = BtnKind.Secondary)
         } else {
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text(T("完成"), color = c.muted) }
+            NbButton(T("完成"), onDismiss, Modifier.fillMaxWidth(), kind = BtnKind.Secondary)
         }
     }
 }

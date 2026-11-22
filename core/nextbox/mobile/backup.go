@@ -177,8 +177,8 @@ type backupInfo struct {
 	// DesktopRules counts the rules by program ("chrome.exe"), which only
 	// the desktop app can use; they are kept anyway.
 	DesktopRules int `json:"desktopRules"`
-	// Scenes lists the desktop app's ready-made scenes that are on ("ai",
-	// "media", "games"); they become rules here.
+	// Scenes lists the scenes that are on and become rule sets here ("ai",
+	// "media", see foldScenes).
 	Scenes []string `json:"scenes"`
 }
 
@@ -233,7 +233,7 @@ func InspectBackup(content, password string) (string, error) {
 			}
 			if _, ok := keys["scenes"]; ok {
 				for _, sc := range set.Scenes {
-					if sc.Enabled && sc.ID != "cn" {
+					if sc.Enabled && isFolded(sc.ID) {
 						info.Scenes = append(info.Scenes, sc.ID)
 					}
 				}
@@ -303,6 +303,9 @@ func ImportBackup(content, options string) (string, error) {
 			next = migrateRules(next, legacyDirectOnly(doc.Android))
 		}
 		remapPolicies(&next, policyMap)
+		if o.Rules {
+			foldScenes(&next)
+		}
 		if err := s.SaveSettings(next); err != nil {
 			return "", err
 		}

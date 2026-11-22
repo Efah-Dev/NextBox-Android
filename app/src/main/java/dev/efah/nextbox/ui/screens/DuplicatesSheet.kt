@@ -5,30 +5,27 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,11 +33,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.DupSet
 import dev.efah.nextbox.data.Profile
-import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.protocolName
-import dev.efah.nextbox.ui.LocalToast
-import dev.efah.nextbox.ui.T
+import dev.efah.nextbox.data.Repo
+import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.label
+import dev.efah.nextbox.ui.LocalToast
+import dev.efah.nextbox.ui.NbButton
+import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
 import kotlinx.coroutines.launch
@@ -103,24 +102,17 @@ fun DuplicatesSheet(onDismiss: () -> Unit) {
             }
         }
         Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TextButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp)) {
-                Text(if (sets.isNullOrEmpty()) T("关闭") else T("取消"))
-            }
+            NbButton(if (sets.isNullOrEmpty()) T("关闭") else T("取消"), onDismiss, Modifier.weight(1f).height(48.dp), kind = BtnKind.Secondary)
             if (!sets.isNullOrEmpty()) {
-                Button(
-                    onClick = {
+                NbButton(T("删除 %d 个", drops), {
                         busy = true
                         scope.launch {
                             Repo.deleteDuplicates()
-                                .onSuccess { toast(T("已删除 %d 个重复节点", it.toInt())); onDismiss() }
-                                .onFailure { toast(it.message ?: T("删除失败")) }
+                                .onSuccess { toast.ok(T("已删除 %d 个重复节点", it.toInt())); onDismiss() }
+                                .onFailure { toast.error(it.message ?: T("删除失败")) }
                             busy = false
                         }
-                    },
-                    enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(containerColor = c.bad),
-                    modifier = Modifier.weight(2f).height(48.dp),
-                ) { Text(T("删除 %d 个", drops), fontWeight = FontWeight.Bold) }
+                    }, Modifier.weight(2f).height(48.dp), enabled = !busy)
             }
         }
     }
@@ -137,7 +129,7 @@ private fun DupRow(p: Profile, badge: String, keep: Boolean, group: String) {
                 .padding(horizontal = 7.dp, vertical = 2.dp),
         )
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
-            Text(
+            dev.efah.nextbox.ui.FlagText(
                 p.label, style = NbType.body.copy(fontSize = 14.sp), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 color = if (keep) c.text else c.muted, textDecoration = if (keep) null else TextDecoration.LineThrough,
             )

@@ -11,9 +11,9 @@ import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.libbox.Libbox
 import dev.efah.nextbox.libbox.SetupOptions
 import dev.efah.nextbox.ui.Lang
+import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.File
 
 class App : Application() {
     override fun onCreate() {

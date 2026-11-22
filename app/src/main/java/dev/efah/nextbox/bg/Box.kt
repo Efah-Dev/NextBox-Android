@@ -5,9 +5,9 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import dev.efah.nextbox.App
 import dev.efah.nextbox.data.Repo
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 enum class Status { Stopped, Starting, Started, Stopping }
 

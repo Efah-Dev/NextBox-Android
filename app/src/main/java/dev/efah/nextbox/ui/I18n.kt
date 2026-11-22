@@ -4,8 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.efah.nextbox.nbcore.Nbcore
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Locale
 
 /**
  * UI language. Source strings are Simplified Chinese and double as keys; the

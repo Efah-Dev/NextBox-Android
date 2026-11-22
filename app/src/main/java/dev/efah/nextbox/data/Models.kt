@@ -1,9 +1,9 @@
 package dev.efah.nextbox.data
 
 import dev.efah.nextbox.ui.T
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.Serializable
 
 /** JSON shapes produced by nbcore (same as the Windows data files). */
 
@@ -177,7 +177,7 @@ data class BackupInfo(
     val rules: Int = 0,
     /** Program rules of the desktop app: kept, but only Windows uses them. */
     val desktopRules: Int = 0,
-    /** The desktop app's ready-made scenes that are on ("ai", "media", "games"); they become rules. */
+    /** The desktop app's scenes that are on and become rule sets here ("ai", "media"). */
     val scenes: List<String> = emptyList(),
 )
 

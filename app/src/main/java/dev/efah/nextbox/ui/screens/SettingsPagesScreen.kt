@@ -9,43 +9,39 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.efah.nextbox.BuildConfig
 import dev.efah.nextbox.bg.Notifier
+import dev.efah.nextbox.BuildConfig
 import dev.efah.nextbox.data.BackupInfo
 import dev.efah.nextbox.data.BackupParts
 import dev.efah.nextbox.data.Prefs
@@ -53,21 +49,24 @@ import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.Updater
 import dev.efah.nextbox.libbox.Libbox
 import dev.efah.nextbox.ui.BarIcon
+import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.LocalBottomInset
 import dev.efah.nextbox.ui.LocalToast
 import dev.efah.nextbox.ui.NavRow
 import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.NbButton
 import dev.efah.nextbox.ui.NbCard
+import dev.efah.nextbox.ui.NbField
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.RowDivider
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.SettingsGroup
 import dev.efah.nextbox.ui.SwitchRow
 import dev.efah.nextbox.ui.T
-import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -112,7 +111,7 @@ private fun patcher(reloadDefault: Boolean = true): (Boolean, kotlinx.serializat
     val scope = rememberCoroutineScope()
     val toast = LocalToast.current
     return { reload, block ->
-        scope.launch { Repo.updateSettings(buildJsonObject(block), reload && reloadDefault).onFailure { toast(it.message ?: T("保存失败")) } }
+        scope.launch { Repo.updateSettings(buildJsonObject(block), reload && reloadDefault).onFailure { toast.error(it.message ?: T("保存失败")) } }
     }
 }
 
@@ -127,7 +126,7 @@ private fun ColumnScope.AutoSelectPage() {
     val watch by Prefs.autoSelectWatch.collectAsState()
     var dialog by remember { mutableStateOf(false) }
     NbCard(padding = PaddingValues(0.dp)) {
-        SwitchRow(T("自动选择节点"), T("连接时当前节点不通，就换成同组里最快的可用节点。默认关闭"), on, { Prefs.setAutoSelect(it) })
+        SwitchRow(T("自动选择节点"), T("当前节点不通时，换成最快的可用节点"), on, { Prefs.setAutoSelect(it) }, info = T("点连接时如果当前节点连不上，就从下面选的范围里测出最快的可用节点并换过去。默认关闭。"))
         RowDivider()
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(T("从哪些节点里选"), style = NbType.body, color = if (on) c.text else c.muted, modifier = Modifier.padding(start = 4.dp))
@@ -136,7 +135,7 @@ private fun ColumnScope.AutoSelectPage() {
         RowDivider()
         NavRow(T("判定超时"), T("超过这个时间算连不上"), T("%d 秒", timeout / 1000)) { dialog = true }
         RowDivider()
-        SwitchRow(T("连接中节点失效也切换"), T("每 5 分钟检查一次，只在亮屏时；连续两次不通才换"), watch, { Prefs.setAutoSelectWatch(it) }, enabled = on)
+        SwitchRow(T("连接中节点失效也切换"), T("亮屏时每 5 分钟检查一次"), watch, { Prefs.setAutoSelectWatch(it) }, enabled = on, info = T("连接后，亮屏时每 5 分钟测一次正在用的节点；连续两次不通才换，一次网络波动不会切换。"))
     }
     NbCard {
         Text(T("点连接后"), style = NbType.section, color = c.muted)
@@ -201,27 +200,26 @@ private fun ColumnScope.TestPage() {
         RowDivider()
         NavRow(T("同时测试数"), T("一次并行测试的节点数"), s.testConcurrency.toString()) { edit = "concurrency" }
         RowDivider()
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(T("测速后"), style = NbType.body, color = c.text, modifier = Modifier.padding(start = 4.dp))
-            val order = listOf("", "latency", "none")
-            Segmented(
-                listOf(T("每次询问"), T("按延迟排序"), T("保持顺序")), order.indexOf(s.sortAfterTest).coerceAtLeast(0),
-                onSelect = { i -> patch(false) { put("sortAfterTest", order[i]) } },
-            )
-            Text(T("测试整个分组之后节点怎么排"), style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp))
-        }
+        val sorts = sortChoices()
+        NavRow(T("测速后"), T("测试整个分组之后节点怎么排"), sorts.firstOrNull { it.first == s.sortAfterTest }?.second ?: T("每次询问")) { edit = "sort" }
     }
     when (edit) {
+        "sort" -> dev.efah.nextbox.ui.ChoiceSheet(
+            T("测速后"),
+            listOf(dev.efah.nextbox.ui.ChoiceOption("", T("每次询问"), T("测试整个分组前问一次"))) +
+                sortChoices().map { (v, t, d) -> dev.efah.nextbox.ui.ChoiceOption(v, t, d) },
+            s.sortAfterTest, { edit = null },
+        ) { v -> edit = null; patch(false) { put("sortAfterTest", v) } }
         "url" -> TestUrlDialog(s.testUrl, { edit = null }) { v -> edit = null; patch(false) { put("testUrl", v) } }
         "timeout" -> TextDialog(T("超时时间（毫秒）"), s.testTimeout.toString(), "1000 - 30000", { edit = null }, number = true) { v ->
             edit = null
             val ms = v.toIntOrNull()
-            if (ms == null || ms !in 1000..30000) toast(T("请输入 1000 到 30000")) else patch(false) { put("testTimeout", ms) }
+            if (ms == null || ms !in 1000..30000) toast.error(T("请输入 1000 到 30000")) else patch(false) { put("testTimeout", ms) }
         }
         "concurrency" -> TextDialog(T("同时测试数"), s.testConcurrency.toString(), "1 - 64", { edit = null }, number = true) { v ->
             edit = null
             val n = v.toIntOrNull()
-            if (n == null || n !in 1..64) toast(T("请输入 1 到 64")) else patch(false) { put("testConcurrency", n) }
+            if (n == null || n !in 1..64) toast.error(T("请输入 1 到 64")) else patch(false) { put("testConcurrency", n) }
         }
     }
 }
@@ -250,17 +248,17 @@ private fun TestUrlDialog(current: String, onDismiss: () -> Unit, onConfirm: (St
                     }
                 }
                 if (choice == "custom") {
-                    OutlinedTextField(custom, { custom = it }, singleLine = true, placeholder = { Text("https://") }, modifier = Modifier.fillMaxWidth())
+                    NbField(custom, { custom = it }, singleLine = true, placeholder = { Text("https://") }, modifier = Modifier.fillMaxWidth())
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            NbButton(T("保存"), {
                 val url = testUrls.firstOrNull { it.first == choice }?.second ?: custom.trim()
                 if (url.startsWith("http://") || url.startsWith("https://")) onConfirm(url) else onDismiss()
-            }) { Text(T("保存")) }
+            })
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(T("取消")) } },
+        dismissButton = { NbButton(T("取消"), onDismiss, kind = BtnKind.Secondary) },
     )
 }
 
@@ -289,7 +287,7 @@ private fun ColumnScope.NotifyPage() {
         TextDialog(T("每月结算日"), billingDay.toString(), "1 - 28", { edit = false }, number = true) { v ->
             edit = false
             val d = v.toIntOrNull()
-            if (d == null || d !in 1..28) toast(T("请输入 1 到 28")) else Prefs.setBillingDay(d)
+            if (d == null || d !in 1..28) toast.error(T("请输入 1 到 28")) else Prefs.setBillingDay(d)
         }
     }
 }
@@ -315,25 +313,25 @@ private fun ColumnScope.AdvancedPage() {
         RowDivider()
         SubscriptionDnsRow(state.groups)
         RowDivider()
-        SwitchRow("FakeIP", T("代理的域名立即返回虚拟地址，省去一次经代理的 DNS 查询，打开网页更快"), fakeIp, { on ->
+        SwitchRow("FakeIP", T("打开网页更快，省一次 DNS 查询"), fakeIp, { on ->
             Prefs.setFakeIp(on)
             dev.efah.nextbox.bg.Box.reloadIfRunning()
-        })
+        }, info = T("走代理的域名立即得到一个虚拟地址，真实地址由代理那边解析，省去一次经代理的 DNS 查询。"))
     }
     SettingsGroup(T("网络")) {
         SwitchRow("IPv6", T("为 VPN 分配 IPv6 地址并解析 IPv6"), s.enableIpv6, { on -> patch(true) { put("enableIpv6", on) } })
         RowDivider()
-        NavRow(T("本地代理端口"), T("HTTP + SOCKS5 混合端口，仅代理模式或允许局域网连接时开启"), s.mixedPort.toString()) { edit = "mixedPort" }
+        NavRow(T("本地代理端口"), T("HTTP + SOCKS5 混合端口"), s.mixedPort.toString(), info = T("仅代理模式，或打开「允许局域网连接」时开启。VPN 模式下手机上的应用不需要它。")) { edit = "mixedPort" }
         RowDivider()
-        SwitchRow(T("允许局域网连接"), T("局域网内其他设备可以使用这台手机的代理端口"), s.allowLan, { on -> patch(true) { put("allowLan", on) } })
+        SwitchRow(T("允许局域网连接"), T("其他设备可以用这台手机的代理端口"), s.allowLan, { on -> patch(true) { put("allowLan", on) } })
         RowDivider()
-        SwitchRow(T("显示连接所属应用"), T("「活动」页显示每个连接是哪个应用发起的，每个连接都要多查询一次，略增耗电"), showApps, { on ->
+        SwitchRow(T("显示连接所属应用"), T("在「活动」页显示，略增耗电"), showApps, { on ->
             Prefs.setShowApps(on)
             dev.efah.nextbox.bg.Box.reloadIfRunning()
-        })
+        }, info = T("「活动」页显示每个连接是哪个应用发起的。每个连接都要向系统多查询一次，所以会略增耗电。"))
         RowDivider()
         NavRow(T("更新规则集"), T("重新下载当前需要的规则集")) {
-            scope.launch { Repo.updateRuleSets().onSuccess { toast(it) }.onFailure { toast(it.message ?: T("更新失败")) } }
+            scope.launch { Repo.updateRuleSets().onSuccess { toast.ok(it) }.onFailure { toast.error(it.message ?: T("更新失败")) } }
         }
     }
     when (edit) {
@@ -342,7 +340,7 @@ private fun ColumnScope.AdvancedPage() {
         "mixedPort" -> TextDialog(T("本地代理端口"), s.mixedPort.toString(), "1024 - 65535", { edit = null }, number = true) { v ->
             edit = null
             val port = v.toIntOrNull()
-            if (port == null || port !in 1024..65535) toast(T("端口无效")) else patch(true) { put("mixedPort", port) }
+            if (port == null || port !in 1024..65535) toast.error(T("端口无效")) else patch(true) { put("mixedPort", port) }
         }
     }
 }
@@ -361,7 +359,7 @@ private fun ColumnScope.AboutPage() {
         runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
     }
     NbCard(padding = PaddingValues(0.dp)) {
-        NavRow("NextBox", T("基于 NekoBox / sing-box 的代理客户端"), BuildConfig.VERSION_NAME) {}
+        NavRow("NextBox", T("基于 sing-box 内核的代理客户端"), BuildConfig.VERSION_NAME) {}
         RowDivider()
         NavRow(
             T("检查更新"),
@@ -372,8 +370,8 @@ private fun ColumnScope.AboutPage() {
             checking = true
             scope.launch {
                 Updater.check(manual = true)
-                    .onSuccess { if (it == null) toast(T("已是最新版本")) }
-                    .onFailure { toast(T("检查更新失败：") + (it.message ?: it.javaClass.simpleName)) }
+                    .onSuccess { if (it == null) toast.ok(T("已是最新版本")) }
+                    .onFailure { toast.error(T("检查更新失败：") + (it.message ?: it.javaClass.simpleName)) }
                 checking = false
             }
         }
@@ -422,8 +420,8 @@ private fun ColumnScope.BackupPage() {
         scope.launch {
             Repo.exportBackup(BackupParts(nodes = nodes, rules = rules, settings = other, appearance = look, password = password)).onSuccess { out ->
                 runCatching { ctx.contentResolver.openOutputStream(uri)?.use { it.write(out.toByteArray()) } }
-                    .onSuccess { toast(T("已导出备份")); password = ""; again = "" }.onFailure { toast(it.message ?: T("导出失败")) }
-            }.onFailure { toast(it.message ?: T("导出失败")) }
+                    .onSuccess { toast.ok(T("已导出备份")); password = ""; again = "" }.onFailure { toast.error(it.message ?: T("导出失败")) }
+            }.onFailure { toast.error(it.message ?: T("导出失败")) }
             busy = false
         }
     }
@@ -438,14 +436,14 @@ private fun ColumnScope.BackupPage() {
                     pendingPassword = pw
                     info = i
                 }
-            }.onFailure { toast(it.message ?: T("不是有效的备份文件")) }
+            }.onFailure { toast.error(it.message ?: T("不是有效的备份文件")) }
         }
     }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val text = runCatching { ctx.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
-        if (text == null) toast(T("读取文件失败")) else inspect(text, "")
+        if (text == null) toast.error(T("读取文件失败")) else inspect(text, "")
     }
 
     val nothing = !nodes && !rules && !look && !other
@@ -458,40 +456,26 @@ private fun ColumnScope.BackupPage() {
         PartRow(look, T("外观"), T("主题、主题色、语言")) { look = it }
         PartRow(other, T("其他设置"), T("DNS、代理范围、通知等")) { other = it }
         val pw = androidx.compose.ui.text.input.PasswordVisualTransformation()
-        OutlinedTextField(
+        NbField(
             password, { password = it }, singleLine = true, label = { Text(T("密码")) },
             visualTransformation = pw, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
-        OutlinedTextField(
+        NbField(
             again, { again = it }, singleLine = true, label = { Text(T("再输一次")) },
             isError = again.isNotEmpty() && again != password,
             supportingText = { Text(if (again.isNotEmpty() && again != password) T("两次输入的密码不一样") else T("忘记密码就没法恢复，请记好。")) },
             visualTransformation = pw, modifier = Modifier.fillMaxWidth(),
         )
-        Button(
-            onClick = { exportLauncher.launch("NextBox-" + T("备份") + "-" + java.time.LocalDate.now() + ".json") },
-            enabled = !busy && !nothing && password.isNotEmpty() && password == again,
-            colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(48.dp),
-        ) {
-            Text(
-                when {
+        NbButton(when {
                     busy -> T("正在导出…")
                     nothing -> T("请至少选择一项内容")
                     else -> T("保存备份文件…")
-                },
-                fontWeight = FontWeight.Bold,
-            )
-        }
+                }, { exportLauncher.launch("NextBox-" + T("备份") + "-" + java.time.LocalDate.now() + ".json") }, Modifier.fillMaxWidth().padding(top = 6.dp).height(48.dp), enabled = !busy && !nothing && password.isNotEmpty() && password == again)
     }
     NbCard {
         Text(T("导入备份"), style = NbType.bodyBold, color = c.text)
         Text(T("手机版或 Windows 版导出的文件，也支持 profiles.json"), style = NbType.small, color = c.muted)
-        Button(
-            onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
-            colors = ButtonDefaults.buttonColors(containerColor = c.accentSoft, contentColor = c.accentInk),
-            modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp),
-        ) { Text(T("选择文件…"), fontWeight = FontWeight.Bold) }
+        NbButton(T("选择文件…"), { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }, Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp))
     }
 
     if (askPassword) {
@@ -508,7 +492,7 @@ private fun ColumnScope.BackupPage() {
             pending = null
             scope.launch {
                 Repo.importBackup(text, parts.copy(password = pendingPassword))
-                    .onSuccess { toast(it) }.onFailure { toast(it.message ?: T("恢复失败")) }
+                    .onSuccess { toast.ok(it) }.onFailure { toast.error(it.message ?: T("恢复失败")) }
             }
         }
     }
@@ -567,7 +551,7 @@ private fun ImportSheet(i: BackupInfo, onDismiss: () -> Unit, onImport: (BackupP
         }
         val notes = buildList {
             if (rules && i.desktopRules > 0) add(T("其中 %d 条按电脑程序分流，只在 Windows 版生效，会原样保留，再导出给电脑时不会丢。", i.desktopRules))
-            if (rules && i.scenes.isNotEmpty()) add(T("电脑上打开的场景（%s）会变成对应的规则，放在原来的位置。", i.scenes.joinToString(T("、")) { sceneName(it) }))
+            if (rules && i.scenes.isNotEmpty()) add(T("电脑上打开的「%s」会变成同名规则集，放在原来的位置。", i.scenes.joinToString(T("、")) { sceneName(it) }))
             if (fromOther && ((rules && i.hasRules) || (other && i.hasSettings))) add(T("全部直连的选择、端口、TUN 等这台手机的设置不会被覆盖。"))
         }
         if (notes.isNotEmpty()) {
@@ -590,21 +574,15 @@ private fun ImportSheet(i: BackupInfo, onDismiss: () -> Unit, onImport: (BackupP
         }
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TextButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp)) { Text(T("取消")) }
-            Button(
-                onClick = { onImport(BackupParts(nodes = nodes && i.hasNodes, rules = rules && i.hasRules, settings = other && i.hasSettings, appearance = look && i.hasAppearance, replace = replace)) },
-                enabled = any,
-                colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-                modifier = Modifier.weight(2f).height(48.dp),
-            ) { Text(T("导入"), fontWeight = FontWeight.Bold) }
+            NbButton(T("取消"), onDismiss, Modifier.weight(1f).height(48.dp), kind = BtnKind.Secondary)
+            NbButton(T("导入"), { onImport(BackupParts(nodes = nodes && i.hasNodes, rules = rules && i.hasRules, settings = other && i.hasSettings, appearance = look && i.hasAppearance, replace = replace)) }, Modifier.weight(2f).height(48.dp), enabled = any)
         }
     }
 }
 
-/** The names the desktop app gives its ready-made scenes. */
+/** The names of the desktop app's scenes that become rule sets here (see foldScenes in the core). */
 private fun sceneName(id: String): String = when (id) {
     "ai" -> T("AI 服务")
     "media" -> T("流媒体")
-    "games" -> T("游戏")
     else -> id
 }

@@ -1,12 +1,12 @@
 package dev.efah.nextbox.ui
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,17 +14,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,14 +38,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
@@ -166,7 +166,7 @@ fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
 fun RowDivider() = HorizontalDivider(color = Nb.c.line, thickness = 1.dp, modifier = Modifier.padding(start = 16.dp))
 
 @Composable
-fun SwitchRow(label: String, sub: String?, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
+fun SwitchRow(label: String, sub: String?, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true, info: String? = null) {
     val c = Nb.c
     Row(
         Modifier
@@ -177,7 +177,7 @@ fun SwitchRow(label: String, sub: String?, checked: Boolean, onChange: (Boolean)
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(label, style = NbType.body, color = if (enabled) c.text else c.muted)
+            RowLabel(label, info, if (enabled) c.text else c.muted)
             if (!sub.isNullOrEmpty()) Text(sub, style = NbType.small, color = c.muted)
         }
         Spacer(Modifier.width(12.dp))
@@ -197,7 +197,7 @@ fun SwitchRow(label: String, sub: String?, checked: Boolean, onChange: (Boolean)
 }
 
 @Composable
-fun NavRow(label: String, sub: String? = null, value: String = "", onClick: () -> Unit) {
+fun NavRow(label: String, sub: String? = null, value: String = "", info: String? = null, onClick: () -> Unit) {
     val c = Nb.c
     Row(
         Modifier
@@ -208,13 +208,25 @@ fun NavRow(label: String, sub: String? = null, value: String = "", onClick: () -
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(label, style = NbType.body, color = c.text)
+            RowLabel(label, info, c.text)
             if (!sub.isNullOrEmpty()) Text(sub, style = NbType.small, color = c.muted)
         }
         if (value.isNotEmpty()) {
             Text(value, style = NbType.small.copy(fontSize = 13.sp), color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
         }
         Icon(NbIcons.Chevron, null, tint = c.muted, modifier = Modifier.padding(start = 4.dp).size(18.dp))
+    }
+}
+
+/**
+ * A row's title, with a "?" after it when there is more to say than its one
+ * line under the title holds.
+ */
+@Composable
+private fun RowLabel(label: String, info: String?, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = NbType.body, color = color)
+        if (info != null) InfoIcon(label, info)
     }
 }
 

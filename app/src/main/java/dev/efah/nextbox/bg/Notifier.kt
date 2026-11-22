@@ -1,6 +1,5 @@
 package dev.efah.nextbox.bg
 
-import dev.efah.nextbox.ui.T
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -10,18 +9,19 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.SystemClock
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import dev.efah.nextbox.App
-import dev.efah.nextbox.R
 import dev.efah.nextbox.data.Prefs
 import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.UsageReport
-import dev.efah.nextbox.ui.MainActivity
+import dev.efah.nextbox.R
 import dev.efah.nextbox.ui.fmtBytes
 import dev.efah.nextbox.ui.fmtSpeed
+import dev.efah.nextbox.ui.MainActivity
+import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.theme.parseHex
-import androidx.compose.ui.graphics.toArgb
 
 /** The ongoing notification: live speed, usage and quick actions. */
 class Notifier(private val service: Service, private val isVpn: Boolean) {

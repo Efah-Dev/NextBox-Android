@@ -1,27 +1,29 @@
 package dev.efah.nextbox.data
 
-import dev.efah.nextbox.ui.T
 import android.content.Context
 import dev.efah.nextbox.bg.Box
 import dev.efah.nextbox.nbcore.LatencyHandler
 import dev.efah.nextbox.nbcore.Nbcore
-import dev.efah.nextbox.nbtest.Nbtest
 import dev.efah.nextbox.nbtest.LatencyHandler as NbtestHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import dev.efah.nextbox.nbtest.Nbtest
+import dev.efah.nextbox.ui.T
 import java.io.File
 import java.util.TimeZone
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.put
 
 /**
  * The app's single source of data: a thin, coroutine friendly wrapper around
@@ -164,6 +166,77 @@ object Repo {
 
     suspend fun updateSubscription(groupId: Long): Result<String> = reloadIfConfigChanges {
         call { Nbcore.updateSubscription(groupId, Box.subscriptionProxy()) }
+    }
+
+    /** A message for the user from work that goes on after the page that started it. */
+    class Notice(val text: String, val ok: Boolean?) // null: neither a success nor a failure
+
+    private val _notices = MutableSharedFlow<Notice>(extraBufferCapacity = 8)
+    val notices: SharedFlow<Notice> = _notices
+
+    /** Subscriptions being downloaded: group ids, [ADDING] for a new one. */
+    private val _updating = MutableStateFlow<Set<Long>>(emptySet())
+    val updating: StateFlow<Set<Long>> = _updating.asStateFlow()
+    const val ADDING = -1L
+
+    /** A Clash subscription whose other parts are still to be chosen, after it was added or updated. */
+    private val _clashAsk = MutableStateFlow<Pair<Long, ClashInfo>?>(null)
+    val clashAsk: StateFlow<Pair<Long, ClashInfo>?> = _clashAsk.asStateFlow()
+
+    fun askClash(groupId: Long, info: ClashInfo) { _clashAsk.value = groupId to info }
+
+    fun clashAnswered() { _clashAsk.value = null }
+
+    /**
+     * Updates a subscription without holding up the app: the nodes page shows
+     * it on the group's card ([updating]) and the result comes as a [Notice].
+     */
+    fun updateInBackground(groupId: Long) {
+        if (groupId in _updating.value) return
+        _updating.update { it + groupId }
+        scope.launch {
+            try {
+                updateSubscription(groupId)
+                    .onSuccess { _notices.tryEmit(Notice(it, true)); askClashOnce(groupId) }
+                    .onFailure { _notices.tryEmit(Notice(T("更新失败：") + (it.message ?: T("未知错误")), false)) }
+            } finally {
+                _updating.update { it - groupId }
+            }
+        }
+    }
+
+    /** Adds a subscription in the background, as [updateInBackground]; the new group becomes the current one. */
+    fun addInBackground(name: String, url: String) {
+        _updating.update { it + ADDING }
+        scope.launch {
+            try {
+                addSubscription(name, url)
+                    .onSuccess { _notices.tryEmit(Notice(it, true)); askClashOnce(_state.value.currentGroupId) }
+                    .onFailure { _notices.tryEmit(Notice(T("获取订阅失败：") + (it.message ?: T("未知错误")), false)) }
+            } finally {
+                _updating.update { it - ADDING }
+            }
+        }
+    }
+
+    /** Asks about a Clash subscription's other parts the first time only. */
+    private suspend fun askClashOnce(groupId: Long) {
+        clashPreview(groupId).getOrNull()?.takeIf { it.current == null }?.let { askClash(groupId, it) }
+    }
+
+    /** Reads a subscription again for the choice of its other parts; null result: it has none. */
+    fun reviewClash(groupId: Long) {
+        if (groupId in _updating.value) return
+        _updating.update { it + groupId }
+        scope.launch {
+            try {
+                clashPreview(groupId, fetch = true)
+                    .onSuccess { info -> if (info == null) _notices.tryEmit(Notice(T("这个订阅不是 Clash 格式，没有分组和规则可以导入"), null)) else askClash(groupId, info) }
+                    .onFailure { _notices.tryEmit(Notice(it.message ?: T("读取失败"), false)) }
+            } finally {
+                _updating.update { it - groupId }
+            }
+        }
     }
 
     /**
@@ -319,9 +392,10 @@ object Repo {
     /**
      * Tests the given nodes with the configured method; UDP based protocols
      * always use the URL test. Results show up in [profiles] as they arrive.
-     * [sortAfter] sorts the current group by latency once the test is done.
+     * [sortBy] sorts the current group once the test is done: "latency", or
+     * "default" for the order of the subscription (null keeps the order).
      */
-    fun testLatency(ids: List<Long>, sortAfter: Boolean = false) {
+    fun testLatency(ids: List<Long>, sortBy: String? = null) {
         if (ids.isEmpty()) return
         val byId = _profiles.value.associateBy { it.id }
         val (urlIds, tcpIds) = if (Prefs.latencyMode.value == Prefs.TEST_URL) {
@@ -359,7 +433,7 @@ object Repo {
             val stopped = cancelled
             cancelled = false
             _testing.value = emptySet()
-            if (sortAfter && !stopped) runCatching { Nbcore.sortGroup(_state.value.currentGroupId, "latency") }
+            if (sortBy != null && !stopped) runCatching { Nbcore.sortGroup(_state.value.currentGroupId, sortBy) }
             runCatching { refreshNow() }
         }
     }

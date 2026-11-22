@@ -1,56 +1,56 @@
 package dev.efah.nextbox.ui.screens
 
-import dev.efah.nextbox.ui.T
 import android.graphics.drawable.Drawable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import dev.efah.nextbox.bg.Box as Core
 import dev.efah.nextbox.bg.Status
 import dev.efah.nextbox.bg.toList
 import dev.efah.nextbox.libbox.CommandClient
@@ -64,18 +64,18 @@ import dev.efah.nextbox.libbox.OutboundGroupIterator
 import dev.efah.nextbox.libbox.StatusMessage
 import dev.efah.nextbox.libbox.StringIterator
 import dev.efah.nextbox.ui.EmptyHint
+import dev.efah.nextbox.ui.fmtSpeed
 import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.LocalToast
 import dev.efah.nextbox.ui.NbCard
 import dev.efah.nextbox.ui.Segmented
-import dev.efah.nextbox.ui.TopBar
-import dev.efah.nextbox.ui.fmtSpeed
+import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import dev.efah.nextbox.bg.Box as Core
 
 private data class Conn(
     val id: String,
@@ -244,7 +244,7 @@ private fun ConnectionList(list: List<Conn>, pad: PaddingValues, onShowPath: (St
     ) {
         item(key = "hint") {
             Text(
-                T("点一条连接，可以把它的网站或应用加进分流规则。") + if (showApps) "" else "\n" + T("想看到每个连接来自哪个应用，可以在「设置 → 高级」里打开「显示连接所属应用」。"),
+                T("点一条连接，可以把它的网站或应用加进分流规则。") + if (showApps) "" else "\n" + T("要看连接来自哪个应用：设置 → 高级 →「显示连接所属应用」。"),
                 style = NbType.small, color = Nb.c.muted, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
             )
         }
@@ -382,7 +382,7 @@ private fun LogList(logs: List<LogLine>, pad: PaddingValues) {
                     fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, lineHeight = 15.sp,
                     modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = {
                         dev.efah.nextbox.App.clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NextBox", l.time + " " + l.text))
-                        toast(T("已复制这一行"))
+                        toast.ok(T("已复制这一行"))
                     }),
                 )
             }

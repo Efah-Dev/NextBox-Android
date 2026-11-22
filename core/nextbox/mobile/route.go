@@ -337,23 +337,73 @@ func entryMatches(dir string, e config.Entry, host string, isDomain bool, addrs 
 	return "", false
 }
 
-// pcOnlyScenes are scenes of NextBox for Windows that do nothing useful on a
-// phone (Steam and other game downloads). They stay in the settings, so a
-// backup carries them back to Windows unchanged, but the phone neither
-// routes by them nor shows them.
-var pcOnlyScenes = map[string]bool{"games": true}
+// hiddenScenes are the ready-made scenes of NextBox for Windows the phone
+// does not offer: only bypassing mainland China is a fixed step here, AI
+// services and streaming are rule sets the user makes (foldScenes turns the
+// ones that were on into such rule sets), and game downloads do nothing
+// useful on a phone. They stay in the settings, so a backup carries them
+// back to Windows, but the phone neither routes by them nor shows them.
+var hiddenScenes = map[string]bool{"ai": true, "media": true, "games": true}
 
-// phoneSettings is set as the phone routes by it: the PC-only scenes off.
+// foldedScenes are the hidden scenes that become a rule set of the same
+// sites when they are on (games never applied on a phone).
+type foldedScene struct {
+	id, name string
+	geosite  []string
+}
+
+var foldedScenes = []foldedScene{
+	{"ai", "AI 服务", []string{"category-ai-!cn"}},
+	{"media", "流媒体", []string{"youtube", "netflix", "disney", "spotify", "hbo", "primevideo", "tiktok"}},
+}
+
+func isFolded(id string) bool {
+	return slices.ContainsFunc(foldedScenes, func(f foldedScene) bool { return f.id == id })
+}
+
+// phoneSettings is set as the phone routes by it: the hidden scenes off.
 func phoneSettings(set store.Settings) store.Settings {
 	scenes := make([]store.Scene, len(set.Scenes))
 	for i, sc := range set.Scenes {
-		if pcOnlyScenes[sc.ID] {
+		if hiddenScenes[sc.ID] {
 			sc.Enabled = false
 		}
 		scenes[i] = sc
 	}
 	set.Scenes = scenes
 	return set
+}
+
+// foldScenes turns the AI and streaming scenes that are on into rule sets
+// with the same sites and target, in the scene's place, and turns the scenes
+// off, so that routing stays as it was after they left the route page (also
+// for a backup from Windows). It reports whether anything changed.
+func foldScenes(set *store.Settings) bool {
+	changed := false
+	for _, f := range foldedScenes {
+		si := slices.IndexFunc(set.Scenes, func(sc store.Scene) bool { return sc.ID == f.id && sc.Enabled })
+		if si < 0 {
+			continue
+		}
+		target := set.Scenes[si].Target
+		if target == "" {
+			target = store.TargetProxy
+		}
+		rs := store.Rule{
+			Kind: store.KindSet, Name: i18n.T(f.name), Target: target, Values: []string{},
+			Items: []store.RuleItem{{Kind: "geosite", Values: f.geosite}},
+		}
+		at := slices.IndexFunc(set.Rules, func(r store.Rule) bool {
+			return r.Kind == store.KindScene && len(r.Values) > 0 && r.Values[0] == f.id
+		})
+		if at < 0 {
+			at = len(set.Rules)
+		}
+		set.Rules = slices.Insert(set.Rules, at, rs)
+		set.Scenes[si].Enabled = false
+		changed = true
+	}
+	return changed
 }
 
 // setMatches reports whether the rule-set file at path matches host.

@@ -8,12 +8,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -22,40 +22,40 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.Prefs
 import dev.efah.nextbox.data.Repo
+import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.Lang
 import dev.efah.nextbox.ui.LocalToast
 import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.NbButton
 import dev.efah.nextbox.ui.NbCard
+import dev.efah.nextbox.ui.NbField
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.SectionTitle
 import dev.efah.nextbox.ui.T
-import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -94,7 +94,7 @@ fun SettingsScreen(onPerApp: () -> Unit, onRules: () -> Unit, onOpen: (String) -
     var dialog by remember { mutableStateOf<String?>(null) }
 
     fun patch(reload: Boolean = true, block: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) {
-        scope.launch { Repo.updateSettings(buildJsonObject(block), reload).onFailure { toast(it.message ?: T("保存失败")) } }
+        scope.launch { Repo.updateSettings(buildJsonObject(block), reload).onFailure { toast.error(it.message ?: T("保存失败")) } }
     }
 
     GlassScreen(header = { TopBar(T("设置")) }) { pad ->
@@ -169,7 +169,10 @@ fun SettingsScreen(onPerApp: () -> Unit, onRules: () -> Unit, onOpen: (String) -
     }
 
     when (dialog) {
-        "mode" -> ChoiceDialog(T("连接方式"), listOf(true to T("VPN 模式"), false to T("仅代理")), s.tunEnabled, { dialog = null }) { v ->
+        "mode" -> ChoiceDialog(
+            T("连接方式"), listOf(true to T("VPN 模式"), false to T("仅代理")), s.tunEnabled, { dialog = null },
+            descs = listOf(T("所有应用经过 NextBox，按规则分流"), T("只开本地代理端口，由应用自己设置")),
+        ) { v ->
             dialog = null
             patch { put("tunEnabled", v) }
             if (!v) toast(T("只开启本地代理端口 %d，需要应用自己设置代理", s.mixedPort))
@@ -280,14 +283,14 @@ fun TextDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(
+            NbField(
                 v, { v = it }, singleLine = true, placeholder = { Text(hint) },
                 keyboardOptions = if (number) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
                 modifier = Modifier.fillMaxWidth(),
             )
         },
-        confirmButton = { TextButton(onClick = { onConfirm(v.trim()) }) { Text(T("保存")) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(T("取消")) } },
+        confirmButton = { NbButton(T("保存"), { onConfirm(v.trim()) }) },
+        dismissButton = { NbButton(T("取消"), onDismiss, kind = BtnKind.Secondary) },
     )
 }
 
@@ -301,28 +304,13 @@ internal fun autoLabel(hours: Int): String = when {
 
 internal val languages = listOf("auto" to "跟随系统", "zh-CN" to "简体中文", "zh-TW" to "繁體中文", "en" to "English") // i18n:skip
 
+/** One of [options] (value to label), in a sheet; [descs] are optional lines under the labels. */
 @Composable
-fun <V> ChoiceDialog(title: String, options: List<Pair<V, String>>, current: V, onDismiss: () -> Unit, onPick: (V) -> Unit) {
-    val c = Nb.c
-    NbAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                options.forEach { (value, label) ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onPick(value) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = value == current, onClick = { onPick(value) })
-                        Text(label, style = NbType.body, color = c.text)
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(T("取消")) } },
+fun <V> ChoiceDialog(title: String, options: List<Pair<V, String>>, current: V, onDismiss: () -> Unit, descs: List<String> = emptyList(), onPick: (V) -> Unit) =
+    dev.efah.nextbox.ui.ChoiceSheet(
+        title, options.mapIndexed { i, (v, label) -> dev.efah.nextbox.ui.ChoiceOption(v, label, descs.getOrElse(i) { "" }) },
+        current, onDismiss, onPick = onPick,
     )
-}
 
 @Composable
 fun PasswordDialog(title: String, note: String, confirm: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
@@ -333,7 +321,7 @@ fun PasswordDialog(title: String, note: String, confirm: String, onDismiss: () -
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(note, style = NbType.small, color = Nb.c.muted)
-                OutlinedTextField(
+                NbField(
                     v, { v = it }, singleLine = true, placeholder = { Text(T("密码")) },
                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -341,8 +329,8 @@ fun PasswordDialog(title: String, note: String, confirm: String, onDismiss: () -
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(v) }) { Text(confirm) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(T("取消")) } },
+        confirmButton = { NbButton(confirm, { onConfirm(v) }) },
+        dismissButton = { NbButton(T("取消"), onDismiss, kind = BtnKind.Secondary) },
     )
 }
 

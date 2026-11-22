@@ -11,8 +11,8 @@ import dev.efah.nextbox.ui.MainActivity
 import dev.efah.nextbox.ui.T
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** Quick settings tile: tap to connect / disconnect, long press opens the app. */

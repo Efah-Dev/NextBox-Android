@@ -5,67 +5,64 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.NbJson
 import dev.efah.nextbox.data.Profile
-import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.data.protocolName
+import dev.efah.nextbox.data.Repo
 import dev.efah.nextbox.ui.BarIcon
 import dev.efah.nextbox.ui.LocalBottomInset
 import dev.efah.nextbox.ui.LocalToast
+import dev.efah.nextbox.ui.NbButton
 import dev.efah.nextbox.ui.NbCard
+import dev.efah.nextbox.ui.NbField
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
-import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
 private val pretty = Json { prettyPrint = true; prettyPrintIndent = "  " }
@@ -162,7 +159,7 @@ fun NodeEditorScreen(id: Long, newType: String = "vless", onClose: () -> Unit) {
         val p = (original ?: Profile(groupId = state.currentGroupId)).copy(name = name.trim(), outbound = out)
         scope.launch {
             Repo.saveProfile(p)
-                .onSuccess { toast(T("已保存")); onClose() }
+                .onSuccess { toast.ok(T("已保存")); onClose() }
                 .onFailure { error = it.message }
         }
     }
@@ -172,11 +169,7 @@ fun NodeEditorScreen(id: Long, newType: String = "vless", onClose: () -> Unit) {
             if (id == 0L) T("添加节点") else T("编辑节点"),
             leading = { BarIcon(NbIcons.Back, T("返回"), onClose) },
         ) {
-            Button(
-                onClick = ::save,
-                colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-                modifier = Modifier.padding(end = 8.dp),
-            ) { Text(T("保存")) }
+            NbButton(T("保存"), ::save, Modifier.padding(end = 8.dp))
         }
         Segmented(
             listOf(T("表单"), "JSON"), mode,
@@ -202,7 +195,7 @@ fun NodeEditorScreen(id: Long, newType: String = "vless", onClose: () -> Unit) {
         ) {
             if (error != null) Text(error!!, style = NbType.small, color = c.bad, modifier = Modifier.padding(horizontal = 4.dp))
             if (mode == 1) {
-                OutlinedTextField(
+                NbField(
                     json, { json = it; error = null },
                     label = { Text(T("sing-box 出站配置（JSON）")) },
                     textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = c.text),
@@ -222,7 +215,7 @@ private fun ColumnScope.Form(name: String, onName: (String) -> Unit, ob: JsonObj
 
     @Composable
     fun Field(label: String, path: String, number: Boolean = false, mono: Boolean = false, hint: String = "") {
-        OutlinedTextField(
+        NbField(
             ob.text(path),
             { v ->
                 val t = v.trim()
@@ -231,7 +224,7 @@ private fun ColumnScope.Form(name: String, onName: (String) -> Unit, ob: JsonObj
                         path,
                         when {
                             t.isEmpty() -> null
-                            number -> t.toIntOrNull()?.let { JsonPrimitive(it) } ?: return@OutlinedTextField
+                            number -> t.toIntOrNull()?.let { JsonPrimitive(it) } ?: return@NbField
                             else -> JsonPrimitive(t)
                         },
                     ),
@@ -247,7 +240,7 @@ private fun ColumnScope.Form(name: String, onName: (String) -> Unit, ob: JsonObj
     }
 
     Section(T("基本")) {
-        OutlinedTextField(name, onName, label = { Text(T("名称")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        NbField(name, onName, label = { Text(T("名称")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Choice(T("协议"), type, types.map { it to protocolName(it) }) { t ->
             if (t != type) set(blank(t).with("server", ob.at("server")).with("server_port", ob.at("server_port")))
         }
@@ -279,7 +272,7 @@ private fun ColumnScope.Form(name: String, onName: (String) -> Unit, ob: JsonObj
             }
             "hysteria2" -> {
                 Field(T("密码"), "password", mono = true)
-                OutlinedTextField(
+                NbField(
                     ob.text("obfs.password"),
                     { v ->
                         val t = v.trim()
@@ -325,7 +318,7 @@ private fun ColumnScope.Form(name: String, onName: (String) -> Unit, ob: JsonObj
             }
             if (on) {
                 Field(T("SNI（服务器名称）"), "tls.server_name", hint = "example.com")
-                OutlinedTextField(
+                NbField(
                     ob.text("tls.alpn"),
                     { v ->
                         val items = v.split(',').map { it.trim() }.filter { it.isNotEmpty() }
@@ -436,9 +429,9 @@ private fun Choice(label: String, value: String, options: List<Pair<String, Stri
             Text(options.firstOrNull { it.first == value }?.second ?: value, style = NbType.body, color = c.accentInk)
             Icon(NbIcons.Chevron, null, tint = c.muted, modifier = Modifier.padding(start = 4.dp).size(18.dp))
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        dev.efah.nextbox.ui.NbMenu(open, { open = false }) {
             options.forEach { (v, l) ->
-                DropdownMenuItem(text = { Text(l) }, onClick = { open = false; onPick(v) })
+                dev.efah.nextbox.ui.NbMenuItem(l, if (v == value) NbIcons.Check else null, { open = false; onPick(v) })
             }
         }
     }

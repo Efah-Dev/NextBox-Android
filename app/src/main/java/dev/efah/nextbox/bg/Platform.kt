@@ -12,6 +12,7 @@ import dev.efah.nextbox.libbox.InterfaceUpdateListener
 import dev.efah.nextbox.libbox.Libbox
 import dev.efah.nextbox.libbox.LocalDNSTransport
 import dev.efah.nextbox.libbox.NeighborUpdateListener
+import dev.efah.nextbox.libbox.NetworkInterface as BoxInterface
 import dev.efah.nextbox.libbox.NetworkInterfaceIterator
 import dev.efah.nextbox.libbox.Notification
 import dev.efah.nextbox.libbox.PlatformInterface
@@ -24,7 +25,6 @@ import java.net.Inet6Address
 import java.net.InetSocketAddress
 import java.net.InterfaceAddress
 import java.net.NetworkInterface
-import dev.efah.nextbox.libbox.NetworkInterface as BoxInterface
 
 class StringArray(private val items: List<String>) : StringIterator {
     private var i = 0

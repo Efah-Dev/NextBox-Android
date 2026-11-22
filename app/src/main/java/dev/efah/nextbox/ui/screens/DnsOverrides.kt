@@ -3,17 +3,16 @@ package dev.efah.nextbox.ui.screens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -26,19 +25,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.efah.nextbox.data.DnsOverride
 import dev.efah.nextbox.data.NbJson
 import dev.efah.nextbox.data.Repo
+import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.LocalToast
-import dev.efah.nextbox.ui.NbAlertDialog
-import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.NavRow
+import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.NbButton
+import dev.efah.nextbox.ui.NbField
+import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.theme.Nb
@@ -56,7 +58,7 @@ import kotlinx.serialization.json.buildJsonObject
 @Composable
 fun DnsOverridesRow(list: List<DnsOverride>) {
     var open by remember { mutableStateOf(false) }
-    NavRow(T("DNS 复写"), T("指定的域名改用别的 DNS 服务器解析，或者直接指定 IP"), if (list.isEmpty()) T("未设置") else T("%d 条", list.size)) { open = true }
+    NavRow(T("DNS 复写"), T("指定域名改用别的 DNS 或固定 IP"), if (list.isEmpty()) T("未设置") else T("%d 条", list.size)) { open = true }
     if (open) DnsOverridesDialog(list) { open = false }
 }
 
@@ -73,7 +75,7 @@ private fun DnsOverridesDialog(initial: List<DnsOverride>, onDismiss: () -> Unit
         list = next
         scope.launch {
             val js = NbJson.encodeToJsonElement(ListSerializer(DnsOverride.serializer()), next)
-            Repo.updateSettings(buildJsonObject { put("dnsOverrides", js) }).onFailure { toast(it.message ?: T("保存失败")) }
+            Repo.updateSettings(buildJsonObject { put("dnsOverrides", js) }).onFailure { toast.error(it.message ?: T("保存失败")) }
         }
     }
     NbAlertDialog(
@@ -102,8 +104,8 @@ private fun DnsOverridesDialog(initial: List<DnsOverride>, onDismiss: () -> Unit
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(T("完成")) } },
-        dismissButton = { TextButton(onClick = { editing = -1 }) { Text(T("添加")) } },
+        confirmButton = { NbButton(T("完成"), onDismiss) },
+        dismissButton = { NbButton(T("添加"), { editing = -1 }, kind = BtnKind.Secondary) },
     )
     if (editing != -2) {
         DnsOverrideEditor(list.getOrNull(editing), { editing = -2 }) { o ->
@@ -133,7 +135,7 @@ private fun DnsOverrideEditor(initial: DnsOverride?, onDismiss: () -> Unit, onSa
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Segmented(listOf(T("用指定的 DNS 服务器"), T("固定 IP")), kind, onSelect = { kind = it })
-                OutlinedTextField(
+                NbField(
                     domains, { domains = it }, minLines = 2,
                     label = { Text(if (kind == 0) T("域名（含子域名）") else T("完整域名")) },
                     placeholder = { Text(if (kind == 0) "netflix.com" else "nas.home.arpa") },
@@ -141,7 +143,7 @@ private fun DnsOverrideEditor(initial: DnsOverride?, onDismiss: () -> Unit, onSa
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (kind == 0) {
-                    OutlinedTextField(server, { server = it }, singleLine = true, label = { Text(T("DNS 服务器")) }, placeholder = { Text("10.8.0.53") }, modifier = Modifier.fillMaxWidth())
+                    NbField(server, { server = it }, singleLine = true, label = { Text(T("DNS 服务器")) }, placeholder = { Text("10.8.0.53") }, modifier = Modifier.fillMaxWidth())
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(T("经代理查询"), style = NbType.body, color = c.text)
@@ -153,21 +155,21 @@ private fun DnsOverrideEditor(initial: DnsOverride?, onDismiss: () -> Unit, onSa
                         )
                     }
                 } else {
-                    OutlinedTextField(ips, { ips = it }, minLines = 1, label = { Text("IP") }, placeholder = { Text("192.168.1.20") }, modifier = Modifier.fillMaxWidth())
+                    NbField(ips, { ips = it }, minLines = 1, label = { Text("IP") }, placeholder = { Text("192.168.1.20") }, modifier = Modifier.fillMaxWidth())
                 }
                 if (problem.isNotEmpty()) Text(problem, style = NbType.small, color = c.muted)
             }
         },
         confirmButton = {
-            TextButton(enabled = problem.isEmpty(), onClick = {
+            NbButton(T("保存"), {
                 val base = initial ?: DnsOverride()
                 onSave(
                     if (kind == 0) base.copy(domains = split(domains), server = server.trim(), viaProxy = viaProxy, ips = emptyList())
                     else base.copy(domains = split(domains), ips = split(ips), server = "", viaProxy = false),
                 )
-            }) { Text(T("保存")) }
+            }, enabled = problem.isEmpty())
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(T("取消")) } },
+        dismissButton = { NbButton(T("取消"), onDismiss, kind = BtnKind.Secondary) },
     )
 }
 
@@ -221,7 +223,7 @@ private fun SubscriptionDnsDialog(subs: List<dev.efah.nextbox.data.Group>, onDis
                             Switch(
                                 using, { on ->
                                     if (on && !offered) editing = g
-                                    else scope.launch { Repo.useSubscriptionDns(g.id, on).onFailure { toast(it.message ?: T("保存失败")) } }
+                                    else scope.launch { Repo.useSubscriptionDns(g.id, on).onFailure { toast.error(it.message ?: T("保存失败")) } }
                                 },
                                 colors = SwitchDefaults.colors(checkedTrackColor = c.accentStrong, checkedThumbColor = Color.White),
                             )
@@ -230,7 +232,7 @@ private fun SubscriptionDnsDialog(subs: List<dev.efah.nextbox.data.Group>, onDis
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(T("完成")) } },
+        confirmButton = { NbButton(T("完成"), onDismiss) },
     )
     editing?.let { g ->
         TwoFieldDialog(
@@ -239,7 +241,7 @@ private fun SubscriptionDnsDialog(subs: List<dev.efah.nextbox.data.Group>, onDis
             note = T("只用于这个订阅的节点：连接它的节点时代替远程 DNS，并用来解析它的节点地址。手动设置后，更新订阅不会再覆盖。"),
         ) { remote, resolver ->
             editing = null
-            scope.launch { Repo.setGroupDns(g.id, remote, resolver).onFailure { toast(it.message ?: T("保存失败")) } }
+            scope.launch { Repo.setGroupDns(g.id, remote, resolver).onFailure { toast.error(it.message ?: T("保存失败")) } }
         }
     }
 }

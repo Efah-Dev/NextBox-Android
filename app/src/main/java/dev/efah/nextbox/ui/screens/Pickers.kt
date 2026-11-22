@@ -13,40 +13,37 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -58,16 +55,19 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import dev.efah.nextbox.ui.BarIcon
+import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.Chip
+import dev.efah.nextbox.ui.flagged
 import dev.efah.nextbox.ui.GlowBackground
 import dev.efah.nextbox.ui.LocalToast
 import dev.efah.nextbox.ui.NbAlertDialog
+import dev.efah.nextbox.ui.NbButton
+import dev.efah.nextbox.ui.NbField
 import dev.efah.nextbox.ui.NbIcons
 import dev.efah.nextbox.ui.T
-import dev.efah.nextbox.ui.TopBar
-import dev.efah.nextbox.ui.flagged
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.TopBar
 
 /**
  * A full-screen page for picking from a long list (apps, regions, services)
@@ -95,11 +95,7 @@ fun PickerPage(title: String, count: Int, onDone: () -> Unit, onDismiss: () -> U
                 Column(Modifier.fillMaxSize().imePadding()) {
                     TopBar(title, leading = { BarIcon(NbIcons.Back, T("返回"), onDismiss) })
                     Column(Modifier.weight(1f).fillMaxWidth(), content = content)
-                    Button(
-                        onClick = onDone,
-                        colors = ButtonDefaults.buttonColors(containerColor = c.accentStrong),
-                        modifier = Modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp).fillMaxWidth().height(50.dp),
-                    ) { Text(if (count == 0) T("完成") else T("完成（%d 个）", count), fontWeight = FontWeight.Bold) }
+                    NbButton(if (count == 0) T("完成") else T("完成（%d 个）", count), onDone, Modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp).fillMaxWidth().height(50.dp))
                 }
             }
         }
@@ -128,7 +124,7 @@ fun AppPicker(initial: Set<String>, onDone: (Set<String>) -> Unit, onDismiss: ()
             onDismissRequest = { manual = false },
             title = { Text(T("手动输入包名")) },
             text = {
-                OutlinedTextField(
+                NbField(
                     pkg, { pkg = it }, singleLine = true, placeholder = { Text("com.example.app") },
                     supportingText = { Text(T("没安装的应用也可以先加上")) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -137,17 +133,17 @@ fun AppPicker(initial: Set<String>, onDone: (Set<String>) -> Unit, onDismiss: ()
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                NbButton(T("添加"), {
                     val v = pkg.trim()
                     if (!packageName.matches(v)) {
-                        toast(T("包名格式不对，例如 com.example.app"))
+                        toast.error(T("包名格式不对，例如 com.example.app"))
                     } else {
                         picked = picked + v
                         manual = false
                     }
-                }) { Text(T("添加")) }
+                })
             },
-            dismissButton = { TextButton(onClick = { manual = false }) { Text(T("取消")) } },
+            dismissButton = { NbButton(T("取消"), { manual = false }, kind = BtnKind.Secondary) },
         )
     }
 }
@@ -159,7 +155,7 @@ fun RegionPicker(initial: Set<String>, onDone: (Set<String>) -> Unit, onDismiss:
     var picked by remember { mutableStateOf(initial) }
     var query by remember { mutableStateOf("") }
     PickerPage(T("选择地区"), picked.size, onDone = { onDone(picked) }, onDismiss = onDismiss) {
-        OutlinedTextField(
+        NbField(
             query, { query = it }, singleLine = true,
             placeholder = { Text(T("搜索名称、代码或简拼，例如 rb")) },
             leadingIcon = { Icon(NbIcons.Search, null, tint = c.muted) },
@@ -175,7 +171,7 @@ fun RegionPicker(initial: Set<String>, onDone: (Set<String>) -> Unit, onDismiss:
                         .clickable { picked = if (on) picked - r.code else picked + r.code }.padding(horizontal = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(flagged(r.name, r.code.uppercase()), style = NbType.body, color = c.text, modifier = Modifier.weight(1f))
+                    dev.efah.nextbox.ui.FlagText(flagged(r.name, r.code.uppercase()), style = NbType.body, color = c.text, modifier = Modifier.weight(1f))
                     Text(r.code, style = NbType.small, color = c.muted, modifier = Modifier.padding(end = 8.dp))
                     Checkbox(
                         checked = on, onCheckedChange = { picked = if (on) picked - r.code else picked + r.code },

@@ -12,19 +12,19 @@
 ### Nodes and subscriptions
 
 - **Protocols**: Shadowsocks (incl. obfs, v2ray-plugin, ShadowTLS), VMess, VLESS (incl. Reality / Vision), Trojan, Hysteria2, TUIC, AnyTLS, NaiveProxy (HTTPS and QUIC), SOCKS, HTTP; chain proxies
-- **Subscriptions**: Base64 link lists, Clash / Clash.Meta YAML, sing-box JSON; used traffic and expiry date; automatic updates. Updates keep your order and add new nodes at the end
-- **Clash conversion**: the groups of a subscription become policy groups, its rules become rule sets (one per target), its DNS settings DNS overrides; you tick what to take the first time (rules are off by default), and it follows every update. *Clash subscription content* in the group menu chooses again
+- **Subscriptions**: Base64 link lists, Clash / Clash.Meta YAML, sing-box JSON; used traffic and expiry date; automatic updates, in the background while you keep working. Updates keep your order and add new nodes at the end
+- **Clash conversion**: the groups of a subscription become policy groups, its rules become rule sets (one per target), its DNS settings DNS overrides; you tick what to take the first time (rules are off by default), and it follows every update. *Groups and rules of the subscription* in the group menu (long-press a group) chooses again
 - **Subscription DNS**: when a subscription names its provider's own DNS servers, the import offers them; they are used only for that subscription's nodes. Switch them per subscription in *Settings → Advanced → DNS → Subscription DNS*
 - **Import**: QR codes, the clipboard, share links opened from other apps (confirmed first); `clash://` and `sing-box://` links too
-- **Nodes**: form or JSON editing, search, multi-select delete and test, QR sharing; remove duplicates; flags before node names; drag to reorder, or sort by latency, name or region
+- **Nodes**: form or JSON editing, search, multi-select delete and test, QR sharing; remove duplicates; flags before node names, protocol and server address below them; long-press and drag to reorder, or sort by default order, latency, name or region; long-press a group for its menu
 - **Chain proxies**: 2 to 8 nodes in turn; or long-press a node and pick *Connect through other nodes*
-- **Latency tests**: URL and TCP tests, UDP protocols always use the URL test. After testing a whole group the nodes can be sorted by latency, asked each time or remembered (*Settings → Test → After a test*)
+- **Latency tests**: URL and TCP tests, UDP protocols always use the URL test. After testing a whole group the nodes go back to the order of the subscription (default), keep their order or are sorted by latency, asked each time or remembered (*Settings → Test → After a test*)
 - **Automatic node choice** (optional): if the selected node does not answer when connecting, the fastest working node of its group is used
 
 ### Routing
 
 - **Route modes**: global / rule / direct, as on Windows
-- **Route path**: every connection is checked from top to bottom. The first step (LAN) and the last (everything else) stay in place; ad blocking, scenes (bypass mainland China, AI services, streaming), rules and rule sets can be dragged into order, and steps that are off can be hidden
+- **Route path**: every connection is checked from top to bottom. The first step (LAN) and the last (everything else) stay in place (in VPN mode, LAN and local addresses stay outside the VPN, as without it); ad blocking, bypass mainland China, rules and rule sets can be dragged into order; AI services, streaming and other sites are one tap away in a rule set's site categories, and steps that are off can be hidden
 - **Rules**: sites (common services in one tap), apps (searchable, or type a package name), IPs and IP regions; rules can be named; an optional text mode
 - **Rule sets**: domains, IPs, apps, site categories, IP regions and online sing-box rule-sets or Clash rule providers (YAML / text) in one named set with one target
 - **Tester**: type an address or pick an app, and the path shows the step that catches it, and why
