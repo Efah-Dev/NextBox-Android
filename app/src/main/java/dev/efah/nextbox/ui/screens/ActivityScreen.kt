@@ -1,5 +1,9 @@
 package dev.efah.nextbox.ui.screens
 
+import dev.efah.nextbox.ui.NbTextButton
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.lazy.itemsIndexed
 import android.graphics.drawable.Drawable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -24,7 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -91,8 +94,14 @@ private data class Conn(
     val createdAt: Long,
 )
 
-/** A log line: id orders and keys it, time is the clock time ("14:53:48"). */
-private data class LogLine(val id: Long, val level: Int, val time: String, val text: String)
+/**
+ * A log line: id orders and keys it, time is the clock time ("14:53:48"),
+ * tag the core's level word ("ERROR") and text the message after it.
+ */
+private data class LogLine(val id: Long, val level: Int, val time: String, val tag: String, val text: String) {
+    /** As copied: one line, like the core's own log. */
+    fun plain() = "$time $tag $text"
+}
 
 /** Most log lines the page keeps; older ones are dropped from the top. */
 private const val MAX_LOG_LINES = 500
@@ -115,21 +124,24 @@ private fun logLine(level: Int, message: String): LogLine {
     val base = Core.coreStartedAt
     var at = now
     var body = text
+    var tag = when (level) { 0 -> "PANIC"; 1 -> "FATAL"; 2 -> "ERROR"; else -> "WARN" }
     if (m != null) {
-        body = m.groupValues[1] + " " + text.substring(m.range.last + 1)
+        tag = m.groupValues[1]
+        body = text.substring(m.range.last + 1)
         val t = base + (m.groupValues[2].toLongOrNull() ?: 0) * 1000
         // a line of an earlier instance (before a reload) would land in the future
         if (base > 0 && t <= now + 2000) at = t
     }
     val time = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
         .format(java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()))
-    return LogLine(++logSeq, level, time, body)
+    return LogLine(++logSeq, level, time, tag, body)
 }
 
 /** Live connections and core logs, streamed from the command server while visible. */
 @Composable
 fun ActivityScreen(onShowPath: (host: String, pkg: String) -> Unit) {
     val c = Nb.c
+    val toast = LocalToast.current
     val status by Core.status.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
     val conns = remember { mutableStateMapOf<String, Conn>() }
@@ -213,7 +225,15 @@ fun ActivityScreen(onShowPath: (host: String, pkg: String) -> Unit) {
     GlassScreen(header = {
         TopBar(T("活动")) {
             if (tab == 0 && conns.isNotEmpty()) {
-                TextButton(onClick = { runCatching { client?.closeConnections() } }) { Text(T("全部断开"), color = c.bad) }
+                NbTextButton(T("全部断开"), { runCatching { client?.closeConnections() } }, color = c.bad)
+            }
+            if (tab == 1 && logs.isNotEmpty()) {
+                NbTextButton(T("复制全部"), {
+                    dev.efah.nextbox.App.clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NextBox", logs.joinToString("\n") { it.plain() }))
+                    toast.ok(T("已复制 %d 条日志", logs.size))
+                })
+                // only what this page shows; the log file keeps everything
+                NbTextButton(T("清空"), { logs.clear() }, color = c.muted)
             }
         }
         Segmented(
@@ -359,32 +379,39 @@ private fun LogList(logs: List<LogLine>, pad: PaddingValues) {
         if (follow || atBottom) seenId = lastId
     }
     val unseen = if (follow) 0 else logs.count { it.id > seenId }
-    Box(Modifier.fillMaxSize()) {
+    // starts below the header: lines of text scrolling under it would show through
+    Box(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding()).clipToBounds()) {
         LazyColumn(
             state = state,
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = pad.calculateBottomPadding() + 16.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = pad.calculateBottomPadding() + 16.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             // keys keep the lines the user is reading in place while old ones are dropped from the top
-            items(logs, key = { it.id }) { l ->
+            itemsIndexed(logs, key = { _, l -> l.id }) { i, l ->
                 val color = when {
                     l.level <= 2 -> c.bad
                     l.level == 3 -> c.mid
                     else -> c.text
                 }
-                Text(
-                    androidx.compose.ui.text.buildAnnotatedString {
-                        withStyle(androidx.compose.ui.text.SpanStyle(color = c.muted)) { append(l.time) }
-                        append("  ")
-                        withStyle(androidx.compose.ui.text.SpanStyle(color = color)) { append(l.text) }
-                    },
-                    fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, lineHeight = 15.sp,
-                    modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = {
-                        dev.efah.nextbox.App.clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NextBox", l.time + " " + l.text))
+                Column(
+                    Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = {
+                        dev.efah.nextbox.App.clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NextBox", l.plain()))
                         toast.ok(T("已复制这一行"))
                     }),
-                )
+                ) {
+                    if (i > 0) HorizontalDivider(color = c.line, thickness = 0.5.dp)
+                    Row(Modifier.padding(top = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(l.time, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, color = c.muted)
+                        Text(
+                            if (l.level <= 2) T("错误") else T("警告"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                    Text(
+                        l.text, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, lineHeight = 15.sp, color = c.text,
+                        modifier = Modifier.padding(top = 2.dp, bottom = 7.dp),
+                    )
+                }
             }
         }
         if (!atBottom && !follow) {

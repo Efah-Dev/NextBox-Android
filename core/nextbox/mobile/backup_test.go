@@ -198,3 +198,16 @@ func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
 }
+
+func TestLegacyTestMode(t *testing.T) {
+	s := store.DefaultSettings()
+	legacyTestMode(&s, backupDoc{Settings: json.RawMessage(`{"testUrl":"x"}`), Android: json.RawMessage(`{"latencyMode":"url"}`)})
+	if s.TestMode != store.TestURL {
+		t.Errorf("backup of 2.2.0: %q", s.TestMode)
+	}
+	s = store.DefaultSettings()
+	legacyTestMode(&s, backupDoc{Settings: json.RawMessage(`{"testMode":"tcp"}`), Android: json.RawMessage(`{"latencyMode":"url"}`)})
+	if s.TestMode != store.TestTCP {
+		t.Errorf("shared setting overridden: %q", s.TestMode)
+	}
+}

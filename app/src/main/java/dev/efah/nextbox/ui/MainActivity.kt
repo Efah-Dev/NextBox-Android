@@ -141,6 +141,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         pendingIntent.value = intent
         setContent {
+            val hideRecents by Prefs.hideRecents.collectAsState()
+            LaunchedEffect(hideRecents) {
+                val am = getSystemService(android.app.ActivityManager::class.java)
+                am?.appTasks?.forEach { runCatching { it.setExcludeFromRecents(hideRecents) } }
+            }
             val state by Repo.state.collectAsState()
             NextBoxTheme(state.settings.theme, state.settings.accentColor) {
                 NextBoxApp(pendingIntent)

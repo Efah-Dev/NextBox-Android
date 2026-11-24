@@ -29,7 +29,6 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -159,9 +158,9 @@ fun AppChooser(
                     if (showBulkActions && list != null) {
                         // bulk actions work on what the list shows (search and system filter)
                         val visible = shown.map { it.pkg }.toSet()
-                        TextButton(onClick = { onChange((selected - visible) + (visible - selected)) }) { Text(T("反选"), color = c.accentInk) }
-                        TextButton(onClick = { onChange(selected + visible) }) { Text(T("全选"), color = c.accentInk) }
-                        TextButton(onClick = { onChange(selected - visible) }) { Text(T("清空"), color = c.accentInk) }
+                        dev.efah.nextbox.ui.NbTextButton(T("反选"), { onChange((selected - visible) + (visible - selected)) })
+                        dev.efah.nextbox.ui.NbTextButton(T("全选"), { onChange(selected + visible) })
+                        dev.efah.nextbox.ui.NbTextButton(T("清空"), { onChange(selected - visible) })
                     }
                 }
             }

@@ -18,7 +18,7 @@
 - **Import**: QR codes, the clipboard, share links opened from other apps (confirmed first); `clash://` and `sing-box://` links too
 - **Nodes**: form or JSON editing, search, multi-select delete and test, QR sharing; remove duplicates; flags before node names, protocol and server address below them; long-press and drag to reorder, or sort by default order, latency, name or region; long-press a group for its menu
 - **Chain proxies**: 2 to 8 nodes in turn; or long-press a node and pick *Connect through other nodes*
-- **Latency tests**: URL and TCP tests, UDP protocols always use the URL test. After testing a whole group the nodes go back to the order of the subscription (default), keep their order or are sorted by latency, asked each time or remembered (*Settings → Test → After a test*)
+- **Latency tests**: TCP by default, or URL, the same setting as in the Windows app; UDP protocols and chains always use the URL test. After testing a whole group the nodes go back to the order of the subscription, keep their order or are sorted by latency, asked once on the first test and changed later in *Settings → Test*
 - **Automatic node choice** (optional): if the selected node does not answer when connecting, the fastest working node of its group is used
 
 ### Routing
@@ -40,9 +40,9 @@
 - **Notification**: live speed, session / today / month usage; disconnect, switch nodes or the bypass from it
 - **Quick settings tile**: connect / disconnect in one tap
 - **Usage**: today, this month (billing day of your choice), the last 30 days, and per node
-- **Activity**: live connections (with the matched rule and exit node) and the core log; tap a connection to add its site or app to a rule
+- **Activity**: live connections (with the matched rule and exit node) and the core log; tap a connection to add its site or app to a rule; copy the whole log at once
 - **Modes**: VPN, or proxy only (local HTTP + SOCKS5 port)
-- **Appearance**: light / dark / system, custom accent colour; glass effect (can be turned off)
+- **Appearance**: light / dark / system, custom accent colour; glass effect (can be turned off); can be hidden from the recent apps
 - **Backups**: shared with the Windows app; nodes and subscriptions, routing rules, appearance and other settings each optional; local settings such as ports and TUN stay as they are
 - **Updates**: check in *About*, or turn on the automatic check (off by default)
 - **Languages**: Simplified Chinese, Traditional Chinese, English
@@ -78,6 +78,7 @@ while one of that subscription's nodes is connected they replace the remote DNS 
 
 ## What each version added
 
+- **2.2.0**: long-press to reorder, a group menu on long press, protocol and server address under nodes, the subscription order after a test, background subscription updates, LAN outside the VPN
 - **2.1.0**: Clash conversion, subscription DNS, DNS overrides, exit IP and ASN on the home page, a one-screen home page, swiping between pages, sorting by latency after a test, updates keep the order
 - **2.0.0**: routing as on Windows (route path, drag to reorder), rule sets, rule names, IP regions, the resolving choice, matched rules on the activity page, appearance in backups
 - **1.1.3**: removing duplicate nodes, custom accent colours, backups compatible with Windows 2.2

@@ -217,7 +217,9 @@ data class Settings(
     val testUrl: String = "https://www.google.com/generate_204",
     val testTimeout: Int = 5000,
     val testConcurrency: Int = 16,
-    /** After a speed test of a whole group: "" asks, "latency" sorts, "none" keeps the order. */
+    /** How speed tests measure: "tcp" (the default) or "url"; UDP protocols and chain proxies always use URL. */
+    val testMode: String = "tcp",
+    /** After a speed test of a whole group: "default" (the subscription's order), "latency" or "none"; "" until chosen (asked once). */
     val sortAfterTest: String = "",
     /** DNS 复写: domains answered by a DNS server of their own, or with fixed IPs. */
     val dnsOverrides: List<DnsOverride> = emptyList(),

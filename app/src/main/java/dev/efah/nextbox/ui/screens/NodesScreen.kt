@@ -133,7 +133,6 @@ fun NodesScreen(
     // the nodes the delete confirmation is about
     var deleting by remember { mutableStateOf<Set<Long>>(emptySet()) }
     // the nodes of a group test waiting for the "order afterwards?" answer
-    var sortAsk by remember { mutableStateOf<List<Long>?>(null) }
     val drag = rememberDragState()
     val list = rememberLazyListState()
     // picking several nodes: sideways moves are ours, not a swipe to the next page
@@ -153,12 +152,15 @@ fun NodesScreen(
     // dragging works on the whole list only, not on search results or while picking
     val canDrag = query.isNullOrBlank() && picked == null
 
+    // the group is sorted afterwards as the settings say (a single node is
+    // never moved); the first test of a whole group asks once
+    var sortAsk by remember { mutableStateOf<List<Long>?>(null) }
     fun testGroup(ids: List<Long>) {
         val pref = state.settings.sortAfterTest
         when {
             ids.size < 2 || pref == "none" -> Repo.testLatency(ids)
-            pref == "latency" || pref == "default" -> Repo.testLatency(ids, pref)
-            else -> sortAsk = ids
+            pref.isEmpty() -> sortAsk = ids
+            else -> Repo.testLatency(ids, pref)
         }
     }
 
@@ -428,9 +430,9 @@ fun NodesScreen(
     }
 
     qr?.let { (name, link) -> QrDialog(name, link) { qr = null } }
-    sortAsk?.let { ids -> SortAfterTestDialog(ids.size, { sortAsk = null }) { by -> sortAsk = null; Repo.testLatency(ids, by) } }
 
     val dg = dialogGroup ?: group
+    sortAsk?.let { ids -> SortAfterTestDialog(ids.size, { sortAsk = null }) { by -> sortAsk = null; Repo.testLatency(ids, by) } }
     when (dialog) {
         "sub" -> TwoFieldDialog(
             title = T("添加订阅"), first = T("名称"), second = T("订阅地址"), initialFirst = "", initialSecond = "",
@@ -543,7 +545,7 @@ private fun SubscriptionCard(g: Group, count: Int, updating: Boolean, onRefresh:
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(T("%s · %d 个节点", g.name, count), style = NbType.bodyBold, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(if (updating) T("正在更新，可以继续操作…") else fmtAgo(g.updatedAt), style = NbType.small, color = if (updating) c.accentInk else c.muted)
+                    Text(if (updating) T("节点正在更新，请等待……") else fmtAgo(g.updatedAt), style = NbType.small, color = if (updating) c.accentInk else c.muted)
                 }
                 Box(
                     Modifier.size(40.dp).clip(CircleShape).background(c.accentSoft).clickable(enabled = !updating, onClick = onRefresh),

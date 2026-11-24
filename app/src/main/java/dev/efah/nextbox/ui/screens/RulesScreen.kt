@@ -28,10 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,7 +46,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -315,7 +311,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                 }
                 dev.efah.nextbox.ui.SwitchRow(T("文本模式"), T("每行一条规则，适合一次改很多条"), textMode, { Prefs.setRuleTextMode(it) })
             }
-            TextButton(onClick = { confirmReset = true }, modifier = Modifier.align(Alignment.End)) { Text(T("恢复默认"), color = c.muted) }
+            dev.efah.nextbox.ui.NbTextButton(T("恢复默认"), { confirmReset = true }, Modifier.align(Alignment.End), color = c.muted)
         }
     }
 
@@ -482,11 +478,7 @@ fun StepCard(
                         .background(if (active || highlight) bg else c.line.copy(alpha = 0.4f)).padding(horizontal = 8.dp, vertical = 4.dp),
                 )
                 when {
-                    onToggle != null -> Switch(
-                        checked = checked, onCheckedChange = onToggle,
-                        colors = SwitchDefaults.colors(checkedTrackColor = c.accentStrong, checkedThumbColor = Color.White),
-                        modifier = Modifier.padding(start = 4.dp).graphicsLayer { scaleX = 0.8f; scaleY = 0.8f },
-                    )
+                    onToggle != null -> dev.efah.nextbox.ui.NbSwitch(checked, onToggle, Modifier.padding(start = 4.dp), scale = 0.8f)
                     else -> Spacer(Modifier.width(8.dp))
                 }
             }

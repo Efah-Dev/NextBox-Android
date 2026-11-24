@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -210,9 +209,7 @@ fun ScanScreen(onResult: (String) -> Unit, onClose: () -> Unit) {
             Text(
                 T("把节点或订阅的二维码放进取景框"), style = NbType.body, color = c.muted, textAlign = TextAlign.Center,
             )
-            TextButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                Text(T("从相册选择图片"), color = c.accentInk)
-            }
+            dev.efah.nextbox.ui.NbTextButton(T("从相册选择图片"), { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
         }
     }
 }

@@ -18,9 +18,6 @@ object Prefs {
     const val SCOPE_APPS = "apps" // only the selected apps
     const val SCOPE_DIRECT = "direct" // everything direct (VPN stays on, e.g. for ad blocking)
 
-    const val TEST_TCP = "tcp"
-    const val TEST_URL = "url"
-
     private class Pref<T>(val key: String, val default: T) {
         val flow = MutableStateFlow(default)
     }
@@ -31,12 +28,12 @@ object Prefs {
     private val speed = Pref("notify_speed", true)
     private val stats = Pref("notify_stats", true)
     private val billing = Pref("billing_day", 1)
-    private val testMode = Pref("test_mode", TEST_URL)
     private val fake = Pref("fake_ip", true)
     private val owner = Pref("show_apps", false)
     private val glassPref = Pref("glass", true)
     private val lang = Pref("language", "auto")
     private val subHours = Pref("sub_auto_hours", 24)
+    private val hideRecentsPref = Pref("hide_recents", false)
 
     val routeScope: StateFlow<String> = scope.flow.asStateFlow()
     val bypassCn: StateFlow<Boolean> = bypass.flow.asStateFlow()
@@ -44,7 +41,6 @@ object Prefs {
     val notifySpeed: StateFlow<Boolean> = speed.flow.asStateFlow()
     val notifyStats: StateFlow<Boolean> = stats.flow.asStateFlow()
     val billingDay: StateFlow<Int> = billing.flow.asStateFlow()
-    val latencyMode: StateFlow<String> = testMode.flow.asStateFlow()
     val fakeIp: StateFlow<Boolean> = fake.flow.asStateFlow()
     val showApps: StateFlow<Boolean> = owner.flow.asStateFlow()
 
@@ -57,10 +53,17 @@ object Prefs {
     /** Update subscriptions older than this many hours; 0 turns it off. */
     val subAutoHours: StateFlow<Int> = subHours.flow.asStateFlow()
 
+    /** Keep NextBox out of the recent apps (隐藏后台); the VPN keeps running. */
+    val hideRecents: StateFlow<Boolean> = hideRecentsPref.flow.asStateFlow()
+
     private var migrated = true
+
+    /** An earlier version ran here (its preferences were there before this start). */
+    private var hadData = false
 
     fun init(context: Context) {
         sp = context.getSharedPreferences("nextbox", Context.MODE_PRIVATE)
+        hadData = sp.all.isNotEmpty()
         migrated = sp.contains(scope.key)
         scope.flow.value = sp.getString(scope.key, scope.default) ?: scope.default
         bypass.flow.value = sp.getBoolean(bypass.key, bypass.default)
@@ -68,12 +71,12 @@ object Prefs {
         speed.flow.value = sp.getBoolean(speed.key, speed.default)
         stats.flow.value = sp.getBoolean(stats.key, stats.default)
         billing.flow.value = sp.getInt(billing.key, billing.default)
-        testMode.flow.value = sp.getString(testMode.key, testMode.default) ?: testMode.default
         fake.flow.value = sp.getBoolean(fake.key, fake.default)
         owner.flow.value = sp.getBoolean(owner.key, owner.default)
         glassPref.flow.value = sp.getBoolean(glassPref.key, glassPref.default)
         lang.flow.value = sp.getString(lang.key, lang.default) ?: lang.default
         subHours.flow.value = sp.getInt(subHours.key, subHours.default)
+        hideRecentsPref.flow.value = sp.getBoolean(hideRecentsPref.key, hideRecentsPref.default)
         autoUpdatePref.flow.value = sp.getBoolean(autoUpdatePref.key, autoUpdatePref.default)
         listOf(textModePref, appModePref, autoConnectPref, autoSelectPref, autoSelectAllPref, autoSelectTimeoutPref, autoSelectWatchPref).forEach { load(it) }
     }
@@ -122,9 +125,27 @@ object Prefs {
         sp.edit().putInt(billing.key, billing.flow.value).apply()
     }
 
-    fun setLatencyMode(v: String) {
-        testMode.flow.value = v
-        sp.edit().putString(testMode.key, v).apply()
+    /**
+     * The speed test method of a version before 2.2.1, which kept it here
+     * (now Settings.testMode, shared with NextBox for Windows), once: what
+     * the user chose, or URL, the default of those versions, when they never
+     * chose (only a choice was stored). null for a new install (TCP, the new
+     * default) and after the first call.
+     */
+    fun takeLegacyTestMode(): String? {
+        if (shown("test_mode_shared")) return null
+        val v = sp.getString("test_mode", null)
+        sp.edit().remove("test_mode").putBoolean("shown_test_mode_shared", true).apply()
+        return when {
+            v == "tcp" || v == "url" -> v
+            hadData -> "url"
+            else -> null
+        }
+    }
+
+    fun setHideRecents(v: Boolean) {
+        hideRecentsPref.flow.value = v
+        sp.edit().putBoolean(hideRecentsPref.key, v).apply()
     }
 
     fun setFakeIp(v: Boolean) {
@@ -244,6 +265,7 @@ object Prefs {
         if (appearance) {
             put("glass", kotlinx.serialization.json.JsonPrimitive(glass.value))
             put("language", kotlinx.serialization.json.JsonPrimitive(language.value))
+            put("hideRecents", kotlinx.serialization.json.JsonPrimitive(hideRecents.value))
         }
         if (!settings) return@buildJsonObject
         put("routeScope", kotlinx.serialization.json.JsonPrimitive(routeScope.value))
@@ -252,7 +274,8 @@ object Prefs {
         put("notifySpeed", kotlinx.serialization.json.JsonPrimitive(notifySpeed.value))
         put("notifyStats", kotlinx.serialization.json.JsonPrimitive(notifyStats.value))
         put("billingDay", kotlinx.serialization.json.JsonPrimitive(billingDay.value))
-        put("latencyMode", kotlinx.serialization.json.JsonPrimitive(latencyMode.value))
+        // for versions before 2.2.1, which kept the test method here
+        put("latencyMode", kotlinx.serialization.json.JsonPrimitive(Repo.state.value.settings.testMode))
         put("fakeIp", kotlinx.serialization.json.JsonPrimitive(fakeIp.value))
         put("subAutoHours", kotlinx.serialization.json.JsonPrimitive(subAutoHours.value))
         put("autoConnect", kotlinx.serialization.json.JsonPrimitive(autoConnect.value))
@@ -271,6 +294,7 @@ object Prefs {
         if (appearance) {
             bool("glass")?.let { setGlass(it) }
             str("language")?.takeIf { it == "auto" || it == "zh-CN" || it == "zh-TW" || it == "en" }?.let { setLanguage(it); dev.efah.nextbox.ui.Lang.apply(it) }
+            bool("hideRecents")?.let { setHideRecents(it) }
         }
         if (!settings) return
         // "direct" (everything direct) was a scope in 1.x; it is a routing mode now, set with the rules (see ImportBackup)
@@ -280,7 +304,6 @@ object Prefs {
         bool("notifySpeed")?.let { setNotifySpeed(it) }
         bool("notifyStats")?.let { setNotifyStats(it) }
         int("billingDay")?.let { setBillingDay(it) }
-        str("latencyMode")?.takeIf { it == TEST_TCP || it == TEST_URL }?.let { setLatencyMode(it) }
         bool("fakeIp")?.let { setFakeIp(it) }
         int("subAutoHours")?.let { setSubAutoHours(it) }
         bool("autoConnect")?.let { setAutoConnect(it) }

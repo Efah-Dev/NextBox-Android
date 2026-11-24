@@ -47,7 +47,7 @@ var appearanceSettings = []string{
 // Other settings that mean the same on every platform (as in the desktop app).
 var portableSettings = []string{
 	"remoteDns", "directDns", "dnsOverrides", "enableIpv6", "sniff",
-	"testUrl", "testTimeout", "testConcurrency",
+	"testUrl", "testTimeout", "testConcurrency", "testMode",
 	"subUserAgent", "subUpdateByProxy", "subAutoUpdate", "subUpdateHours",
 	"countrySource", "autoCheckUpdate", "sortAfterTest",
 }
@@ -306,6 +306,9 @@ func ImportBackup(content, options string) (string, error) {
 		if o.Rules {
 			foldScenes(&next)
 		}
+		if o.Settings {
+			legacyTestMode(&next, doc)
+		}
 		if err := s.SaveSettings(next); err != nil {
 			return "", err
 		}
@@ -329,6 +332,22 @@ func ImportBackup(content, options string) (string, error) {
 	s.Flush()
 	res.Message = i18n.T("已导入：") + strings.Join(done, i18n.T("、"))
 	return marshal(res)
+}
+
+// legacyTestMode takes the speed test method of a backup made before it was
+// a shared setting (the "latencyMode" of the Android preferences).
+func legacyTestMode(s *store.Settings, doc backupDoc) {
+	var in map[string]json.RawMessage
+	json.Unmarshal(doc.Settings, &in)
+	if _, ok := in["testMode"]; ok {
+		return
+	}
+	var prefs struct {
+		LatencyMode string `json:"latencyMode"`
+	}
+	if json.Unmarshal(doc.Android, &prefs) == nil && (prefs.LatencyMode == store.TestTCP || prefs.LatencyMode == store.TestURL) {
+		s.TestMode = prefs.LatencyMode
+	}
 }
 
 // mergeSettings applies the given keys of an imported settings document (all

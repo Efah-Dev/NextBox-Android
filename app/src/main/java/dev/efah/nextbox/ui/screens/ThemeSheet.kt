@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -180,14 +179,14 @@ fun ThemeSheet(theme: String, accent: String, recent: List<String>, onDismiss: (
                 if (whiteContrast(current) < 3f) {
                     Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(T("颜色偏浅，按钮上的白字会看不清"), style = NbType.small, color = c.mid, modifier = Modifier.weight(1f))
-                        TextButton(onClick = {
+                        dev.efah.nextbox.ui.NbTextButton(T("自动加深"), {
                             // darker (and a little more saturated) until white text reads
                             var v = hsv[2]
                             val s = maxOf(hsv[1], 0.55f)
                             while (v > 0.2f && whiteContrast(colorOf(floatArrayOf(hsv[0], s, v))) < 3.2f) v -= 0.02f
                             hsv = floatArrayOf(hsv[0], s, v)
                             hexText = hexOf(colorOf(hsv))
-                        }) { Text(T("自动加深"), color = c.accentInk) }
+                        })
                     }
                 } else {
                     Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -26,7 +26,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -257,10 +256,10 @@ fun RouteTestScreen(initialHost: String, initialPkg: String, onClose: () -> Unit
                         TargetPill(exitTarget, policies, label = exit)
                     }
                     Text(reason, style = NbType.body.copy(fontSize = 13.5.sp), color = c.text, modifier = Modifier.padding(top = 8.dp))
-                    TextButton(onClick = {
+                    dev.efah.nextbox.ui.NbTextButton(T("想换个走法？加一条规则"), {
                         adding = if (pkg.isNotEmpty() && input.isBlank()) RuleDraft(tab = 1, apps = setOf(pkg), target = "direct")
                         else RuleDraft(tab = 0, text = hostOf(input), target = if (exitTarget == "direct") "proxy" else "direct")
-                    }) { Text(T("想换个走法？加一条规则"), color = c.accentInk, fontWeight = FontWeight.Bold) }
+                    }, bold = true)
                 }
             }
         }

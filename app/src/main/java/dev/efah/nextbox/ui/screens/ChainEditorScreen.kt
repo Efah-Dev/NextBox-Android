@@ -25,7 +25,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -285,9 +284,9 @@ fun NodePicker(
             )
             if (!ordered && shown.isNotEmpty()) {
                 val all = shown.all { it.id in picked }
-                TextButton(onClick = {
+                dev.efah.nextbox.ui.NbTextButton(if (all) T("取消全选") else T("全选这 %d 个", shown.size), {
                     picked = if (all) picked - shown.map { it.id }.toSet() else picked + shown.map { it.id }.filter { it !in picked }
-                }) { Text(if (all) T("取消全选") else T("全选这 %d 个", shown.size), color = c.accentInk) }
+                })
             }
         }
         Box(Modifier.fillMaxWidth().height(sheetListHeight(0.45f, 440.dp))) {

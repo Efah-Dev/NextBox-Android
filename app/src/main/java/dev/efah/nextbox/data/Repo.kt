@@ -67,6 +67,11 @@ object Repo {
             Prefs.markShown("route_v3")
             refreshNow()
         }
+        // 2.2.1: the test method is a shared setting (backups carry it both ways)
+        Prefs.takeLegacyTestMode()?.let { mode ->
+            runCatching { Nbcore.saveSettings(buildJsonObject { put("testMode", mode) }.toString()) }
+            refreshNow()
+        }
     }
 
     /** Android-only switches passed to nbcore.BuildConfig. */
@@ -386,24 +391,30 @@ object Repo {
 
     // ---------------------------------------------------------------- latency
 
-    /** Protocols that run over UDP: a TCP handshake says nothing about them. */
-    private val udpTypes = setOf("hysteria2", "hysteria", "tuic", "wireguard")
+    // reached over UDP (no TCP handshake to time), or a chain whose first hop is all a TCP test would reach
+    private val urlOnlyTypes = setOf("hysteria2", "hysteria", "tuic", "wireguard", "chain")
+
+    /** Measured by URL only, as core.URLOnly of NextBox for Windows: also naive over HTTP/3 and vmess / vless / trojan over QUIC. */
+    private fun urlOnly(p: Profile): Boolean =
+        p.type in urlOnlyTypes ||
+            (p.type == "naive" && p.outbound["quic"]?.toString() == "true") ||
+            ((p.outbound["transport"] as? JsonObject)?.get("type") as? kotlinx.serialization.json.JsonPrimitive)?.content == "quic"
 
     /**
-     * Tests the given nodes with the configured method; UDP based protocols
-     * always use the URL test. Results show up in [profiles] as they arrive.
+     * Tests the given nodes with the configured method (Settings.testMode, or
+     * [mode]); UDP based protocols and chain proxies always use the URL test. Results show up in [profiles] as they arrive.
      * [sortBy] sorts the current group once the test is done: "latency", or
      * "default" for the order of the subscription (null keeps the order).
      */
-    fun testLatency(ids: List<Long>, sortBy: String? = null) {
+    fun testLatency(ids: List<Long>, sortBy: String? = null, mode: String? = null) {
         if (ids.isEmpty()) return
         val byId = _profiles.value.associateBy { it.id }
-        val (urlIds, tcpIds) = if (Prefs.latencyMode.value == Prefs.TEST_URL) {
+        val s = _state.value.settings
+        val (urlIds, tcpIds) = if ((mode ?: s.testMode) == "url") {
             ids to emptyList()
         } else {
-            ids.partition { id -> byId[id]?.let { it.type in udpTypes || (it.type == "naive" && it.outbound["quic"]?.toString() == "true") } == true }
+            ids.partition { id -> byId[id]?.let(::urlOnly) == true }
         }
-        val s = _state.value.settings
         _testing.value = ids.toSet()
         cancelled = false
         fun onResult(id: Long, latency: Int, message: String) {

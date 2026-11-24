@@ -17,8 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
@@ -400,13 +398,7 @@ private fun Toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit)
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = NbType.body, color = c.text, modifier = Modifier.weight(1f))
-        Switch(
-            checked = checked, onCheckedChange = onChange,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = c.accentStrong, checkedThumbColor = Color.White,
-                uncheckedTrackColor = c.card, uncheckedBorderColor = c.muted, uncheckedThumbColor = c.muted,
-            ),
-        )
+        dev.efah.nextbox.ui.NbSwitch(checked, onChange)
     }
 }
 

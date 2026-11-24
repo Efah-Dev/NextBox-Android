@@ -1,5 +1,6 @@
 package dev.efah.nextbox.ui.screens
 
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloat
@@ -58,7 +59,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -145,18 +145,7 @@ private fun RouteSection(onPickApps: () -> Unit) {
                 Text(T("绕过中国大陆"), style = NbType.body, color = if (enabled) c.text else c.muted, modifier = Modifier.weight(1f))
                 // how it resolves names, while it is on
                 if (bypass && mode == "rule") ResolveDnsChip(state.settings.bypassDns, Modifier.padding(end = 4.dp))
-                androidx.compose.material3.Switch(
-                    checked = bypass && mode == "rule", enabled = enabled,
-                    onCheckedChange = { scope.launch { Repo.setBypass(it) } },
-                    colors = androidx.compose.material3.SwitchDefaults.colors(
-                        checkedTrackColor = c.accentStrong,
-                        checkedThumbColor = Color.White,
-                        uncheckedTrackColor = c.card,
-                        uncheckedBorderColor = c.muted,
-                        uncheckedThumbColor = c.muted,
-                    ),
-                    modifier = Modifier.graphicsLayer { scaleX = 0.86f; scaleY = 0.86f },
-                )
+                dev.efah.nextbox.ui.NbSwitch(bypass && mode == "rule", { scope.launch { Repo.setBypass(it) } }, enabled = enabled, scale = 0.86f)
             }
             androidx.compose.material3.HorizontalDivider(color = c.line.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
             Row(

@@ -57,31 +57,30 @@ fun CheckRow(checked: Boolean, title: String, sub: String, enabled: Boolean = tr
 }
 
 /**
- * Before testing a whole group: what happens to its order afterwards (the
- * subscription's own order, the order as it is, or by latency), and
- * optionally remember the choice (Settings.sortAfterTest, also in Settings →
- * 测速). [onStart] gets the order to sort by, null to keep it.
+ * Before the first test of a whole group: what happens to its order
+ * afterwards. Asked once; the answer is kept (Settings.sortAfterTest) and
+ * changed in Settings → 测速 later. [onStart] gets the order to sort by, null
+ * to keep it.
  */
 @Composable
 fun SortAfterTestDialog(count: Int, onDismiss: () -> Unit, onStart: (sortBy: String?) -> Unit) {
     val scope = rememberCoroutineScope()
     var choice by remember { mutableStateOf("default") }
-    var remember by remember { mutableStateOf(false) }
     NbAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(T("测速 %d 个节点", count)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(T("测完以后："), style = NbType.small, color = Nb.c.muted)
+                Text(T("测完以后节点怎么排？"), style = NbType.small, color = Nb.c.muted)
                 sortChoices().forEach { (value, title, sub) ->
                     ChoiceCard(choice == value, title, sub, onClick = { choice = value })
                 }
-                CheckRow(remember, T("记住，下次不再询问"), T("可以在「设置 → 测速」里改")) { remember = it }
+                Text(T("只问这一次。以后要改，前往「设置 → 测速 → 测速后」。"), style = NbType.small, color = Nb.c.muted, modifier = Modifier.padding(top = 4.dp))
             }
         },
         confirmButton = {
             NbButton(T("开始测速"), onClick = {
-                if (remember) scope.launch { Repo.updateSettings(buildJsonObject { put("sortAfterTest", choice) }, reload = false) }
+                scope.launch { Repo.updateSettings(buildJsonObject { put("sortAfterTest", choice) }, reload = false) }
                 onStart(choice.takeIf { it != "none" })
             })
         },

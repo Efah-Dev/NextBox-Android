@@ -32,8 +32,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -146,7 +144,11 @@ fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, mod
                         .clickable { onSelect(i) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(label, color = color, fontSize = 14.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium)
+                    // one line: a label that wraps breaks the pill it sits on
+                    Text(
+                        label, color = color, fontSize = 14.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 6.dp),
+                    )
                 }
             }
         }
@@ -181,18 +183,7 @@ fun SwitchRow(label: String, sub: String?, checked: Boolean, onChange: (Boolean)
             if (!sub.isNullOrEmpty()) Text(sub, style = NbType.small, color = c.muted)
         }
         Spacer(Modifier.width(12.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = onChange,
-            enabled = enabled,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = c.accentStrong,
-                checkedThumbColor = Color.White,
-                uncheckedTrackColor = c.card,
-                uncheckedBorderColor = c.muted,
-                uncheckedThumbColor = c.muted,
-            ),
-        )
+        NbSwitch(checked, onChange, enabled = enabled)
     }
 }
 

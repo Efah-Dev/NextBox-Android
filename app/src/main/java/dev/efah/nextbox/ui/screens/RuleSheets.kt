@@ -26,7 +26,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -211,7 +210,7 @@ fun AddRuleSheet(draft: RuleDraft, onDismiss: () -> Unit) {
                     Text(T("匹配方式"), style = NbType.body, color = c.text, modifier = Modifier.weight(1f))
                     Box {
                         var open by remember { mutableStateOf(false) }
-                        TextButton(onClick = { open = true }) { Text(RuleUi.siteKindLabel(siteKind), color = c.accentInk) }
+                        dev.efah.nextbox.ui.NbTextButton(RuleUi.siteKindLabel(siteKind), { open = true })
                         dev.efah.nextbox.ui.NbMenu(open, { open = false }) {
                             RuleUi.siteKinds.forEach { k -> dev.efah.nextbox.ui.NbMenuItem(RuleUi.siteKindLabel(k), if (k == siteKind) NbIcons.Check else null, { open = false; siteKind = k }) }
                         }

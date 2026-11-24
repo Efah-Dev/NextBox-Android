@@ -176,16 +176,15 @@ private fun ColumnScope.TestPage() {
     val toast = LocalToast.current
     val state by Repo.state.collectAsState()
     val s = state.settings
-    val mode by Prefs.latencyMode.collectAsState()
     val patch = patcher(reloadDefault = false)
     var edit by remember { mutableStateOf<String?>(null) }
     NbCard(padding = PaddingValues(0.dp)) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Segmented(listOf(T("URL 测试"), T("TCP 测试")), if (mode == Prefs.TEST_TCP) 1 else 0, onSelect = { i ->
-                Prefs.setLatencyMode(if (i == 1) Prefs.TEST_TCP else Prefs.TEST_URL)
+            Segmented(listOf(T("TCP 测试"), T("URL 测试")), if (s.testMode == "url") 1 else 0, onSelect = { i ->
+                patch(false) { put("testMode", if (i == 1) "url" else "tcp") }
             })
             Text(
-                if (mode == Prefs.TEST_TCP) {
+                if (s.testMode != "url") {
                     T("TCP 测试只测到服务器的握手时间，更快但不代表节点可用。Hysteria2、TUIC 等 UDP 协议和链式代理仍使用 URL 测试。")
                 } else {
                     T("通过节点实际访问测试地址，结果最接近真实体验。")
@@ -201,13 +200,12 @@ private fun ColumnScope.TestPage() {
         NavRow(T("同时测试数"), T("一次并行测试的节点数"), s.testConcurrency.toString()) { edit = "concurrency" }
         RowDivider()
         val sorts = sortChoices()
-        NavRow(T("测速后"), T("测试整个分组之后节点怎么排"), sorts.firstOrNull { it.first == s.sortAfterTest }?.second ?: T("每次询问")) { edit = "sort" }
+        NavRow(T("测速后"), T("测完整个分组之后节点怎么排"), sorts.firstOrNull { it.first == s.sortAfterTest }?.second ?: T("第一次测速时询问")) { edit = "sort" }
     }
     when (edit) {
         "sort" -> dev.efah.nextbox.ui.ChoiceSheet(
             T("测速后"),
-            listOf(dev.efah.nextbox.ui.ChoiceOption("", T("每次询问"), T("测试整个分组前问一次"))) +
-                sortChoices().map { (v, t, d) -> dev.efah.nextbox.ui.ChoiceOption(v, t, d) },
+            sortChoices().map { (v, t, d) -> dev.efah.nextbox.ui.ChoiceOption(v, t, d) },
             s.sortAfterTest, { edit = null },
         ) { v -> edit = null; patch(false) { put("sortAfterTest", v) } }
         "url" -> TestUrlDialog(s.testUrl, { edit = null }) { v -> edit = null; patch(false) { put("testUrl", v) } }

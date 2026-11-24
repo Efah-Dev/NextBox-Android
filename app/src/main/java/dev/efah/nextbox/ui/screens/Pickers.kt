@@ -34,7 +34,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -115,7 +114,7 @@ fun AppPicker(initial: Set<String>, onDone: (Set<String>) -> Unit, onDismiss: ()
         AppChooser(
             selected = picked, onChange = { picked = it }, showBulkActions = false,
             padding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
-            trailing = { TextButton(onClick = { manual = true }) { Text(T("手动输入包名"), color = c.accentInk) } },
+            trailing = { dev.efah.nextbox.ui.NbTextButton(T("手动输入包名"), { manual = true }) },
         )
     }
     if (manual) {

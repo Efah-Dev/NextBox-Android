@@ -36,6 +36,9 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -47,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
@@ -182,6 +186,34 @@ fun NbButton(
         }
         Text(text, color = tint, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
+}
+
+/** A text-only button for toolbars and lines of text: "全部断开", "编辑", "全选". */
+@Composable
+fun NbTextButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, color: Color = Nb.c.accentInk, bold: Boolean = false, enabled: Boolean = true) {
+    TextButton(onClick = onClick, modifier = modifier, enabled = enabled) {
+        Text(
+            text, color = if (enabled) color else color.copy(alpha = 0.45f), maxLines = 1,
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
+        )
+    }
+}
+
+/** The app's switch; [scale] below 1 for switches inside dense rows. */
+@Composable
+fun NbSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true, scale: Float = 1f) {
+    val c = Nb.c
+    Switch(
+        checked = checked, onCheckedChange = onCheckedChange, enabled = enabled,
+        modifier = if (scale == 1f) modifier else modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+        colors = SwitchDefaults.colors(
+            checkedTrackColor = c.accentStrong,
+            checkedThumbColor = Color.White,
+            uncheckedTrackColor = c.card,
+            uncheckedBorderColor = c.muted,
+            uncheckedThumbColor = c.muted,
+        ),
+    )
 }
 
 // ---------------------------------------------------------------- dialogs
@@ -365,6 +397,38 @@ fun NbField(
             cursorColor = c.accentStrong,
         ),
     )
+}
+
+/**
+ * A field with its label above it (not inside the box) and one line below:
+ * [error] in red when set, else the [hint].
+ */
+@Composable
+fun NbLabeledField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    hint: String = "",
+    error: String = "",
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    mono: Boolean = false,
+) {
+    val c = Nb.c
+    Column(modifier.fillMaxWidth()) {
+        Text(label, style = NbType.small, color = if (error.isNotEmpty()) c.bad else c.muted, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+        NbField(
+            value, onValueChange, Modifier.fillMaxWidth(), singleLine = singleLine, minLines = minLines, isError = error.isNotEmpty(),
+            textStyle = if (mono) NbType.body.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace) else NbType.body,
+            placeholder = if (placeholder.isEmpty()) null else ({ Text(placeholder) }),
+        )
+        val below = error.ifEmpty { hint }
+        if (below.isNotEmpty()) {
+            Text(below, style = NbType.small, color = if (error.isNotEmpty()) c.bad else c.muted, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
+        }
+    }
 }
 
 // ---------------------------------------------------------------- explanations

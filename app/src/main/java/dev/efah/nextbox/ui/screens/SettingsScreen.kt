@@ -22,8 +22,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
@@ -86,10 +84,10 @@ fun SettingsScreen(onPerApp: () -> Unit, onRules: () -> Unit, onOpen: (String) -
     val autoConnect by Prefs.autoConnect.collectAsState()
     val autoSelect by Prefs.autoSelect.collectAsState()
     val subAuto by Prefs.subAutoHours.collectAsState()
-    val testMode by Prefs.latencyMode.collectAsState()
     val notifySpeed by Prefs.notifySpeed.collectAsState()
     val notifyStats by Prefs.notifyStats.collectAsState()
     val glass by Prefs.glass.collectAsState()
+    val hideRecents by Prefs.hideRecents.collectAsState()
     val language by Prefs.language.collectAsState()
     var dialog by remember { mutableStateOf<String?>(null) }
 
@@ -138,7 +136,7 @@ fun SettingsScreen(onPerApp: () -> Unit, onRules: () -> Unit, onOpen: (String) -
                 IconSep()
                 IconNav(
                     NbIcons.Bolt, T("测速"), T("方式、测试地址、超时、并发"),
-                    (if (testMode == Prefs.TEST_TCP) "TCP" else "URL") + " · " + T("%d 秒", s.testTimeout / 1000),
+                    (if (s.testMode == "url") "URL" else "TCP") + " · " + T("%d 秒", s.testTimeout / 1000),
                 ) { onOpen(SettingsPages.TEST) }
             }
 
@@ -154,6 +152,8 @@ fun SettingsScreen(onPerApp: () -> Unit, onRules: () -> Unit, onOpen: (String) -
                     NbIcons.Sparkle, T("玻璃效果"), T("省电模式下自动关闭"), glass, { Prefs.setGlass(it) },
                     enabled = android.os.Build.VERSION.SDK_INT >= 31,
                 )
+                IconSep()
+                IconSwitch(NbIcons.EyeOff, T("在最近任务中隐藏"), T("多任务界面不显示 NextBox"), hideRecents, { Prefs.setHideRecents(it) })
                 IconSep()
                 IconNav(NbIcons.Globe, T("语言"), null, languages.firstOrNull { it.first == language }?.second?.let { if (language == "auto") T(it) else it }.orEmpty()) { dialog = "language" }
             }
@@ -250,7 +250,7 @@ fun IconSwitch(icon: ImageVector, label: String, sub: String?, checked: Boolean,
                 Text(label, style = NbType.body, color = if (enabled) c.text else c.muted)
                 if (!sub.isNullOrEmpty()) Text(sub, style = NbType.small, color = c.muted)
             }
-            Switch(checked = checked, onCheckedChange = onChange, enabled = enabled, colors = SwitchDefaults.colors(checkedTrackColor = c.accentStrong))
+            dev.efah.nextbox.ui.NbSwitch(checked, onChange, enabled = enabled)
         }
     }
 }
