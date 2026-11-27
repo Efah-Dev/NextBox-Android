@@ -126,7 +126,7 @@ private fun ColumnScope.AutoSelectPage() {
     val watch by Prefs.autoSelectWatch.collectAsState()
     var dialog by remember { mutableStateOf(false) }
     NbCard(padding = PaddingValues(0.dp)) {
-        SwitchRow(T("自动选择节点"), T("当前节点不通时，换成最快的可用节点"), on, { Prefs.setAutoSelect(it) }, info = T("点连接时如果当前节点连不上，就从下面选的范围里测出最快的可用节点并换过去。默认关闭。"))
+        SwitchRow(T("自动选择节点"), T("节点失效时自动切换"), on, { Prefs.setAutoSelect(it) }, info = T("连接时若当前节点不可用，从下方范围内测出最快的可用节点并切换。默认关闭。"))
         RowDivider()
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(T("从哪些节点里选"), style = NbType.body, color = if (on) c.text else c.muted, modifier = Modifier.padding(start = 4.dp))
@@ -135,14 +135,14 @@ private fun ColumnScope.AutoSelectPage() {
         RowDivider()
         NavRow(T("判定超时"), T("超过这个时间算连不上"), T("%d 秒", timeout / 1000)) { dialog = true }
         RowDivider()
-        SwitchRow(T("连接中节点失效也切换"), T("亮屏时每 5 分钟检查一次"), watch, { Prefs.setAutoSelectWatch(it) }, enabled = on, info = T("连接后，亮屏时每 5 分钟测一次正在用的节点；连续两次不通才换，一次网络波动不会切换。"))
+        SwitchRow(T("连接期间节点失效时切换"), T("亮屏时每 5 分钟检查一次"), watch, { Prefs.setAutoSelectWatch(it) }, enabled = on, info = T("连接期间、亮屏时每 5 分钟检查一次当前节点；连续两次失败才切换，避免网络波动误判。"))
     }
     NbCard {
         Text(T("点连接后"), style = NbType.section, color = c.muted)
         listOf(
-            T("先确认手机能上网，再测当前节点"),
-            T("不通就同时测同组其他节点"),
-            T("连到最快的可用节点；一个都不通就不连接，并说明原因"),
+            T("先确认网络可用，再检查当前节点"),
+            T("不可用时同时测试同组其他节点"),
+            T("连接最快的可用节点；全部不可用时不连接并提示原因"),
         ).forEachIndexed { i, s ->
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.size(22.dp).clip(CircleShape).background(c.accentSoft), contentAlignment = Alignment.Center) {
@@ -152,7 +152,7 @@ private fun ColumnScope.AutoSelectPage() {
             }
         }
     }
-    Note(T("测试使用「测速」里的测试地址，结果会更新到节点列表。"))
+    Note(T("使用「测延迟」中的测试地址，结果同步到节点列表。"))
     if (dialog) {
         ChoiceDialog(T("判定超时"), listOf(2000, 3000, 5000, 8000).map { it to T("%d 秒", it / 1000) }, timeout, { dialog = false }) {
             dialog = false
@@ -185,9 +185,9 @@ private fun ColumnScope.TestPage() {
             })
             Text(
                 if (s.testMode != "url") {
-                    T("TCP 测试只测到服务器的握手时间，更快但不代表节点可用。Hysteria2、TUIC 等 UDP 协议和链式代理仍使用 URL 测试。")
+                    T("TCP 只测与服务器端口建立连接的时间，速度快，但不能说明节点可用。Hysteria2、TUIC 等基于 UDP 的协议和链式代理始终使用 URL 测试。")
                 } else {
-                    T("通过节点实际访问测试地址，结果最接近真实体验。")
+                    T("经节点请求测试地址，结果即实际可用的延迟。")
                 },
                 style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp, top = 6.dp),
             )
@@ -311,22 +311,22 @@ private fun ColumnScope.AdvancedPage() {
         RowDivider()
         SubscriptionDnsRow(state.groups)
         RowDivider()
-        SwitchRow("FakeIP", T("打开网页更快，省一次 DNS 查询"), fakeIp, { on ->
+        SwitchRow("FakeIP", T("为代理域名分配保留地址"), fakeIp, { on ->
             Prefs.setFakeIp(on)
             dev.efah.nextbox.bg.Box.reloadIfRunning()
-        }, info = T("走代理的域名立即得到一个虚拟地址，真实地址由代理那边解析，省去一次经代理的 DNS 查询。"))
+        }, info = T("代理域名先获得保留地址，真实地址由代理服务器解析，省去一次经代理的 DNS 查询。"))
     }
     SettingsGroup(T("网络")) {
         SwitchRow("IPv6", T("为 VPN 分配 IPv6 地址并解析 IPv6"), s.enableIpv6, { on -> patch(true) { put("enableIpv6", on) } })
         RowDivider()
-        NavRow(T("本地代理端口"), T("HTTP + SOCKS5 混合端口"), s.mixedPort.toString(), info = T("仅代理模式，或打开「允许局域网连接」时开启。VPN 模式下手机上的应用不需要它。")) { edit = "mixedPort" }
+        NavRow(T("本地代理端口"), T("HTTP + SOCKS5 混合端口"), s.mixedPort.toString(), info = T("仅在仅代理模式或开启「允许局域网连接」时使用；VPN 模式下本机应用无需此端口。")) { edit = "mixedPort" }
         RowDivider()
         SwitchRow(T("允许局域网连接"), T("其他设备可以用这台手机的代理端口"), s.allowLan, { on -> patch(true) { put("allowLan", on) } })
         RowDivider()
         SwitchRow(T("显示连接所属应用"), T("在「活动」页显示，略增耗电"), showApps, { on ->
             Prefs.setShowApps(on)
             dev.efah.nextbox.bg.Box.reloadIfRunning()
-        }, info = T("「活动」页显示每个连接是哪个应用发起的。每个连接都要向系统多查询一次，所以会略增耗电。"))
+        }, info = T("在「活动」页显示发起每个连接的应用。每个连接需多查询一次系统，耗电略有增加。"))
         RowDivider()
         NavRow(T("更新规则集"), T("重新下载当前需要的规则集")) {
             scope.launch { Repo.updateRuleSets().onSuccess { toast.ok(it) }.onFailure { toast.error(it.message ?: T("更新失败")) } }
@@ -379,6 +379,8 @@ private fun ColumnScope.AboutPage() {
         NavRow(T("官网"), "nextbox.efah.dev") { open(Updater.WEBSITE) }
         RowDivider()
         NavRow("GitHub", "github.com/" + Updater.REPO) { open(Updater.GITHUB) }
+        RowDivider()
+        NavRow(T("Telegram 频道"), "t.me/nextboxofficial") { open(Updater.TELEGRAM) }
         RowDivider()
         NavRow(T("sing-box 内核"), "with_gvisor · with_quic · with_utls · with_naive_outbound", runCatching { Libbox.version() }.getOrDefault("")) {}
     }
@@ -445,7 +447,7 @@ private fun ColumnScope.BackupPage() {
     }
 
     val nothing = !nodes && !rules && !look && !other
-    Note(T("备份文件用密码加密。手机版和 NextBox for Windows 导出的备份可以互相导入。"))
+    Note(T("用密码加密备份文件。Android 版与 Windows 版的备份可以互相导入。"))
     NbCard {
         Text(T("导出备份"), style = NbType.bodyBold, color = c.text)
         Spacer(Modifier.height(4.dp))
@@ -461,7 +463,7 @@ private fun ColumnScope.BackupPage() {
         NbField(
             again, { again = it }, singleLine = true, label = { Text(T("再输一次")) },
             isError = again.isNotEmpty() && again != password,
-            supportingText = { Text(if (again.isNotEmpty() && again != password) T("两次输入的密码不一样") else T("忘记密码就没法恢复，请记好。")) },
+            supportingText = { Text(if (again.isNotEmpty() && again != password) T("两次输入的密码不一样") else T("密码遗失后无法恢复，请妥善保存。")) },
             visualTransformation = pw, modifier = Modifier.fillMaxWidth(),
         )
         NbButton(when {

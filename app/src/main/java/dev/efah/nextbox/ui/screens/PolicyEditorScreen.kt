@@ -145,10 +145,31 @@ fun PolicyEditorScreen(id: Long, onClose: () -> Unit) {
 
             Text(T("使用方式"), style = NbType.section, color = c.muted, modifier = Modifier.padding(start = 4.dp))
             Segmented(listOf(T("自动用最快的"), T("我来选")), if (p.mode == "select") 1 else 0, onSelect = { p = p.copy(mode = if (it == 1) "select" else "auto") })
-            Text(
-                if (p.mode == "select") T("在下面的列表里点一个节点。") else T("连接后每 10 分钟测一次，自动用延迟最低的节点。"),
-                style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp),
-            )
+            if (p.mode == "select") {
+                Text(T("在下面的列表里点一个节点。"), style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp))
+            } else {
+                // how often the group tests its members (Policy.interval, shared with Windows)
+                val every = if (p.interval > 0) p.interval else 10
+                val presets = listOf(3, 5, 10, 15, 30, 60)
+                var custom by remember { mutableStateOf(every !in presets) }
+                Text(T("测试间隔"), style = NbType.section, color = c.muted, modifier = Modifier.padding(start = 4.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    presets.forEach { m -> Chip(T("%d 分钟", m), !custom && every == m, onClick = { custom = false; p = p.copy(interval = m) }) }
+                    Chip(T("自定义"), custom, onClick = { custom = true })
+                }
+                if (custom) {
+                    NbField(
+                        every.toString(), { v -> v.filter(Char::isDigit).take(4).toIntOrNull()?.let { p = p.copy(interval = it.coerceIn(1, 1440)) } },
+                        singleLine = true, label = { Text(T("间隔（分钟）")) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Text(
+                    T("连接期间按这个间隔测一次组内节点，换用最快的一个。间隔越短越耗电，建议不低于 5 分钟。"),
+                    style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp),
+                )
+            }
 
             Row(Modifier.padding(start = 4.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(T("匹配到 %d 个节点", preview.size), style = NbType.section.copy(fontWeight = FontWeight.Bold), color = c.text)

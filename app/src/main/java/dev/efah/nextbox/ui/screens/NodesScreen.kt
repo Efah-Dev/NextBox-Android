@@ -127,6 +127,13 @@ fun NodesScreen(
     var query by remember { mutableStateOf<String?>(null) }
     // null = normal mode, otherwise the ids picked in multi-select mode
     var picked by remember { mutableStateOf<Set<Long>?>(null) }
+    // 分组代理: the policy groups, to connect through one (PolicyUse.kt)
+    val policies by Repo.policies.collectAsState()
+    val runningNode by dev.efah.nextbox.bg.Box.runningNode.collectAsState()
+    var showPolicies by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { Repo.loadPolicies() }
+    LaunchedEffect(state.selectedPolicy, runningNode) { if (showPolicies) Repo.loadPolicies() }
+    if (policies.isEmpty()) showPolicies = false
     var qr by remember { mutableStateOf<Pair<String, String>?>(null) } // node name, share link
     // the nodes in the order being dragged into, until the new order is saved
     var arranged by remember { mutableStateOf<List<Profile>?>(null) }
@@ -226,11 +233,22 @@ fun NodesScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(bottom = 12.dp),
             ) {
+                if (policies.isNotEmpty()) {
+                    item(key = "policies") {
+                        Chip(T("分组代理"), showPolicies, onClick = {
+                            picked = null
+                            query = null
+                            showPolicies = true
+                            scope.launch { Repo.loadPolicies() }
+                        })
+                    }
+                }
                 items(state.groups, key = { it.id }) { g ->
                     var chipMenu by remember { mutableStateOf(false) }
                     Box {
-                        Chip(g.displayName, g.id == state.currentGroupId, onClick = {
+                        Chip(g.displayName, g.id == state.currentGroupId && !showPolicies, onClick = {
                             picked = null
+                            showPolicies = false
                             scope.launch { Repo.selectGroup(g.id) }
                         }, onLongClick = {
                             picked = null
@@ -294,6 +312,30 @@ fun NodesScreen(
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
+            if (showPolicies) {
+                items(policies, key = { "p" + it.id }) { p ->
+                    val used = state.selectedPolicy == p.id
+                    PolicyUseCard(
+                        p, used, if (used) runningNode else 0L,
+                        onUse = {
+                            scope.launch {
+                                Repo.usePolicy(if (used) 0L else p.id)
+                                    .onSuccess { toast.ok(if (used) T("已改回单个节点") else T("已改用分组代理“%s”", p.name)) }
+                                    .onFailure { toast.error(it.message ?: T("切换失败")) }
+                                Repo.loadPolicies()
+                            }
+                        },
+                        onPick = { id -> scope.launch { Repo.selectPolicyNode(p.id, id) } },
+                    )
+                }
+                item(key = "policy-hint") {
+                    Text(
+                        T("在任意分组里选择一个节点，即可改回单个节点。"), style = NbType.small, color = c.muted,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+                return@LazyColumn
+            }
             if (Repo.ADDING in updating) {
                 item(key = "adding") {
                     NbCard(padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
@@ -355,7 +397,7 @@ fun NodesScreen(
                 ) {
                     NodeRow(
                         p,
-                        selected = p.id == state.selectedId,
+                        selected = p.id == state.selectedId && state.selectedPolicy == 0L,
                         testing = p.id in testing,
                         picked = sel?.contains(p.id),
                         lifted = drag.key == p.id,

@@ -231,11 +231,15 @@ func DeletePolicy(id int64) error {
 	return nil
 }
 
-// PolicyUsed reports whether the rules send traffic to the policy group.
+// PolicyUsed reports whether the rules send traffic to the policy group, or
+// the connection uses it (SetSelectedPolicy).
 func PolicyUsed(id int64) bool {
 	s, err := current()
 	if err != nil {
 		return false
+	}
+	if id != 0 && s.SelectedPolicy() == id {
+		return true
 	}
 	for _, used := range config.UsedPolicies(s.Settings()) {
 		if used == id {

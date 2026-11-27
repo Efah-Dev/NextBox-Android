@@ -551,6 +551,17 @@ object Repo {
         return r
     }
 
+    /** Connect through a policy group (0: back to the selected node). */
+    suspend fun usePolicy(id: Long): Result<Unit> {
+        val r = call { Nbcore.setSelectedPolicy(id) }
+        if (r.isSuccess) Box.reloadIfRunning()
+        return r
+    }
+
+    /** The policy group the running connection uses, or null. */
+    fun policyRuntime(): PolicyRuntime? =
+        runCatching { Nbcore.policyRuntime().takeIf { it.isNotEmpty() }?.let { NbJson.decodeFromString<PolicyRuntime>(it) } }.getOrNull()
+
     suspend fun selectPolicyNode(id: Long, node: Long): Result<Unit> {
         val r = call { Nbcore.selectPolicyNode(id, node) }
         loadPolicies()

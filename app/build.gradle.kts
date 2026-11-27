@@ -17,8 +17,8 @@ android {
         minSdk = 29
         targetSdk = 37
         // major.minor.patch -> major * 10000 + minor * 100 + patch
-        versionCode = 20201
-        versionName = "2.2.1"
+        versionCode = 20300
+        versionName = "2.3.0"
         base.archivesName.set("NextBox-$versionName")
     }
 

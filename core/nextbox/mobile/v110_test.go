@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"nextbox/internal/config"
+	"nextbox/internal/link"
 	"nextbox/internal/store"
 )
 
@@ -19,13 +20,13 @@ func TestClassify(t *testing.T) {
 		"vless://uuid@1.2.3.4:443?security=tls#node":                           "nodes",
 		"hello world": "none",
 	} {
-		var c classified
+		var c link.Classified
 		json.Unmarshal([]byte(Classify(in)), &c)
 		if c.Kind != want {
 			t.Errorf("%s: kind %q, want %q", in, c.Kind, want)
 		}
 	}
-	var c classified
+	var c link.Classified
 	json.Unmarshal([]byte(Classify("clash://install-config?url=https%3A%2F%2Fa.com%2Fs&name=Airport")), &c)
 	if c.URL != "https://a.com/s" || c.Name != "Airport" {
 		t.Errorf("clash link: %+v", c)
@@ -34,7 +35,7 @@ func TestClassify(t *testing.T) {
 	if !c.LikelyProxy {
 		t.Error("an address with credentials and a port should look like a proxy")
 	}
-	c = classified{}
+	c = link.Classified{}
 	json.Unmarshal([]byte(Classify("https://sub.example.com/link/abc")), &c)
 	if c.LikelyProxy {
 		t.Error("a subscription path is not a proxy")

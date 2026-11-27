@@ -186,6 +186,20 @@ fun HomeScreen(onConnect: () -> Unit, onOpenNodes: () -> Unit, onImport: () -> U
     // starts from the node list it already has: an empty card for a moment
     // (each time the page is built) made the page jump
     val selected by produceState(profiles.firstOrNull { it.id == state.selectedId }, state.selectedId, profiles) { value = Repo.profile(state.selectedId) }
+    // a policy group used instead of the node: its name, and the member it uses
+    val runningNode by Box.runningNode.collectAsState()
+    val policies by Repo.policies.collectAsState()
+    LaunchedEffect(state.selectedPolicy) { if (state.selectedPolicy != 0L) Repo.loadPolicies() }
+    val policy = policies.firstOrNull { it.id == state.selectedPolicy }
+    val member by produceState<Profile?>(null, policy?.id, runningNode, status) {
+        val id = when {
+            policy == null -> 0L
+            status == Status.Started && runningNode != 0L -> runningNode
+            else -> policy.selected.takeIf { it != 0L } ?: policy.nodes.firstOrNull()?.id ?: 0L
+        }
+        value = if (id != 0L) Repo.profile(id) else null
+    }
+    val exitNode = if (state.selectedPolicy != 0L) runningNode else state.selectedId
 
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(status) {
@@ -231,9 +245,9 @@ fun HomeScreen(onConnect: () -> Unit, onOpenNodes: () -> Unit, onImport: () -> U
                         ConnectButton(status, size.coerceAtLeast(56.dp), onConnect)
                     }
 
-                    StatusBlock(status, now - startedAt, startedAt, error, state.selectedId, compact)
+                    StatusBlock(status, now - startedAt, startedAt, error, exitNode, policy?.name, compact)
 
-                    NodeCard(selected, onOpenNodes)
+                    if (policy != null) PolicyCard(policy, member, onOpenNodes) else NodeCard(selected, onOpenNodes)
 
                     if (h >= 380.dp) RouteSection(onPickApps)
 
@@ -385,6 +399,47 @@ private fun NodeCard(node: Profile?, onClick: () -> Unit) {
     }
 }
 
+/**
+ * The node card while a policy group is used: the node the group uses now,
+ * and "protocol · 分组代理" under it (while connected, the group's own name
+ * starts the exit line above). Until that node is known, the group's name
+ * and size.
+ */
+@Composable
+private fun PolicyCard(policy: dev.efah.nextbox.data.PolicyView, member: Profile?, onClick: () -> Unit) {
+    val c = Nb.c
+    val (memberFlag, memberName) = member?.let { dev.efah.nextbox.ui.splitFlag(it.name) } ?: ("" to "")
+    NbCard(onClick = onClick, padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(c.accentSoft),
+                contentAlignment = Alignment.Center,
+            ) {
+                val flag = memberFlag.ifEmpty { member?.let { dev.efah.nextbox.ui.flagOf(it.region) }.orEmpty() }
+                if (flag.isNotEmpty()) dev.efah.nextbox.ui.FlagText(flag, fontSize = 24.sp)
+                else Icon(NbIcons.Layers, null, tint = c.accentInk, modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (member != null) memberName else policy.name,
+                    style = NbType.bodyBold.copy(fontSize = 16.sp), color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    if (member != null) protocolName(member.type) + " · " + T("分组代理")
+                    else T("分组代理") + " · " + T("%d 个节点", policy.nodes.size),
+                    style = NbType.small.copy(fontSize = 13.sp), color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (member != null && member.latency != 0) LatencyText(member.latency, Modifier.padding(start = 8.dp))
+            Icon(NbIcons.Chevron, null, tint = c.muted, modifier = Modifier.padding(start = 4.dp).size(20.dp))
+        }
+    }
+}
+
 /** Two letters for the node badge: a region code if the name has one, else its first characters. */
 fun badge(name: String): String {
     val regions = linkedMapOf(
@@ -497,7 +552,7 @@ private fun Sparkline(history: List<Speed>, modifier: Modifier) {
  * long error is cut to one line; tapping it shows all of it.
  */
 @Composable
-private fun StatusBlock(status: Status, connectedMs: Long, session: Long, error: String?, nodeId: Long, compact: Boolean) {
+private fun StatusBlock(status: Status, connectedMs: Long, session: Long, error: String?, nodeId: Long, via: String?, compact: Boolean) {
     val c = Nb.c
     var showError by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().height(if (compact) 46.dp else 52.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -518,7 +573,7 @@ private fun StatusBlock(status: Status, connectedMs: Long, session: Long, error:
         }
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
             when (status) {
-                Status.Started -> ExitLine(nodeId, session)
+                Status.Started -> ExitLine(nodeId, session, via)
                 Status.Starting -> Text(T("正在启动内核"), style = NbType.small.copy(fontSize = 13.sp), color = c.muted, maxLines = 1)
                 Status.Stopping -> {}
                 Status.Stopped -> Text(
@@ -545,15 +600,15 @@ private fun StatusBlock(status: Status, connectedMs: Long, session: Long, error:
  * page shows it; a check runs after connecting or switching nodes and when
  * the last one is 5 minutes old (30 seconds after a failure), only while the
  * page is shown. Tap: show or hide the full IP (or check again after a
- * failure); long press: copy it.
+ * failure); long press: copy it. While a policy group is used, the line
+ * starts with its name (via).
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ExitLine(nodeId: Long, session: Long) {
+private fun ExitLine(nodeId: Long, session: Long, via: String?) {
     val c = Nb.c
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
-    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val all by Repo.exit.collectAsState()
     val state = all?.takeIf { it.nodeId == nodeId && it.session == session }
     var reveal by remember { mutableStateOf(false) }
@@ -574,9 +629,9 @@ private fun ExitLine(nodeId: Long, session: Long) {
         e!!.latency < 300 -> c.good
         else -> c.mid
     }
-    val text = when {
+    val text = (via?.let { "$it · " } ?: "") + when {
         checking -> T("检测落地 IP…")
-        !ok -> if (e?.failed == "test") T("无法访问测速地址，点击重试") else T("落地检测失败，点击重试")
+        !ok -> if (e?.failed == "test") T("无法访问测试地址，点击重试") else T("落地检测失败，点击重试")
         else -> listOfNotNull(
             (dev.efah.nextbox.ui.flagOf(e!!.country) + " " + if (reveal) e.ip else maskIp(e.ip)).trim(),
             e.asn.takeIf { it > 0 }?.let { "AS$it" + if (e.org.isNotEmpty()) " " + shortOrg(e.org) else "" },
@@ -587,7 +642,7 @@ private fun ExitLine(nodeId: Long, session: Long) {
         Modifier.clip(RoundedCornerShape(10.dp))
             .combinedClickable(
                 onClick = { if (ok) reveal = !reveal else scope.launch { Repo.refreshExit(nodeId, session, force = true) } },
-                onLongClick = { if (ok) { clipboard.setText(androidx.compose.ui.text.AnnotatedString(e!!.ip)); toast.ok(T("已复制")) } },
+                onLongClick = { if (ok) { dev.efah.nextbox.App.clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NextBox", e!!.ip)); toast.ok(T("已复制")) } },
             )
             .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -610,5 +665,5 @@ private fun maskIp(ip: String): String {
 
 /** "Cloudflare, Inc." → "Cloudflare": the company forms are left out (as on the desktop). */
 private fun shortOrg(org: String): String =
-    org.replace(Regex("[,.]?s+(inc|llc|ltd|limited|co|corp|corporation|gmbh|s.?a|b.?v|pte|plc|ag|oy|ab|srl|sas|kk).?", RegexOption.IGNORE_CASE), "")
+    org.replace(Regex("""[,.]?\s+(inc|llc|ltd|limited|co|corp|corporation|gmbh|s\.?a|b\.?v|pte|plc|ag|oy|ab|srl|sas|kk)\b\.?""", RegexOption.IGNORE_CASE), "")
         .trimEnd(',', '.', ' ')

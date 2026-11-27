@@ -27,9 +27,8 @@ import (
 )
 
 var (
-	mu      sync.Mutex
-	st      *store.Store
-	dataDir string
+	mu sync.Mutex
+	st *store.Store
 )
 
 func current() (*store.Store, error) {
@@ -74,7 +73,6 @@ func Open(dir string) error {
 		}
 	}
 	st = s
-	dataDir = dir
 	usageBook = loadUsage(filepath.Join(dir, "usage.json"))
 	return nil
 }
@@ -95,6 +93,7 @@ type state struct {
 	Groups         []store.Group  `json:"groups"`
 	CurrentGroupID int64          `json:"currentGroupId"`
 	SelectedID     int64          `json:"selectedId"`
+	SelectedPolicy int64          `json:"selectedPolicy"` // used instead of the node (0 = none)
 	Settings       store.Settings `json:"settings"`
 }
 
@@ -108,6 +107,7 @@ func State() (string, error) {
 		Groups:         s.Groups(),
 		CurrentGroupID: s.CurrentGroupID(),
 		SelectedID:     s.SelectedID(),
+		SelectedPolicy: s.SelectedPolicy(),
 		Settings:       s.Settings(),
 	})
 }

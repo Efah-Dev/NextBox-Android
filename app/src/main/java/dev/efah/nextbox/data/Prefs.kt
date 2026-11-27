@@ -129,8 +129,8 @@ object Prefs {
      * The speed test method of a version before 2.2.1, which kept it here
      * (now Settings.testMode, shared with NextBox for Windows), once: what
      * the user chose, or URL, the default of those versions, when they never
-     * chose (only a choice was stored). null for a new install (TCP, the new
-     * default) and after the first call.
+     * chose (only a choice was stored). null for a new install (URL, the
+     * default again since 2.3.0) and after the first call.
      */
     fun takeLegacyTestMode(): String? {
         if (shown("test_mode_shared")) return null

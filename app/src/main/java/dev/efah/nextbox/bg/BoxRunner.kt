@@ -132,9 +132,49 @@ class BoxRunner(
         }
     }
 
+    // ---------------------------------------------------------------- node or policy group in use
+
+    /** The policy group the connection uses (null: a node). */
+    @Volatile
+    private var policy: dev.efah.nextbox.data.PolicyRuntime? = null
+
+    /** Takes over what the new config uses: a node, or a policy group whose member comes later (onGroups). */
+    private fun applyNodeInfo() {
+        val p = Repo.policyRuntime()
+        policy = p
+        Box._via.value = ""
+        if (p != null) {
+            nodeId = 0 // until the group status names its member
+            Box._nodeName.value = p.name
+        } else {
+            nodeId = Repo.state.value.selectedId
+            Box._nodeName.value = Nbcore.selectedNodeName()
+        }
+        Box._runningNode.value = nodeId
+    }
+
+    /** "group · member" while a policy group is used, else the node. */
+    private fun label(): String = Box.via.value.let { if (it.isEmpty()) Box.nodeName.value else Box.nodeName.value + " · " + it }
+
+    /** The group status: which member the policy group in use has picked. */
+    private fun onGroups(groups: OutboundGroupIterator?) {
+        val p = policy ?: return
+        val it = groups ?: return
+        while (it.hasNext()) {
+            val g = it.next() ?: continue
+            if (g.tag != p.tag) continue
+            val id = p.nodes[g.selected] ?: return
+            if (id == nodeId) return
+            nodeId = id
+            Box._via.value = runCatching { NbJson.decodeFromString<dev.efah.nextbox.data.Profile>(Nbcore.profile(id)).name }.getOrDefault(g.selected)
+            Box._runningNode.value = id
+            notifier.update(label(), Box.speed.value, Box.session.value, usage)
+            return
+        }
+    }
+
     private suspend fun onStarted() {
-        nodeId = Repo.state.value.selectedId
-        Box._nodeName.value = Nbcore.selectedNodeName()
+        applyNodeInfo()
         Box._startedAt.value = System.currentTimeMillis()
         Box._session.value = Speed()
         Box._speed.value = Speed()
@@ -146,7 +186,7 @@ class BoxRunner(
         Box._status.value = Status.Started
         withContext(Dispatchers.Main) { registerReceiver() }
         refreshUsage()
-        notifier.update(Box.nodeName.value, Speed(), Speed(), usage)
+        notifier.update(label(), Speed(), Speed(), usage)
         connectStatus()
         statsJob = scope.launch {
             var ticks = 0
@@ -171,11 +211,10 @@ class BoxRunner(
                     Box.coreStartedAt = System.currentTimeMillis()
                     s.startOrReloadService(config, overrideOptions())
                     Nbtest.trackProxy(s)
-                    nodeId = Repo.state.value.selectedId
-                    Box._nodeName.value = Nbcore.selectedNodeName()
+                    applyNodeInfo()
                     lastUp = 0
                     lastDown = 0
-                    notifier.update(Box.nodeName.value, Box.speed.value, Box.session.value, usage)
+                    notifier.update(label(), Box.speed.value, Box.session.value, usage)
                     // a reload starts a new box instance: reattach the status stream
                     disconnectStatus()
                     connectStatus()
@@ -323,6 +362,8 @@ class BoxRunner(
             StatusHandler(),
             CommandClientOptions().apply {
                 addCommand(Libbox.CommandStatus)
+                // which member a policy group in use picks
+                if (policy != null) addCommand(Libbox.CommandGroup)
                 statusInterval = 1_000_000_000L
             },
         )
@@ -369,7 +410,7 @@ class BoxRunner(
         Box._speed.value = speed
         Box._session.value = session
         Box._history.value = (Box.history.value + speed).takeLast(60)
-        notifier.update(Box.nodeName.value, speed, session, usage)
+        notifier.update(label(), speed, session, usage)
     }
 
     private inner class StatusHandler : CommandClientHandler {
@@ -379,7 +420,7 @@ class BoxRunner(
         override fun clearLogs() {}
         override fun writeLogs(messageList: LogIterator?) {}
         override fun writeStatus(message: StatusMessage) = onStatus(message)
-        override fun writeGroups(message: OutboundGroupIterator?) {}
+        override fun writeGroups(message: OutboundGroupIterator?) = onGroups(message)
         override fun writeOutbounds(message: OutboundGroupItemIterator?) {}
         override fun initializeClashMode(modeList: dev.efah.nextbox.libbox.StringIterator?, currentMode: String?) {}
         override fun updateClashMode(newMode: String?) {}

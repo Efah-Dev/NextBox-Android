@@ -160,8 +160,8 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                 // what this mode does, and the way to the mode the path is for
                 NbCard(Modifier.fillMaxWidth().padding(bottom = 12.dp), padding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp), color = c.accentSoft.copy(alpha = 0.6f)) {
                     Text(
-                        if (s.routeMode == "global") T("全局代理：除了局域网和屏蔽广告，所有流量都走当前节点，下面的步骤暂不生效。")
-                        else T("全部直连：不使用代理，下面的步骤暂不生效。"),
+                        if (s.routeMode == "global") T("全局代理：除局域网和广告拦截外，全部流量经当前节点；以下步骤暂不生效。")
+                        else T("全部直连：不经过代理；以下步骤暂不生效。"),
                         style = NbType.small.copy(fontSize = 13.sp, lineHeight = 19.sp), color = c.text,
                     )
                     Text(
@@ -272,7 +272,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                     NbButton(T("添加规则集"), { onEditSet(-1) }, Modifier.weight(1f), kind = BtnKind.Secondary, icon = NbIcons.Archive)
                 }
                 Text(
-                    T("从上往下依次判断，在哪一步命中就从哪一步出去。按住左边的把手拖动，调整先后顺序。"),
+                    T("按顺序逐步匹配，命中即按该步出站。按住左侧手柄拖动调整顺序。"),
                     style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp, top = 10.dp),
                 )
             }
@@ -280,7 +280,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
             // 分组代理: groups of nodes a rule or a scene can send traffic to (as in the Windows settings)
             Text(T("分组代理"), style = NbType.bodyBold.copy(fontSize = 15.sp), color = c.text, modifier = Modifier.padding(start = 4.dp, top = 22.dp))
             Text(
-                T("一组节点（比如所有日本节点），自动用最快的或由你选一个。在规则的「走哪里」里选它，比如让 YouTube 走日本。"),
+                T("一组节点（例如全部日本节点），自动选用最快的或手动指定。可作为规则的出口，也可在节点页直接用它连接。"),
                 style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 8.dp),
             )
             NbCard(padding = PaddingValues(0.dp)) {

@@ -47,25 +47,16 @@ func BuildConfig(ruleSetDir, options string) (string, error) {
 		}
 	}
 	set := phoneSettings(s.Settings())
-	var node *store.Profile
-	if id := s.SelectedID(); id != 0 {
-		if p, ok := s.Profile(id); ok {
-			node = &p
-		}
-	}
 	ensureRuleSets(ruleSetDir, set, "")
 	// The FakeIP of the shared builder answers every proxied domain with a
 	// fake address (IPv6 too unless turned off below).
 	set.TunFakeIP = opt.FakeIP
-	cfg, err := config.Build(config.Input{
-		Settings:            set,
-		Node:                node,
-		Member:              s.Profile,
-		Policies:            policyInputs(s, set),
-		RuleSetDir:          ruleSetDir,
-		SkipMissingRuleSets: true,
-		GroupDNS:            s.GroupDNS(),
-	})
+	in, err := connectInput(s, set) // the node, or a policy group instead
+	if err != nil {
+		return "", err
+	}
+	in.RuleSetDir, in.SkipMissingRuleSets = ruleSetDir, true
+	cfg, err := config.Build(in)
 	if err != nil {
 		return "", err
 	}

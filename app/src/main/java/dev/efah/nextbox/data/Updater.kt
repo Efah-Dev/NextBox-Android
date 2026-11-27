@@ -23,6 +23,7 @@ object Updater {
     const val WEBSITE = "https://nextbox.efah.dev"
     const val REPO = "Efah-Dev/NextBox-Android"
     const val GITHUB = "https://github.com/$REPO"
+    const val TELEGRAM = "https://t.me/nextboxofficial"
 
     /** [version] is the tag ("v1.0.1"), [apk] the download for this device (the release page if none fits). */
     data class Release(val version: String, val notes: String, val page: String, val apk: String)

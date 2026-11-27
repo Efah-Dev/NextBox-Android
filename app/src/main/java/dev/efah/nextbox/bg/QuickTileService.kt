@@ -23,7 +23,7 @@ class QuickTileService : TileService() {
         super.onStartListening()
         job?.cancel()
         job = CoroutineScope(Dispatchers.Main).launch {
-            combine(Box.status, Box.nodeName) { s, n -> s to n }.collect { (s, n) -> render(s, n) }
+            combine(Box.status, Box.nodeName, Box.via) { s, n, v -> Triple(s, n, v) }.collect { (s, n, v) -> render(s, n, v) }
         }
     }
 
@@ -33,7 +33,7 @@ class QuickTileService : TileService() {
         super.onStopListening()
     }
 
-    private fun render(status: Status, node: String) {
+    private fun render(status: Status, node: String, via: String) {
         val tile = qsTile ?: return
         tile.state = when (status) {
             Status.Started -> Tile.STATE_ACTIVE
@@ -48,7 +48,12 @@ class QuickTileService : TileService() {
             Status.Stopping -> "NextBox " + T("正在断开…")
             Status.Stopped -> "NextBox " + T("未连接")
         }
-        tile.subtitle = if (status == Status.Started && node.isNotEmpty()) "NextBox " + T("已连接") else null
+        // a policy group: its name on the label, the node it uses below
+        tile.subtitle = when {
+            status != Status.Started || node.isEmpty() -> null
+            via.isNotEmpty() -> via
+            else -> "NextBox " + T("已连接")
+        }
         tile.updateTile()
     }
 

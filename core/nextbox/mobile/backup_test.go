@@ -201,13 +201,14 @@ func mustJSON(v any) []byte {
 
 func TestLegacyTestMode(t *testing.T) {
 	s := store.DefaultSettings()
-	legacyTestMode(&s, backupDoc{Settings: json.RawMessage(`{"testUrl":"x"}`), Android: json.RawMessage(`{"latencyMode":"url"}`)})
-	if s.TestMode != store.TestURL {
+	legacyTestMode(&s, backupDoc{Settings: json.RawMessage(`{"testUrl":"x"}`), Android: json.RawMessage(`{"latencyMode":"tcp"}`)})
+	if s.TestMode != store.TestTCP {
 		t.Errorf("backup of 2.2.0: %q", s.TestMode)
 	}
+	// the shared setting is taken by mergeSettings; the old preference is not used
 	s = store.DefaultSettings()
-	legacyTestMode(&s, backupDoc{Settings: json.RawMessage(`{"testMode":"tcp"}`), Android: json.RawMessage(`{"latencyMode":"url"}`)})
-	if s.TestMode != store.TestTCP {
+	legacyTestMode(&s, backupDoc{Settings: json.RawMessage(`{"testMode":"tcp"}`), Android: json.RawMessage(`{"latencyMode":"tcp"}`)})
+	if s.TestMode != store.TestURL {
 		t.Errorf("shared setting overridden: %q", s.TestMode)
 	}
 }

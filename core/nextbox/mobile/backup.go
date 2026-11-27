@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"nextbox/internal/i18n"
@@ -42,6 +43,7 @@ type backupDoc struct {
 // backup takes it along by default, also to and from the other system.
 var appearanceSettings = []string{
 	"theme", "accentColor", "language", "lightLevel", "darkLevel", "themeScale", "recentColors",
+	"nodeView", "trayItems", // the desktop app's, kept for its backups
 }
 
 // Other settings that mean the same on every platform (as in the desktop app).
@@ -50,12 +52,13 @@ var portableSettings = []string{
 	"testUrl", "testTimeout", "testConcurrency", "testMode",
 	"subUserAgent", "subUpdateByProxy", "subAutoUpdate", "subUpdateHours",
 	"countrySource", "autoCheckUpdate", "sortAfterTest",
+	"speedTestUrl", "speedTestSeconds", "speedTestMb",
 }
 
 // Settings that make up the routing rules (分流规则), as in the desktop app.
 var ruleSettings = []string{
 	"routeMode", "blockAds", "rules", "scenes", "ruleSetMirror", "bypassDns",
-	"routeView", "routeHideOff", "routeViewAsked", // how the desktop page looks
+	"routeView", "routeHideOff", // how the desktop page looks
 	"directRules", "proxyRules", "blockRules", // v1.2 and Android 1.0
 }
 
@@ -362,10 +365,10 @@ func mergeSettings(cur store.Settings, imported json.RawMessage, keys []string, 
 	var out map[string]json.RawMessage
 	json.Unmarshal(b, &out)
 	for k, v := range in {
-		if keys != nil && !contains(keys, k) {
+		if keys != nil && !slices.Contains(keys, k) {
 			continue
 		}
-		if keys == nil && !withRules && contains(ruleSettings, k) {
+		if keys == nil && !withRules && slices.Contains(ruleSettings, k) {
 			continue
 		}
 		out[k] = v
@@ -374,7 +377,7 @@ func mergeSettings(cur store.Settings, imported json.RawMessage, keys []string, 
 	// store.Settings.ThemeScale)
 	_, light := in["lightLevel"]
 	_, dark := in["darkLevel"]
-	if _, scale := in["themeScale"]; (light || dark) && !scale && (keys == nil || contains(keys, "lightLevel")) {
+	if _, scale := in["themeScale"]; (light || dark) && !scale && (keys == nil || slices.Contains(keys, "lightLevel")) {
 		out["themeScale"] = json.RawMessage("0")
 	}
 	if withRules {
@@ -413,40 +416,6 @@ func remapPolicies(s *store.Settings, m map[int64]int64) {
 	}
 }
 
-func pickKeys(raw []byte, keys []string) ([]byte, error) {
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, err
-	}
-	out := map[string]json.RawMessage{}
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			out[k] = v
-		}
-	}
-	return json.Marshal(out)
-}
-
-func dropKeys(raw []byte, keys []string) ([]byte, error) {
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, err
-	}
-	for _, k := range keys {
-		delete(m, k)
-	}
-	return json.Marshal(m)
-}
-
-func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
 // routeOrdered marks backups whose rules are checked in their stored order.
 const routeOrdered = 3
 
@@ -463,9 +432,9 @@ func legacyDirectOnly(android json.RawMessage) bool {
 // "rules", "appearance" or "settings" (the other settings).
 func settingsPart(key string) string {
 	switch {
-	case contains(ruleSettings, key):
+	case slices.Contains(ruleSettings, key):
 		return "rules"
-	case contains(appearanceSettings, key):
+	case slices.Contains(appearanceSettings, key):
 		return "appearance"
 	}
 	return "settings"
@@ -505,7 +474,7 @@ func importKeys(doc backupDoc, o backupOptions) []string {
 				keys = append(keys, k)
 			}
 		default:
-			if o.Settings && (same || contains(portableSettings, k)) {
+			if o.Settings && (same || slices.Contains(portableSettings, k)) {
 				keys = append(keys, k)
 			}
 		}

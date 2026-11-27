@@ -66,8 +66,8 @@ fun PerAppScreen(onClose: () -> Unit) {
                     )
                     Text(
                         when (choice) {
-                            0 -> T("手机上所有应用都经过 VPN，按路由模式和分流规则决定走代理还是直连。下面选好的应用会保留，切换范围后生效。")
-                            2 -> T("选中的应用直接联网，其余应用都走 VPN；以后新装的应用也走 VPN。适合排除银行、支付类应用。")
+                            0 -> T("所有应用经过 VPN，按路由模式和分流规则决定出口。下方已选的应用会保留，切换范围后生效。")
+                            2 -> T("选中的应用直接联网，其余应用（包括以后安装的）经过 VPN。适合排除银行、支付类应用。")
                             else -> T("只有选中的应用经过 VPN，其他应用直接联网。")
                         },
                         style = NbType.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp),

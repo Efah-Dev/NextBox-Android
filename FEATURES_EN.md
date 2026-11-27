@@ -18,7 +18,7 @@
 - **Import**: QR codes, the clipboard, share links opened from other apps (confirmed first); `clash://` and `sing-box://` links too
 - **Nodes**: form or JSON editing, search, multi-select delete and test, QR sharing; remove duplicates; flags before node names, protocol and server address below them; long-press and drag to reorder, or sort by default order, latency, name or region; long-press a group for its menu
 - **Chain proxies**: 2 to 8 nodes in turn; or long-press a node and pick *Connect through other nodes*
-- **Latency tests**: TCP by default, or URL, the same setting as in the Windows app; UDP protocols and chains always use the URL test. After testing a whole group the nodes go back to the order of the subscription, keep their order or are sorted by latency, asked once on the first test and changed later in *Settings → Test*
+- **Latency tests**: by URL (the default for new installs) or TCP, the same setting as in the Windows app; UDP protocols and chains always use the URL test. After testing a whole group the nodes go back to the order of the subscription, keep their order or are sorted by latency, asked once on the first test and changed later in *Settings → Test*
 - **Automatic node choice** (optional): if the selected node does not answer when connecting, the fastest working node of its group is used
 
 ### Routing
@@ -29,7 +29,7 @@
 - **Rule sets**: domains, IPs, apps, site categories, IP regions and online sing-box rule-sets or Clash rule providers (YAML / text) in one named set with one target
 - **Tester**: type an address or pick an app, and the path shows the step that catches it, and why
 - **Bypass mainland China**: built-in Chinese domain and IP rules, no download. Known foreign sites and sites on the mainland China list are not resolved; the rest are resolved with the remote DNS through the proxy (default, never poisoned) or the direct DNS, switched with the small tag on the home page
-- **Policy groups**: nodes picked by region, keywords or by hand, the fastest or a chosen one
+- **Policy groups**: nodes picked by region, keywords or by hand, the fastest or a chosen one; you can connect through a policy group: Home shows the node it uses and the group's name before the exit IP, and traffic is still counted per node; an automatic group has its own test interval
 - **Proxy scope**: all apps, only the selected apps, or all but the selected apps
 
 ### Everyday use
@@ -78,6 +78,7 @@ while one of that subscription's nodes is connected they replace the remote DNS 
 
 ## What each version added
 
+- **2.3.0**: connecting through a policy group, test interval for policy groups, URL test by default for new installs, sing-box 1.14.5
 - **2.2.0**: long-press to reorder, a group menu on long press, protocol and server address under nodes, the subscription order after a test, background subscription updates, LAN outside the VPN
 - **2.1.0**: Clash conversion, subscription DNS, DNS overrides, exit IP and ASN on the home page, a one-screen home page, swiping between pages, sorting by latency after a test, updates keep the order
 - **2.0.0**: routing as on Windows (route path, drag to reorder), rule sets, rule names, IP regions, the resolving choice, matched rules on the activity page, appearance in backups

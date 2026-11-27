@@ -65,9 +65,17 @@ object Box {
         _noNode.value = null
     }
 
-    /** Name of the node the running core uses. */
+    /** Name of the node the running core uses (of the policy group when one is used). */
     internal val _nodeName = MutableStateFlow("")
     val nodeName: StateFlow<String> = _nodeName.asStateFlow()
+
+    /** The member a policy group in use has picked ("" without a policy group). */
+    internal val _via = MutableStateFlow("")
+    val via: StateFlow<String> = _via.asStateFlow()
+
+    /** The node the traffic goes through: the selected one, or the policy group's member. */
+    internal val _runningNode = MutableStateFlow(0L)
+    val runningNode: StateFlow<Long> = _runningNode.asStateFlow()
 
     @Volatile
     internal var runner: BoxRunner? = null

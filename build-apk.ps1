@@ -28,7 +28,9 @@ if (-not (Test-Path (Join-Path $here "app\libs\libbox.aar"))) {
 $task = if ($Release) { "assembleRelease" } else { "assembleDebug" }
 Push-Location $here
 try {
-    & .\gradlew.bat $task --console=plain @gradleArgs
+    # --no-daemon: a Gradle daemon left running keeps this script's output
+    # open, so whatever waits for the script to end would wait for good
+    & .\gradlew.bat $task --console=plain --no-daemon @gradleArgs
     if ($LASTEXITCODE -ne 0) { throw "gradle $task failed" }
 } finally {
     Pop-Location

@@ -113,7 +113,13 @@ data class Policy(
     val selected: Long = 0,
     /** The subscription whose Clash proxy group made it (0 = the user). */
     val from: Long = 0,
+    /** Minutes between the tests of an auto group (0 = 10). */
+    val interval: Int = 0,
 )
+
+/** The policy group the connection uses, as the running config names it (Nbcore.policyRuntime). */
+@Serializable
+data class PolicyRuntime(val id: Long = 0, val name: String = "", val auto: Boolean = false, val tag: String = "", val nodes: Map<String, Long> = emptyMap())
 
 @Serializable
 data class PolicyNode(val id: Long, val name: String = "", val type: String = "", val latency: Int = 0, val region: String = "")
@@ -129,10 +135,12 @@ data class PolicyView(
     val groupId: Long = 0,
     val mode: String = "auto",
     val selected: Long = 0,
+    val from: Long = 0,
+    val interval: Int = 0,
     val nodes: List<PolicyNode> = emptyList(),
     val rules: Int = 0,
 ) {
-    fun toPolicy() = Policy(id, name, match, country, keyword, members, groupId, mode, selected)
+    fun toPolicy() = Policy(id, name, match, country, keyword, members, groupId, mode, selected, from, interval)
 }
 
 @Serializable
@@ -218,7 +226,7 @@ data class Settings(
     val testTimeout: Int = 5000,
     val testConcurrency: Int = 16,
     /** How speed tests measure: "tcp" (the default) or "url"; UDP protocols and chain proxies always use URL. */
-    val testMode: String = "tcp",
+    val testMode: String = "url",
     /** After a speed test of a whole group: "default" (the subscription's order), "latency" or "none"; "" until chosen (asked once). */
     val sortAfterTest: String = "",
     /** DNS 复写: domains answered by a DNS server of their own, or with fixed IPs. */
@@ -283,6 +291,8 @@ data class AppState(
     val groups: List<Group> = emptyList(),
     val currentGroupId: Long = 0,
     val selectedId: Long = 0,
+    /** The policy group the connection uses instead of the node (0 = none). */
+    val selectedPolicy: Long = 0,
     val settings: Settings = Settings(),
 )
 

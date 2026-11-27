@@ -37,6 +37,8 @@ object AutoSelect {
     suspend fun check(): Outcome = withContext(Dispatchers.IO) {
         val st = Repo.state.value
         if (st.settings.routeMode == "direct") return@withContext Outcome.Kept
+        // a policy group in use picks its own nodes
+        if (st.selectedPolicy != 0L) return@withContext Outcome.Kept
         if (!hasNetwork()) return@withContext Outcome.NoNode(T("手机现在没有联网，请检查 Wi-Fi 或移动数据。"))
         val all = Repo.allProfiles()
         val current = all.firstOrNull { it.id == st.selectedId }
