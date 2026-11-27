@@ -66,7 +66,12 @@ private val settle = spring<Float>(dampingRatio = Spring.DampingRatioLowBouncy, 
  * that make way, and the row size that decides when to swap. Put it on the row.
  */
 @Composable
-fun Modifier.dragRow(state: DragState, key: Any): Modifier {
+fun Modifier.dragRow(
+    state: DragState,
+    key: Any,
+    horizontal: Boolean = false,
+    shape: androidx.compose.ui.graphics.Shape = rowShape,
+): Modifier {
     val dragging = state.key == key
     val slide = remember(key) { Animatable(0f) }
     val shift = state.shifts[key]
@@ -78,17 +83,20 @@ fun Modifier.dragRow(state: DragState, key: Any): Modifier {
     }
     val lift by animateFloatAsState(if (dragging) 1f else 0f, spring(stiffness = Spring.StiffnessMedium), label = "lift")
     return this
-        .onSizeChanged { if (dragging || state.key == null) state.rowHeight = it.height.coerceAtLeast(1).toFloat() }
+        .onSizeChanged {
+            if (dragging || state.key == null) state.rowHeight = (if (horizontal) it.width else it.height).coerceAtLeast(1).toFloat()
+        }
         // the dropped row stays on top while it settles
         .zIndex(if (dragging || lift > 0.01f) 1f else 0f)
         .graphicsLayer {
-            translationY = if (dragging) state.offset else slide.value
+            val moved = if (dragging) state.offset else slide.value
+            if (horizontal) translationX = moved else translationY = moved
             val s = 1f + 0.03f * lift
             scaleX = s
             scaleY = s
             // the shadow follows the rounded card (a plain one is a dark rectangle around it)
             shadowElevation = 18f * lift
-            shape = rowShape
+            this.shape = shape
             clip = false
         }
 }
@@ -159,6 +167,7 @@ fun Modifier.dragAbove(state: DragState, key: Any): Modifier {
  * scrolls when the row is dragged to its top or bottom edge, and keeps its
  * position while rows swap (a lazy list otherwise follows its first row).
  * keys is the list in its current order; onDrop is called once a drag ends.
+ * horizontal is for a row of items of different widths (a LazyRow).
  */
 @Composable
 fun Modifier.longPressDrag(
@@ -171,6 +180,7 @@ fun Modifier.longPressDrag(
     onMove: (Int, Int) -> Unit,
     onDrop: () -> Unit,
     onHold: () -> Unit,
+    horizontal: Boolean = false,
 ): Modifier {
     val order by rememberUpdatedState(keys)
     val move by rememberUpdatedState(onMove)
@@ -186,14 +196,19 @@ fun Modifier.longPressDrag(
         val h = state.rowHeight + gapPx
         val first = list.firstVisibleItemIndex
         val firstOffset = list.firstVisibleItemScrollOffset
+        // items of a row differ in size: the neighbour passed decides when to
+        // swap and how far the dragged one's own place moves
+        fun span(k: Any): Float =
+            if (!horizontal) h else (list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == k }?.size?.toFloat() ?: state.rowHeight) + gapPx
         val to = when {
-            state.offset > h / 2 && i in 0 until order.size - 1 -> i + 1
-            state.offset < -h / 2 && i > 0 -> i - 1
+            i in 0 until order.size - 1 && state.offset > span(order[i + 1]) / 2 -> i + 1
+            i > 0 && state.offset < -span(order[i - 1]) / 2 -> i - 1
             else -> return
         }
+        val passed = span(order[to])
         state.shift(order[to], if (to > i) h else -h)
         move(i, to)
-        state.offset += if (to > i) -h else h
+        state.offset += if (to > i) -passed else passed
         list.requestScrollToItem(first, firstOffset)
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
@@ -247,7 +262,7 @@ fun Modifier.longPressDrag(
             while (true) {
                 val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
                 if (!change.pressed) break
-                val dy = change.position.y - change.previousPosition.y
+                val dy = if (horizontal) change.position.x - change.previousPosition.x else change.position.y - change.previousPosition.y
                 travel += kotlin.math.abs(dy)
                 state.offset += dy
                 if (travel > viewConfiguration.touchSlop) change.consume()

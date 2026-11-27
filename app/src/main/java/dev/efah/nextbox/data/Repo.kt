@@ -151,6 +151,9 @@ object Repo {
 
     suspend fun selectGroup(id: Long) = call { Nbcore.setCurrentGroup(id) }
 
+    /** Saves the order the group chips were dragged into. */
+    suspend fun reorderGroups(ids: List<Long>) = call { Nbcore.reorderGroups(ids.joinToString(",")) }
+
     suspend fun select(id: Long): Result<Unit> {
         val r = call { Nbcore.setSelected(id) }
         if (r.isSuccess) Box.reloadIfRunning()

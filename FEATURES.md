@@ -11,12 +11,12 @@
 
 ### 节点与订阅
 
-- **协议**：Shadowsocks（含 obfs、v2ray-plugin、ShadowTLS）、VMess、VLESS（含 Reality / Vision）、Trojan、Hysteria2、TUIC、AnyTLS、NaiveProxy（HTTPS 和 QUIC）、SOCKS、HTTP；链式代理
-- **订阅**：Base64 链接列表、Clash / Clash.Meta YAML、sing-box JSON；显示已用流量和到期时间；自动更新，更新在后台进行，不影响操作。更新时保留你排好的顺序，新节点加在最后
+- **协议**：Shadowsocks（含 obfs、v2ray-plugin、ShadowTLS、Clash.Meta 的 gost-plugin）、VMess、VLESS（含 Reality / Vision）、Trojan、Hysteria、Hysteria2、TUIC、AnyTLS、NaiveProxy（HTTPS 和 QUIC）、SOCKS、HTTP；链式代理
+- **订阅**：Base64 链接列表、Clash / Clash.Meta YAML、sing-box JSON；Clash 订阅的 proxy-providers 会一起下载；显示已用流量和到期时间；自动更新，更新在后台进行，不影响操作。更新时保留你排好的顺序，新节点加在最后
 - **Clash 订阅转换**：订阅里的分组转成分组代理，规则按去向转成规则集，DNS 设置转成 DNS 复写；第一次导入时勾选要哪些（规则默认不勾选），以后随订阅更新；长按分组（或分组菜单）里的「订阅附带的分组和规则」可以重新选择
 - **订阅专属 DNS**：订阅里写了机场自己的 DNS 服务器时，导入时会提醒；只用于这个订阅的节点。在「设置 → 高级 → DNS → 订阅专属 DNS」里逐个开关
 - **导入**：扫描二维码、剪贴板、点击其他应用里的分享链接（导入前会确认）；也认识 `clash://`、`sing-box://` 一键导入链接
-- **节点**：表单或 JSON 编辑、搜索、多选批量删除和测速、二维码分享；一键删除重复节点；节点名前显示国旗，下面显示协议和服务器地址；长按拖动排序，或按默认顺序、延迟、名称、地区排列；长按分组弹出分组菜单
+- **节点**：表单或 JSON 编辑、搜索、多选批量删除、测速和复制分享链接、二维码分享；一键删除重复节点；节点名前显示国旗，下面显示协议和服务器地址；长按拖动排序，或按默认顺序、延迟、名称、地区排列；长按分组弹出分组菜单，长按拖动可给分组排序
 - **链式代理**：2 到 8 个节点依次中转，也可以在节点上长按「经过其他节点连接」
 - **测速**：URL 测试（新安装默认）或 TCP 测试，和 Windows 版的设置互通；UDP 协议和链式代理始终用 URL 测试。测完整个分组后恢复订阅里的顺序、保持现在的顺序或按延迟排序，第一次测速时询问一次，以后在「设置 → 测速」里改
 - **自动选择节点**（可选）：连接时当前节点不通，就换成同组里最快的可用节点

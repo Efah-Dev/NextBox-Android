@@ -30,26 +30,28 @@ NextBox for Android 和 [NextBox for Windows](https://github.com/Efah-Dev/NextBo
 
 > NextBox 是独立项目，与 SagerNet / sing-box 以及 MatsuriDayo / nekoray 没有隶属或背书关系。
 
-## 2.3.0 更新
+## 2.3.1 更新
 
 **新增**
 
-- 可以直接用分组代理连接：首页显示它正在用的节点，落地 IP 前标出分组名称，通知和快捷磁贴同步显示；流量仍按实际节点统计
-- 自动选最快的分组代理可以设置测试间隔，和 Windows 版共用
-- 「关于」里加入 Telegram 频道
+- 支持 Clash.Meta 的 gost-plugin 节点（Shadowsocks），可以导出和导入分享链接
+- 更新 Clash 订阅时一起下载其中的 proxy-providers
+- 支持 Clash 订阅里的 Hysteria 节点
+- 长按拖动可以给分组排序
+- 多选节点后可以一次复制分享链接
 
 **改进**
 
-- 新安装默认使用 URL 测试
-- 部分设置说明重写，更简短准确
-- 用分组代理连接时，「自动选节点」暂停
-- 内核升级到 sing-box 1.14.5
+- 「手动填写」去掉了 HTTP 和 SOCKS
+- 添加订阅时的提示卡片改为整行显示
 
 **修复**
 
-- 首页落地信息里的运营商名称没有去掉 Inc.、Ltd. 等公司后缀
+- 在分组栏滑到头会切换到其他页面
+- Clash 订阅读不出节点时，报错改为说明真正的原因
+- Clash 配置里有重复的键时整份无法导入
 
-完整记录见 [Releases](https://github.com/Efah-Dev/NextBox-Android/releases)。
+2.3.0 带来了分组代理连接和自动分组的测试间隔。完整记录见 [Releases](https://github.com/Efah-Dev/NextBox-Android/releases)。
 
 ## 功能
 

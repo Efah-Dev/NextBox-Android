@@ -62,6 +62,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import dev.efah.nextbox.data.Group
@@ -142,8 +147,13 @@ fun NodesScreen(
     // the nodes of a group test waiting for the "order afterwards?" answer
     val drag = rememberDragState()
     val list = rememberLazyListState()
+    // the group chips: long press and drag to reorder them
+    val chipDrag = rememberDragState()
+    val chipList = rememberLazyListState()
+    var arrangedGroups by remember { mutableStateOf<List<Group>?>(null) }
+    val groups = arrangedGroups ?: state.groups
     // picking several nodes: sideways moves are ours, not a swipe to the next page
-    val busy = picked != null || drag.key != null
+    val busy = picked != null || drag.key != null || chipDrag.key != null
     LaunchedEffect(busy) { dev.efah.nextbox.ui.PageSwipe.blocked = busy }
     DisposableEffect(Unit) { onDispose { dev.efah.nextbox.ui.PageSwipe.blocked = false } }
 
@@ -177,6 +187,22 @@ fun NodesScreen(
         }
     }
 
+    // the share links of the picked nodes; nodes without one (chain proxies,
+    // Shadowsocks with ShadowTLS) are left out, the others still copied
+    fun copyLinks(ids: Collection<Long>) {
+        scope.launch {
+            Repo.exportLinks(ids).onSuccess { text ->
+                val copied = text.lines().count { it.isNotBlank() }
+                copyToClipboard(text)
+                val skipped = ids.size - copied
+                toast.ok(
+                    if (skipped > 0) T("已复制 %d 个节点的链接，跳过 %d 个没有分享链接的节点", copied, skipped)
+                    else T("已复制 %d 个节点的链接", copied),
+                )
+            }.onFailure { toast.error(it.message ?: T("导出失败")) }
+        }
+    }
+
     fun groupAction(g: Group, action: String) {
         when (action) {
             "update" -> Repo.updateInBackground(g.id)
@@ -191,6 +217,7 @@ fun NodesScreen(
             val sel = picked
             if (sel != null) {
                 TopBar(T("已选 %d 个", sel.size), leading = { BarIcon(NbIcons.Close, T("退出多选"), { picked = null }) }) {
+                    if (sel.isNotEmpty()) BarIcon(NbIcons.Link, T("复制分享链接"), { copyLinks(sel) })
                     val all = sel.size == shown.size && shown.isNotEmpty()
                     Text(
                         if (all) T("取消全选") else T("全选"), color = c.accentInk, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
@@ -229,9 +256,12 @@ fun NodesScreen(
                 )
             }
             LazyRow(
+                state = chipList,
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 12.dp),
+                // scrolling the chips past their end does not turn the page:
+                // only a swipe elsewhere does
+                modifier = Modifier.padding(bottom = 12.dp).nestedScroll(keepScroll),
             ) {
                 if (policies.isNotEmpty()) {
                     item(key = "policies") {
@@ -243,18 +273,42 @@ fun NodesScreen(
                         })
                     }
                 }
-                items(state.groups, key = { it.id }) { g ->
+                items(groups, key = { it.id }) { g ->
                     var chipMenu by remember { mutableStateOf(false) }
-                    Box {
+                    // held still and released, a long press opens the group's menu;
+                    // held and moved, it drags the chip to another place
+                    val openMenu = {
+                        picked = null
+                        if (g.id != state.currentGroupId) scope.launch { Repo.selectGroup(g.id) }
+                        chipMenu = true
+                    }
+                    val canDragChips = groups.size > 1
+                    Box(
+                        Modifier.animateItem(placementSpec = if (chipDrag.key != null) null else androidx.compose.animation.core.spring())
+                            .dragRow(chipDrag, g.id, horizontal = true, shape = RoundedCornerShape(18.dp))
+                            .longPressDrag(
+                                chipDrag, chipList, g.id, groups.map { it.id }, gap = 8.dp, enabled = canDragChips,
+                                onMove = { from, to -> arrangedGroups = groups.toMutableList().also { it.add(to, it.removeAt(from)) } },
+                                onDrop = {
+                                    val ids = arrangedGroups?.map { it.id }
+                                    if (ids != null && ids != state.groups.map { it.id }) {
+                                        scope.launch {
+                                            Repo.reorderGroups(ids).onFailure { toast.error(it.message ?: T("保存失败")) }
+                                            arrangedGroups = null
+                                        }
+                                    } else {
+                                        arrangedGroups = null
+                                    }
+                                },
+                                onHold = openMenu,
+                                horizontal = true,
+                            ),
+                    ) {
                         Chip(g.displayName, g.id == state.currentGroupId && !showPolicies, onClick = {
                             picked = null
                             showPolicies = false
                             scope.launch { Repo.selectGroup(g.id) }
-                        }, onLongClick = {
-                            picked = null
-                            if (g.id != state.currentGroupId) scope.launch { Repo.selectGroup(g.id) }
-                            chipMenu = true
-                        })
+                        }, onLongClick = if (canDragChips) null else openMenu)
                         NbMenu(chipMenu, { chipMenu = false }, offset = DpOffset(0.dp, 6.dp)) {
                             if (g.default) {
                                 NbMenuItem(T("测速这个分组"), NbIcons.Bolt, { chipMenu = false; groupAction(g, "test") })
@@ -338,11 +392,11 @@ fun NodesScreen(
             }
             if (Repo.ADDING in updating) {
                 item(key = "adding") {
-                    NbCard(padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
+                    NbCard(Modifier.fillMaxWidth(), padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = c.accent)
                             Spacer(Modifier.width(12.dp))
-                            Text(T("正在添加订阅，下载完成后自动切换过去"), style = NbType.small, color = c.text)
+                            Text(T("正在添加订阅，请等待……"), style = NbType.small, color = c.text)
                         }
                     }
                 }
@@ -453,7 +507,7 @@ fun NodesScreen(
             Spacer(Modifier.height(14.dp))
             Text(T("手动填写"), style = NbType.bodyBold.copy(fontSize = 14.sp), color = c.text)
             Spacer(Modifier.height(8.dp))
-            val protocols = listOf("shadowsocks", "vmess", "vless", "trojan", "hysteria2", "tuic", "anytls", "naive", "socks", "http")
+            val protocols = listOf("shadowsocks", "vmess", "vless", "trojan", "hysteria2", "tuic", "anytls", "naive")
             (protocols.map { it to protocolName(it) } + ("json" to T("粘贴 JSON"))).chunked(3).forEach { row ->
                 Row(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     row.forEach { (type, label) ->
@@ -769,4 +823,13 @@ fun TwoFieldDialog(
 
 fun copyToClipboard(text: String) {
     dev.efah.nextbox.App.clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NextBox", text))
+}
+
+/**
+ * Takes the sideways scroll a row leaves over at its ends, so that it does not
+ * reach the pager and turn the page.
+ */
+private val keepScroll = object : NestedScrollConnection {
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = Offset(available.x, 0f)
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity) = Velocity(available.x, 0f)
 }

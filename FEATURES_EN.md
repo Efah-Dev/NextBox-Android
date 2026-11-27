@@ -11,12 +11,12 @@
 
 ### Nodes and subscriptions
 
-- **Protocols**: Shadowsocks (incl. obfs, v2ray-plugin, ShadowTLS), VMess, VLESS (incl. Reality / Vision), Trojan, Hysteria2, TUIC, AnyTLS, NaiveProxy (HTTPS and QUIC), SOCKS, HTTP; chain proxies
-- **Subscriptions**: Base64 link lists, Clash / Clash.Meta YAML, sing-box JSON; used traffic and expiry date; automatic updates, in the background while you keep working. Updates keep your order and add new nodes at the end
+- **Protocols**: Shadowsocks (incl. obfs, v2ray-plugin, ShadowTLS and Clash.Meta's gost-plugin), VMess, VLESS (incl. Reality / Vision), Trojan, Hysteria, Hysteria2, TUIC, AnyTLS, NaiveProxy (HTTPS and QUIC), SOCKS, HTTP; chain proxies
+- **Subscriptions**: Base64 link lists, Clash / Clash.Meta YAML, sing-box JSON; a Clash subscription's proxy-providers are downloaded too; used traffic and expiry date; automatic updates, in the background while you keep working. Updates keep your order and add new nodes at the end
 - **Clash conversion**: the groups of a subscription become policy groups, its rules become rule sets (one per target), its DNS settings DNS overrides; you tick what to take the first time (rules are off by default), and it follows every update. *Groups and rules of the subscription* in the group menu (long-press a group) chooses again
 - **Subscription DNS**: when a subscription names its provider's own DNS servers, the import offers them; they are used only for that subscription's nodes. Switch them per subscription in *Settings → Advanced → DNS → Subscription DNS*
 - **Import**: QR codes, the clipboard, share links opened from other apps (confirmed first); `clash://` and `sing-box://` links too
-- **Nodes**: form or JSON editing, search, multi-select delete and test, QR sharing; remove duplicates; flags before node names, protocol and server address below them; long-press and drag to reorder, or sort by default order, latency, name or region; long-press a group for its menu
+- **Nodes**: form or JSON editing, search, multi-select delete, test and copying share links, QR sharing; remove duplicates; flags before node names, protocol and server address below them; long-press and drag to reorder, or sort by default order, latency, name or region; long-press a group for its menu, or long-press and drag it to reorder the groups
 - **Chain proxies**: 2 to 8 nodes in turn; or long-press a node and pick *Connect through other nodes*
 - **Latency tests**: by URL (the default for new installs) or TCP, the same setting as in the Windows app; UDP protocols and chains always use the URL test. After testing a whole group the nodes go back to the order of the subscription, keep their order or are sorted by latency, asked once on the first test and changed later in *Settings → Test*
 - **Automatic node choice** (optional): if the selected node does not answer when connecting, the fastest working node of its group is used

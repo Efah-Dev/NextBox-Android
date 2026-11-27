@@ -461,19 +461,45 @@ func ReorderProfiles(groupID int64, ids string) error {
 	return s.ReorderProfiles(groupID, parseIDs(ids))
 }
 
-// ExportLinks returns the share links of the given nodes, one per line.
+// ReorderGroups puts the groups in the given order (comma separated ids), as
+// their chips were dragged by the user.
+func ReorderGroups(ids string) error {
+	s, err := current()
+	if err != nil {
+		return err
+	}
+	return s.ReorderGroups(parseIDs(ids))
+}
+
+// ExportLinks returns the share links of the given nodes, one per line. As
+// in the Windows app, a node that has no share link fails a single export;
+// among several it is left out (the app counts the lines), so the others
+// are still copied. Chain proxies have no share link.
 func ExportLinks(ids string) (string, error) {
 	s, err := current()
 	if err != nil {
 		return "", err
 	}
 	var lines []string
+	var firstErr error
 	for _, p := range s.ProfilesByIDs(parseIDs(ids)) {
+		if p.IsChain() {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%s: %s", p.Name, i18n.T("链式代理没有分享链接"))
+			}
+			continue
+		}
 		l, err := link.Export(p.Name, p.Outbound)
 		if err != nil {
-			return "", fmt.Errorf("%s: %w", p.Name, err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%s: %w", p.Name, err)
+			}
+			continue
 		}
 		lines = append(lines, l)
+	}
+	if len(lines) == 0 && firstErr != nil {
+		return "", firstErr
 	}
 	return strings.Join(lines, "\n"), nil
 }

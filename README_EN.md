@@ -30,24 +30,28 @@ the same rules route the same way on your phone and your PC, and encrypted backu
 
 > NextBox is an independent project, not affiliated with or endorsed by SagerNet / sing-box or MatsuriDayo / nekoray.
 
-## What's new in 2.3.0
+## What's new in 2.3.1
 
 **New**
 
-- Connect through a policy group: Home shows the node it uses and puts the group's name before the exit IP, and so do the notification and the quick tile; traffic is still counted per node
-- Automatic policy groups get their own test interval, shared with the Windows app
-- A link to the Telegram channel in About
+- Clash.Meta's gost-plugin (Shadowsocks) nodes, also as share links
+- A Clash subscription's proxy-providers are downloaded when it updates
+- Hysteria nodes from Clash subscriptions
+- Long-press and drag a group to reorder the groups
+- Copy the share links of several picked nodes at once
 
 **Improved**
 
-- New installs test by URL
-- Clearer, shorter text in several settings
-- Automatic node selection pauses while a policy group is used
-- sing-box 1.14.5
+- HTTP and SOCKS were removed from the manual entry list
+- The card shown while a subscription is added spans the full width
 
 **Fixed**
 
-- The network name in the exit line on Home kept company suffixes such as "Inc." and "Ltd."
+- Swiping past the end of the group row switched to another page
+- When no nodes can be read from a Clash subscription, the error now says why
+- Clash configs with a repeated key could not be imported
+
+2.3.0 brought connecting through a policy group and test intervals for automatic groups.
 
 Every release is on the [Releases](https://github.com/Efah-Dev/NextBox-Android/releases) page.
 
