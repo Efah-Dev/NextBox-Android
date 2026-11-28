@@ -12,7 +12,7 @@
   <a href="https://github.com/Efah-Dev/NextBox-Android/releases/latest"><img src="https://img.shields.io/github/v/release/Efah-Dev/NextBox-Android?label=Release&color=f472b6" alt="Release"></a>
   <a href="https://github.com/Efah-Dev/NextBox-Android/releases"><img src="https://img.shields.io/github/downloads/Efah-Dev/NextBox-Android/total?label=Downloads&color=8b8cf8" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white" alt="Platform">
-  <img src="https://img.shields.io/badge/sing--box-1.14.5-5B6678" alt="sing-box">
+  <img src="https://img.shields.io/badge/sing--box-1.14.6-5B6678" alt="sing-box">
   <a href="https://t.me/nextboxofficial"><img src="https://img.shields.io/badge/Telegram-nextboxofficial-26A5E4?logo=telegram&logoColor=white" alt="Telegram"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License"></a>
 </p>
@@ -30,28 +30,39 @@ NextBox for Android 和 [NextBox for Windows](https://github.com/Efah-Dev/NextBo
 
 > NextBox 是独立项目，与 SagerNet / sing-box 以及 MatsuriDayo / nekoray 没有隶属或背书关系。
 
-## 2.3.1 更新
+## 2.3.2 更新
 
 **新增**
 
-- 支持 Clash.Meta 的 gost-plugin 节点（Shadowsocks），可以导出和导入分享链接
-- 更新 Clash 订阅时一起下载其中的 proxy-providers
-- 支持 Clash 订阅里的 Hysteria 节点
-- 长按拖动可以给分组排序
-- 多选节点后可以一次复制分享链接
+- 分流规则的最后一步「其余流量」可以改成直连或分组代理
+- 长按节点页的加号按钮，测速当前列表里的节点
+- 选择节点页面可以测速、按延迟排序
+- 选择节点页面和节点多选模式下，长按后拖动可以一次勾选多个
+- 在首页点当前节点，会跳到它所在的分组并标出来
+- 排列方式新增按协议；选过排序方式后，订阅卡片上有排序按钮，可以在正常、从低到高、从高到低之间切换
+- 从剪贴板或扫码添加订阅时直接添加，订阅没有名称时才问你
 
 **改进**
 
-- 「手动填写」去掉了 HTTP 和 SOCKS
-- 添加订阅时的提示卡片改为整行显示
+- 分组代理「自动用最快的」在换网络后马上重新测速，并从那时重新开始计算测试间隔
+- 内核升级到 sing-box 1.14.6
+- 开启了「连接期间定时检查」的自动选择节点，换网络后也会检查一次
+- 分流规则的卡片分简约和详细两种：默认简约，一步一行；详细显示完整的名称、内容和去向；长按卡片拖动排序
+- 测试间隔改为一行的加减选择，点数字可以直接输入
+- 节点页的添加按钮改为圆形加号
+- 选择节点页面的排序按钮分正常、从低到高、从高到低三种
+- 按名称排序时数字按大小排（日本2 在 日本10 前面）；订阅更新后保持当前的排序
+- 多选时勾选的圆圈在左边
 
 **修复**
 
-- 在分组栏滑到头会切换到其他页面
-- Clash 订阅读不出节点时，报错改为说明真正的原因
-- Clash 配置里有重复的键时整份无法导入
+- 选择节点页面快速滑动会被关闭，轻拉后会来回跳动，到底后还能继续往上滑
+- 部分手机上输入法会盖住弹窗里的输入框
+- 节点列表右侧空出一块，延迟没有靠在最右边
+- 选择节点页面排序后，列表停在中间，看起来没有排好
+- 合并导入备份后，订阅分组恢复默认顺序时顺序不对
 
-2.3.0 带来了分组代理连接和自动分组的测试间隔。完整记录见 [Releases](https://github.com/Efah-Dev/NextBox-Android/releases)。
+2.3.1 支持了 gost-plugin 节点、Clash 订阅的 proxy-providers 和 Hysteria 节点。完整记录见 [Releases](https://github.com/Efah-Dev/NextBox-Android/releases)。
 
 ## 功能
 
@@ -119,7 +130,7 @@ powershell -ExecutionPolicy Bypass -File build-apk.ps1 -Release     # APK
 Linux / macOS 用 `bash core/build-core.sh` 和 `./gradlew assembleRelease`。正式版签名：在仓库根目录放 `keystore.properties`
 （`storeFile`、`storePassword`、`keyAlias`、`keyPassword`），没有时使用调试密钥。
 
-sing-box 直接使用官方模块 `github.com/sagernet/sing-box v1.14.5`，没有修改，编译标签为 `with_gvisor, with_quic, with_utls, with_naive_outbound`。
+sing-box 直接使用官方模块 `github.com/sagernet/sing-box v1.14.6`，没有修改，编译标签为 `with_gvisor, with_quic, with_utls, with_naive_outbound`。
 
 <details>
 <summary>目录结构</summary>

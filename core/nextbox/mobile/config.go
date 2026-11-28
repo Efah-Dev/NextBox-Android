@@ -60,6 +60,9 @@ func BuildConfig(ruleSetDir, options string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	autoMu.Lock()
+	autoGroups = config.AutoTestGroups(in, cfg)
+	autoMu.Unlock()
 	adaptForAndroid(cfg, set, opt)
 	if set.TunEnabled {
 		directNodeServers(cfg, s.Profiles(0))

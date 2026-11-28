@@ -150,23 +150,16 @@ fun PolicyEditorScreen(id: Long, onClose: () -> Unit) {
             } else {
                 // how often the group tests its members (Policy.interval, shared with Windows)
                 val every = if (p.interval > 0) p.interval else 10
-                val presets = listOf(3, 5, 10, 15, 30, 60)
-                var custom by remember { mutableStateOf(every !in presets) }
-                Text(T("测试间隔"), style = NbType.section, color = c.muted, modifier = Modifier.padding(start = 4.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    presets.forEach { m -> Chip(T("%d 分钟", m), !custom && every == m, onClick = { custom = false; p = p.copy(interval = m) }) }
-                    Chip(T("自定义"), custom, onClick = { custom = true })
-                }
-                if (custom) {
-                    NbField(
-                        every.toString(), { v -> v.filter(Char::isDigit).take(4).toIntOrNull()?.let { p = p.copy(interval = it.coerceIn(1, 1440)) } },
-                        singleLine = true, label = { Text(T("间隔（分钟）")) },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
+                Row(Modifier.fillMaxWidth().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(T("测试间隔"), style = NbType.section, color = c.muted, modifier = Modifier.weight(1f))
+                    dev.efah.nextbox.ui.NbStepper(
+                        every, steps = listOf(3, 5, 10, 15, 30, 60), range = 1..1440,
+                        label = { T("%d 分钟", it) }, inputTitle = T("间隔（分钟）"),
+                        onChange = { p = p.copy(interval = it) },
                     )
                 }
                 Text(
-                    T("连接期间按这个间隔测一次组内节点，换用最快的一个。间隔越短越耗电，建议不低于 5 分钟。"),
+                    T("连接期间按这个间隔测一次组内节点，换用最快的一个；换网络后会马上测一次。间隔越短越耗电，建议不低于 5 分钟。点中间的数字可以直接输入。"),
                     style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp),
                 )
             }
@@ -217,7 +210,7 @@ fun PolicyEditorScreen(id: Long, onClose: () -> Unit) {
     }
 
     if (allRegions) {
-        RegionSheet(p.country, onDismiss = { allRegions = false }) {
+        RegionPage(p.country, onDismiss = { allRegions = false }) {
             p = p.copy(country = it)
             allRegions = false
         }
@@ -278,18 +271,22 @@ private fun RegionGrid(codes: List<String>, names: Map<String, String>, counts: 
     }
 }
 
-/** Every region a policy group can match, searchable by name or code. */
+/** Every region a policy group can match, searchable by name or code; a tap picks one. */
 @Composable
-private fun RegionSheet(selected: String, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+private fun RegionPage(selected: String, onDismiss: () -> Unit, onPick: (String) -> Unit) {
     val c = Nb.c
     var query by remember { mutableStateOf("") }
     val q = query.trim().lowercase()
     val shown = Repo.places.filter { q.isEmpty() || it.name.lowercase().contains(q) || it.code.lowercase().contains(q) }
-    NbSheet(onDismiss) {
-        Text(T("选择地区"), style = NbType.big, color = c.text, modifier = Modifier.padding(bottom = 10.dp))
-        NbField(query, { query = it }, singleLine = true, placeholder = { Text(T("搜索地区，例如 日本 或 JP")) }, modifier = Modifier.fillMaxWidth())
-        Box(Modifier.fillMaxWidth().padding(top = 8.dp).height(sheetListHeight(0.55f, 520.dp))) {
-            LazyColumn {
+    // a page of its own: a long list in a bottom sheet fights the sheet over every swipe
+    PickerPage(T("选择地区"), 0, onDone = onDismiss, onDismiss = onDismiss) {
+        NbField(
+            query, { query = it }, singleLine = true, placeholder = { Text(T("搜索地区，例如 日本 或 JP")) },
+            leadingIcon = { Icon(NbIcons.Search, null, tint = c.muted) },
+            shape = RoundedCornerShape(22.dp), modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+        )
+        Box(Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp)) {
+            LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp)) {
                 items(shown, key = { it.code }) { pl ->
                     val on = pl.code == selected
                     Row(

@@ -198,10 +198,10 @@ func TestSortGroup(t *testing.T) {
 		return out
 	}
 	// working nodes first by latency, then untested, then failed
-	if s.SortGroup(g.ID, "latency"); names() != "fast slow untested failed " {
+	if s.SortGroup(g.ID, "latency", SortAsc); names() != "fast slow untested failed " {
 		t.Errorf("by latency: %s", names())
 	}
-	if s.SortGroup(g.ID, "name"); names() != "failed fast slow untested " {
+	if s.SortGroup(g.ID, "name", SortAsc); names() != "failed fast slow untested " {
 		t.Errorf("by name: %s", names())
 	}
 	if got := s.Profiles(other.ID); len(got) != 1 || got[0].Name != "zzz" {
@@ -278,7 +278,7 @@ func TestReorderAndManualOrder(t *testing.T) {
 	if g, _ := s.Group(sub.ID); g.ManualOrder {
 		t.Error("the mark survived a reset")
 	}
-	if err := s.SortGroup(sub.ID, "name"); err != nil {
+	if err := s.SortGroup(sub.ID, "name", SortAsc); err != nil {
 		t.Fatal(err)
 	}
 	if g, _ := s.Group(sub.ID); !g.ManualOrder {
@@ -289,7 +289,7 @@ func TestReorderAndManualOrder(t *testing.T) {
 	// background update kept a manual one); nodes added by hand come last
 	s.ReplaceGroupProfiles(sub.ID, []Profile{node("b"), node("e"), node("a"), node("c")}, true)
 	s.AddProfiles(sub.ID, []Profile{node("m")})
-	if err := s.SortGroup(sub.ID, SortDefault); err != nil {
+	if err := s.SortGroup(sub.ID, SortDefault, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := names(s.Profiles(sub.ID)); got != "b e a c m " {
@@ -303,7 +303,7 @@ func TestReorderAndManualOrder(t *testing.T) {
 	s.ReorderProfiles(manual.ID, []int64{0})
 	ps := s.Profiles(manual.ID)
 	s.ReorderProfiles(manual.ID, []int64{ps[1].ID, ps[0].ID})
-	s.SortGroup(manual.ID, SortDefault)
+	s.SortGroup(manual.ID, SortDefault, "")
 	if got := names(s.Profiles(manual.ID)); got != "x y " {
 		t.Errorf("manual default order: %s", got)
 	}

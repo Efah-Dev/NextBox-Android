@@ -76,6 +76,7 @@ fun RuleSetScreen(index: Int, onClose: () -> Unit) {
     val original = remember { state.settings.rules.getOrNull(index)?.takeIf { it.isSet } }
     var name by remember { mutableStateOf(original?.name.orEmpty()) }
     var target by remember { mutableStateOf(original?.target ?: "proxy") }
+    var enabled by remember { mutableStateOf(original?.disabled != true) }
     val values = remember {
         mutableStateMapOf<String, List<String>>().apply { original?.items?.forEach { put(it.kind, it.values) } }
     }
@@ -124,7 +125,7 @@ fun RuleSetScreen(index: Int, onClose: () -> Unit) {
         val its = Route.setKinds.mapNotNull { k -> values[k]?.takeIf { it.isNotEmpty() }?.let { SetItem(k, it) } } +
             (original?.items?.filter { it.kind == "process" } ?: emptyList()) // the desktop app's, kept
         if (name.isBlank() || its.isEmpty()) { toast.error(T("需要名称和至少一项内容")); return }
-        val set = Rule(kind = "set", name = name.trim(), target = target, items = its, disabled = original?.disabled ?: false)
+        val set = Rule(kind = "set", name = name.trim(), target = target, items = its, disabled = !enabled)
         val rules = state.settings.rules.toMutableList()
         if (original != null && index < rules.size) rules[index] = set else rules.add(Route.insertAt(rules), set)
         scope.launch {
@@ -145,6 +146,7 @@ fun RuleSetScreen(index: Int, onClose: () -> Unit) {
                 .padding(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 6.dp, bottom = LocalBottomInset.current + 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (original != null) EnabledCard(T("启用这个规则集"), enabled) { enabled = it }
             NbField(
                 name, { name = it }, singleLine = true,
                 label = { Text(T("名称")) }, placeholder = { Text(T("例如：公司内网、游戏加速")) },

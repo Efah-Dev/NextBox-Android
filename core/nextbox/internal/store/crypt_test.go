@@ -122,3 +122,36 @@ func TestImportMerge(t *testing.T) {
 		t.Errorf("replace: %d nodes, %d groups", len(dst.Profiles(0)), len(dst.Groups()))
 	}
 }
+
+// A merged backup keeps how its groups are sorted and their normal order
+// (the subscription's), with the nodes' new IDs.
+func TestImportKeepsSorting(t *testing.T) {
+	src, _ := Open(t.TempDir())
+	sub, _ := src.AddGroup(Group{Name: "airport", URL: "https://sub.example/y"})
+	src.ReplaceGroupProfiles(sub.ID, []Profile{{Name: "b 10", Type: "vless"}, {Name: "a 2", Type: "vless"}, {Name: "c 1", Type: "vless"}}, true)
+	src.SortGroup(sub.ID, SortByName, SortDesc)
+	raw, _ := src.ExportData()
+
+	dst, _ := Open(t.TempDir())
+	dst.AddProfiles(dst.Groups()[0].ID, []Profile{{Name: "local", Type: "socks"}}) // IDs in use
+	if _, err := dst.ImportData(raw, false); err != nil {
+		t.Fatal(err)
+	}
+	var g Group
+	for _, x := range dst.Groups() {
+		if x.URL != "" {
+			g = x
+		}
+	}
+	if g.SortBy != SortByName || g.SortDir != SortDesc {
+		t.Errorf("sort lost: %q %q", g.SortBy, g.SortDir)
+	}
+	dst.SortGroup(g.ID, SortByName, "") // back to the subscription's order
+	var names []string
+	for _, p := range dst.Profiles(g.ID) {
+		names = append(names, p.Name)
+	}
+	if strings.Join(names, ",") != "b 10,a 2,c 1" {
+		t.Errorf("normal order after import: %v", names)
+	}
+}

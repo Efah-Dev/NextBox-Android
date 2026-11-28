@@ -247,7 +247,12 @@ fun HomeScreen(onConnect: () -> Unit, onOpenNodes: () -> Unit, onImport: () -> U
 
                     StatusBlock(status, now - startedAt, startedAt, error, exitNode, policy?.name, compact)
 
-                    if (policy != null) PolicyCard(policy, member, onOpenNodes) else NodeCard(selected, onOpenNodes)
+                    // a tap shows the node in its group (or the policy group) on the nodes page
+                    if (policy != null) {
+                        PolicyCard(policy, member) { NodesReveal.request.value = NodesReveal.Target(policy = policy.id); onOpenNodes() }
+                    } else {
+                        NodeCard(selected) { selected?.let { NodesReveal.request.value = NodesReveal.Target(node = it.id) }; onOpenNodes() }
+                    }
 
                     if (h >= 380.dp) RouteSection(onPickApps)
 

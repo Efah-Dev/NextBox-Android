@@ -1,5 +1,5 @@
 # Builds app/libs/libbox.aar with gomobile from
-#   github.com/sagernet/sing-box v1.14.5  experimental/libbox (the proxy core, unmodified)
+#   github.com/sagernet/sing-box v1.14.6  experimental/libbox (the proxy core, unmodified)
 #   ./nextbox/mobile                      nbcore: data store, share links, subscriptions, config builder
 #   ./nbtest                              in-process URL latency test
 #
@@ -50,7 +50,7 @@ $env:Path = (Join-Path $env:JAVA_HOME "bin") + ";" + $env:Path
 # tailscale, wireguard, openvpn, openconnect, usbip and the clash API keeps
 # the library small.
 $tags = "with_gvisor,with_quic,with_utls,with_naive_outbound,badlinkname,tfogo_checklinkname0"
-$version = "1.14.5"
+$version = "1.14.6"
 $ldflags = "-X github.com/sagernet/sing-box/constant.Version=$version -X runtime.godebugDefault=multipathtcp=0,tlssha1=1 -checklinkname=0"
 if (-not $DebugBuild) { $ldflags += " -s -w -buildid=" }
 

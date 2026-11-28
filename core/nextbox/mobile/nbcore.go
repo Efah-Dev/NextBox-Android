@@ -14,7 +14,6 @@ import (
 	"nextbox/internal/clash"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,6 +53,7 @@ func Open(dir string) error {
 	if err != nil {
 		return err
 	}
+	s.SetRegionFunc(regionOf) // sorting by region
 	if errors.Is(statErr, os.ErrNotExist) {
 		set := s.Settings()
 		set.RouteMode = "global"
@@ -213,12 +213,77 @@ func AddSubscription(name, rawURL, proxy string) (string, error) {
 	if strings.TrimSpace(name) == "" {
 		name = i18n.T("新订阅")
 	}
+	// downloaded a moment ago by AddSubscriptionAuto, which asked for the name
+	pending := pendingSub.Take(rawURL)
 	g, err := s.AddGroup(store.Group{Name: strings.TrimSpace(name), URL: rawURL})
 	if err != nil {
 		return "", err
 	}
 	s.SetCurrentGroup(g.ID)
+	if pending != nil {
+		return applySubscription(s, g.ID, pending)
+	}
 	return UpdateSubscription(g.ID, proxy)
+}
+
+// pendingSub is a subscription downloaded while the user names it.
+var pendingSub sub.Pending
+
+type subscriptionAdd struct {
+	Message  string `json:"message,omitempty"`
+	NeedName bool   `json:"needName,omitempty"` // download kept: AddSubscription(name, url) adds it
+	Suggest  string `json:"suggest,omitempty"`  // the host, to start the name with
+}
+
+// AddSubscriptionAuto adds a subscription found in the clipboard (or
+// scanned, or shared): named by the link (name), else by its server; with
+// neither it is downloaded, kept, and the answer (JSON) asks for a name.
+func AddSubscriptionAuto(rawURL, name, proxy string) (string, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if strings.TrimSpace(name) != "" {
+		msg, err := AddSubscription(name, rawURL, proxy)
+		if err != nil {
+			return "", err
+		}
+		return marshal(subscriptionAdd{Message: msg})
+	}
+	s, err := current()
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		return "", errors.New(i18n.T("订阅地址必须以 http:// 或 https:// 开头"))
+	}
+	res, err := fetchSubscription(rawURL, s.Settings().SubUserAgent, proxy)
+	if err != nil {
+		return "", err
+	}
+	if name = sub.AutoName("", res); name == "" {
+		pendingSub.Keep(rawURL, res)
+		return marshal(subscriptionAdd{NeedName: true, Suggest: link.Classify(rawURL).Name})
+	}
+	g, err := s.AddGroup(store.Group{Name: name, URL: rawURL})
+	if err != nil {
+		return "", err
+	}
+	s.SetCurrentGroup(g.ID)
+	msg, err := applySubscription(s, g.ID, res)
+	if err != nil {
+		return "", err
+	}
+	return marshal(subscriptionAdd{Message: msg})
+}
+
+// fetchSubscription downloads a subscription, through proxy when given and
+// once more without it when that fails (the node may be the problem).
+func fetchSubscription(rawURL, ua, proxy string) (*sub.Result, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	res, err := sub.Fetch(ctx, rawURL, ua, proxy)
+	if err != nil && proxy != "" {
+		res, err = sub.Fetch(ctx, rawURL, ua, "")
+	}
+	return res, err
 }
 
 // UpdateSubscription downloads a subscription group again. Nodes that keep
@@ -239,16 +304,15 @@ func UpdateSubscription(groupID int64, proxy string) (string, error) {
 	if ua == "" {
 		ua = s.Settings().SubUserAgent
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	res, err := sub.Fetch(ctx, g.URL, ua, proxy)
-	if err != nil && proxy != "" {
-		// the node may be the problem: try once more without the proxy
-		res, err = sub.Fetch(ctx, g.URL, ua, "")
-	}
+	res, err := fetchSubscription(g.URL, ua, proxy)
 	if err != nil {
 		return "", err
 	}
+	return applySubscription(s, groupID, res)
+}
+
+// applySubscription puts a downloaded subscription into its group.
+func applySubscription(s *store.Store, groupID int64, res *sub.Result) (string, error) {
 	profiles := make([]store.Profile, 0, len(res.Nodes))
 	for _, n := range res.Nodes {
 		profiles = append(profiles, store.Profile{Name: n.Name, Type: n.Type(), Outbound: n.Outbound})
@@ -260,7 +324,7 @@ func UpdateSubscription(groupID int64, proxy string) (string, error) {
 	if err := s.ReplaceGroupProfiles(groupID, profiles, true); err != nil {
 		return "", err
 	}
-	g, _ = s.Group(groupID)
+	g, _ := s.Group(groupID)
 	g.UpdatedAt = time.Now().Unix()
 	if res.Usage != nil {
 		g.Usage = res.Usage
@@ -428,27 +492,22 @@ func DeleteProfiles(ids string) error {
 
 // SortGroup sorts a group by "name", "type", "latency" or "region" (nodes of
 // one region together, regions by code, unknown last).
-func SortGroup(groupID int64, by string) error {
+func SortGroup(groupID int64, by, dir string) error {
 	s, err := current()
 	if err != nil {
 		return err
 	}
-	if by != "region" {
-		return s.SortGroup(groupID, by)
+	return s.SortGroup(groupID, by, dir)
+}
+
+// SortAfterTest orders a group as Settings.SortAfterTest says ("latency" or
+// "default") once a test of the whole group is done.
+func SortAfterTest(groupID int64, choice string) error {
+	s, err := current()
+	if err != nil {
+		return err
 	}
-	list := s.Profiles(groupID)
-	key := func(p store.Profile) string {
-		if r := regionOf(p); r != "" {
-			return r
-		}
-		return "~"
-	}
-	sort.SliceStable(list, func(a, b int) bool { return key(list[a]) < key(list[b]) })
-	ids := make([]int64, len(list))
-	for i, p := range list {
-		ids[i] = p.ID
-	}
-	return s.ReorderProfiles(groupID, ids)
+	return s.SortAfterTest(groupID, choice)
 }
 
 // ReorderProfiles puts the nodes of a group in the given order (comma

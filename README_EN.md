@@ -12,7 +12,7 @@
   <a href="https://github.com/Efah-Dev/NextBox-Android/releases/latest"><img src="https://img.shields.io/github/v/release/Efah-Dev/NextBox-Android?label=Release&color=f472b6" alt="Release"></a>
   <a href="https://github.com/Efah-Dev/NextBox-Android/releases"><img src="https://img.shields.io/github/downloads/Efah-Dev/NextBox-Android/total?label=Downloads&color=8b8cf8" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white" alt="Platform">
-  <img src="https://img.shields.io/badge/sing--box-1.14.5-5B6678" alt="sing-box">
+  <img src="https://img.shields.io/badge/sing--box-1.14.6-5B6678" alt="sing-box">
   <a href="https://t.me/nextboxofficial"><img src="https://img.shields.io/badge/Telegram-nextboxofficial-26A5E4?logo=telegram&logoColor=white" alt="Telegram"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License"></a>
 </p>
@@ -30,28 +30,39 @@ the same rules route the same way on your phone and your PC, and encrypted backu
 
 > NextBox is an independent project, not affiliated with or endorsed by SagerNet / sing-box or MatsuriDayo / nekoray.
 
-## What's new in 2.3.1
+## What's new in 2.3.2
 
 **New**
 
-- Clash.Meta's gost-plugin (Shadowsocks) nodes, also as share links
-- A Clash subscription's proxy-providers are downloaded when it updates
-- Hysteria nodes from Clash subscriptions
-- Long-press and drag a group to reorder the groups
-- Copy the share links of several picked nodes at once
+- The last routing step, "Everything else", can go direct or to a policy group
+- Long press the add button of the nodes page to test the nodes listed
+- The node picker can test and sort by latency
+- In the node picker and in multi-select mode, long press and drag to tick several nodes at once
+- Tapping the current node on the home page opens its group and points it out
+- Sort by protocol; once a sort is chosen, the subscription card has a sort button for normal, low to high and high to low
+- A subscription from the clipboard or a scan is added right away; you are asked for a name only when it has none
 
 **Improved**
 
-- HTTP and SOCKS were removed from the manual entry list
-- The card shown while a subscription is added spans the full width
+- Automatic policy groups test their nodes right after a network change, and their test interval starts again from then
+- sing-box 1.14.6
+- Automatic node selection with "check while connected" also checks after a network change
+- Routing rule cards come compact (the default, one line per step) or detailed (full names, contents and targets); long press a card to drag it
+- The test interval is set with minus and plus buttons, or typed by tapping the number
+- The add button of the nodes page is a round plus button
+- The node picker's sort button has three states: normal, low to high, high to low
+- Names sort with numbers by value (Japan 2 before Japan 10); subscription updates keep the sort
+- The tick boxes of multi-select are on the left
 
 **Fixed**
 
-- Swiping past the end of the group row switched to another page
-- When no nodes can be read from a Clash subscription, the error now says why
-- Clash configs with a repeated key could not be imported
+- The node picker closed on a quick swipe, bounced after a light pull, and kept moving up at the end of the list
+- On some phones the keyboard covered the text fields of dialogs
+- The node list left a gap on the right, so latencies were not at the edge
+- After sorting, the node picker stayed in the middle of the list, so it looked unsorted
+- After a backup was merged in, a subscription's normal order was wrong
 
-2.3.0 brought connecting through a policy group and test intervals for automatic groups.
+2.3.1 brought gost-plugin nodes, the proxy-providers of Clash subscriptions and Hysteria nodes.
 
 Every release is on the [Releases](https://github.com/Efah-Dev/NextBox-Android/releases) page.
 
@@ -121,7 +132,7 @@ powershell -ExecutionPolicy Bypass -File build-apk.ps1 -Release     # APKs
 On Linux / macOS use `bash core/build-core.sh` and `./gradlew assembleRelease`. For release signing put a `keystore.properties`
 (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) in the repository root; without it the debug key is used.
 
-sing-box is the official module `github.com/sagernet/sing-box v1.14.5`, unchanged, built with the tags `with_gvisor, with_quic, with_utls, with_naive_outbound`.
+sing-box is the official module `github.com/sagernet/sing-box v1.14.6`, unchanged, built with the tags `with_gvisor, with_quic, with_utls, with_naive_outbound`.
 
 <details>
 <summary>Layout</summary>

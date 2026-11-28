@@ -14,7 +14,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
+	"nextbox/internal/autotest"
 	"nextbox/internal/store"
 )
 
@@ -191,12 +193,14 @@ func Build(in Input) (map[string]any, error) {
 				}
 				outbounds = append(outbounds, map[string]any{"type": "selector", "tag": tag, "outbounds": members, "default": def})
 			} else {
-				every := pi.Policy.TestInterval()
+				// NextBox tests the group on its own clock (see autotest and
+				// AutoTestGroups), so the core's interval never comes
+				every := fmt.Sprintf("%dh", int(autotest.CoreInterval.Hours()))
 				outbounds = append(outbounds, map[string]any{
 					"type": "urltest", "tag": tag, "outbounds": members,
-					"url": s.TestURL, "interval": fmt.Sprintf("%dm", every), "tolerance": 50,
+					"url": s.TestURL, "interval": every, "tolerance": 50,
 					// sing-box refuses an interval longer than idle_timeout
-					"idle_timeout": fmt.Sprintf("%dm", max(every, 30)),
+					"idle_timeout": every,
 				})
 			}
 		}
@@ -229,6 +233,17 @@ func Build(in Input) (map[string]any, error) {
 		}
 		return TagProxy
 	}
+
+	// the last step, "everything else": the selected node, or in rule mode
+	// where the user sends it (direct, a policy group)
+	final := TagProxy
+	switch {
+	case s.RouteMode == "direct" || !hasProxy:
+		final = TagDirect
+	case s.RouteMode == "rule":
+		final = outboundOf(s.Final())
+	}
+	finalDirect := hasProxy && final == TagDirect
 
 	// ---- dns ----
 	directDNS, err := parseDNS(s.DirectDNS, TagDNSDirect)
@@ -309,9 +324,16 @@ func Build(in Input) (map[string]any, error) {
 			}
 			dnsRules = append(dnsRules, r)
 		}
-		if fakeIP {
+		if fakeIP && !finalDirect {
 			dnsRules = append(dnsRules, map[string]any{"query_type": []string{"A", "AAAA"}, "server": TagFakeIP})
 		}
+	}
+	// traffic no step matched goes direct: its names are resolved the way
+	// sites are reached from here (the steps sending traffic to a node keep
+	// the remote DNS through the rules above)
+	finalDNS := dnsFinal
+	if finalDirect {
+		finalDNS = TagDNSDirect
 	}
 	strategy := "ipv4_only"
 	if s.EnableIPv6 {
@@ -320,7 +342,7 @@ func Build(in Input) (map[string]any, error) {
 	dns := map[string]any{
 		"servers":  dnsServers,
 		"rules":    append(ov.dnsRules, dnsRules...), // overrides first
-		"final":    dnsFinal,
+		"final":    finalDNS,
 		"strategy": strategy,
 	}
 
@@ -356,10 +378,6 @@ func Build(in Input) (map[string]any, error) {
 	}
 
 	// ---- route ----
-	final := TagProxy
-	if s.RouteMode == "direct" || !hasProxy {
-		final = TagDirect
-	}
 	routeRules := []any{}
 	if s.Sniff {
 		routeRules = append(routeRules, map[string]any{"action": "sniff"})
@@ -819,4 +837,26 @@ func RuleSetURL(mirror, name string) string {
 		kind = "geoip"
 	}
 	return strings.NewReplacer("{kind}", kind, "{name}", name).Replace(mirror)
+}
+
+// AutoTestGroups lists the automatic policy groups of a config built from in,
+// with their test intervals, for the clock that tests them (autotest).
+func AutoTestGroups(in Input, cfg map[string]any) []autotest.Group {
+	_, _, ptags := in.Tags()
+	every := map[string]time.Duration{}
+	for _, pi := range in.Policies {
+		if pi.Policy.Mode != store.PolicySelect {
+			every[ptags[pi.Policy.ID]] = time.Duration(pi.Policy.TestInterval()) * time.Minute
+		}
+	}
+	var out []autotest.Group
+	obs, _ := cfg["outbounds"].([]any)
+	for _, ob := range obs {
+		m, _ := ob.(map[string]any)
+		tag, _ := m["tag"].(string)
+		if m["type"] == "urltest" && every[tag] > 0 {
+			out = append(out, autotest.Group{Tag: tag, Every: every[tag]})
+		}
+	}
+	return out
 }

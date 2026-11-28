@@ -118,6 +118,7 @@ class BoxRunner(
                 Log.i(TAG, "default network changed on the same interface: resetting connections")
                 scope.launch { runCatching { server?.resetNetwork() } }
             }
+            DefaultNetworkMonitor.onNetworkChange = { onNetworkChange() }
             DefaultNetworkMonitor.start()
             val s = Libbox.newCommandServer(this, platform)
             s.start()
@@ -188,6 +189,7 @@ class BoxRunner(
         refreshUsage()
         notifier.update(label(), Speed(), Speed(), usage)
         connectStatus()
+        startAutoTest()
         statsJob = scope.launch {
             var ticks = 0
             while (isActive) {
@@ -218,6 +220,7 @@ class BoxRunner(
                     // a reload starts a new box instance: reattach the status stream
                     disconnectStatus()
                     connectStatus()
+                    startAutoTest()
                 } catch (e: Exception) {
                     Log.e(TAG, "reload", e)
                     shutdown(e.message ?: e.toString())
@@ -249,6 +252,9 @@ class BoxRunner(
         tunFd = null
         DefaultNetworkMonitor.stop()
         DefaultNetworkMonitor.onSameInterfaceChange = null
+        DefaultNetworkMonitor.onNetworkChange = null
+        runCatching { Nbcore.stopAutoTest() }
+        networkJob?.cancel()
         runCatching { Nbcore.flush() }
         withContext(Dispatchers.Main) {
             if (receiverRegistered) {
@@ -273,6 +279,7 @@ class BoxRunner(
         if (Box.runner === this && Box.status.value != Status.Stopped) {
             statsJob?.cancel()
             disconnectStatus()
+            runCatching { Nbcore.stopAutoTest() }
             runCatching { server?.closeService() }
             runCatching { server?.close() }
             server = null
@@ -290,6 +297,61 @@ class BoxRunner(
             Box.runner = null
         }
         scope.cancel()
+    }
+
+    // ---------------------------------------------------------------- automatic tests
+
+    /**
+     * The automatic policy groups of the config just loaded are tested on
+     * NextBox's clock (nbcore autotest): every interval, and right after a
+     * network change, which also starts the interval again.
+     */
+    private fun startAutoTest() {
+        runCatching {
+            Nbcore.startAutoTest(object : dev.efah.nextbox.nbcore.GroupTester {
+                override fun testGroup(tag: String) {
+                    // a client of its own: the status stream is off while the screen is
+                    val c = Libbox.newCommandClient(QuietHandler(), CommandClientOptions())
+                    runCatching { c.urlTest(tag) }.onFailure { Log.w(TAG, "group test $tag", it) }
+                    runCatching { c.disconnect() }
+                }
+            })
+        }.onFailure { Log.w(TAG, "auto test", it) }
+    }
+
+    private var networkJob: Job? = null
+
+    /** Another network: the groups are retested (nbcore), and so is the node when asked for. */
+    private fun onNetworkChange() {
+        Log.i(TAG, "network changed: retesting")
+        runCatching { Nbcore.networkChanged() }
+        if (!Prefs.autoSelect.value || !Prefs.autoSelectWatch.value) return
+        networkJob?.cancel()
+        networkJob = scope.launch {
+            delay(2_000) // let the new network settle (more changes restart the wait)
+            // like watchNode, outside the lock: switching the node reloads
+            if (Box.status.value != Status.Started || AutoSelect.selectedWorks()) return@launch
+            when (val r = AutoSelect.check()) {
+                is AutoSelect.Outcome.Switched -> Box._notice.value = switchedNotice(r)
+                is AutoSelect.Outcome.NoNode -> Box._notice.value = r.message
+                AutoSelect.Outcome.Kept -> {}
+            }
+        }
+    }
+
+    /** A command client that listens to nothing (StatusHandler picks what it needs). */
+    private open class QuietHandler : CommandClientHandler {
+        override fun connected() {}
+        override fun disconnected(message: String?) {}
+        override fun setDefaultLogLevel(level: Int) {}
+        override fun clearLogs() {}
+        override fun writeLogs(messageList: LogIterator?) {}
+        override fun writeStatus(message: StatusMessage) {}
+        override fun writeGroups(message: OutboundGroupIterator?) {}
+        override fun writeOutbounds(message: OutboundGroupItemIterator?) {}
+        override fun initializeClashMode(modeList: dev.efah.nextbox.libbox.StringIterator?, currentMode: String?) {}
+        override fun updateClashMode(newMode: String?) {}
+        override fun writeConnectionEvents(events: ConnectionEvents?) {}
     }
 
     private var watchFailures = 0
@@ -413,18 +475,9 @@ class BoxRunner(
         notifier.update(label(), speed, session, usage)
     }
 
-    private inner class StatusHandler : CommandClientHandler {
-        override fun connected() {}
-        override fun disconnected(message: String?) {}
-        override fun setDefaultLogLevel(level: Int) {}
-        override fun clearLogs() {}
-        override fun writeLogs(messageList: LogIterator?) {}
+    private inner class StatusHandler : QuietHandler() {
         override fun writeStatus(message: StatusMessage) = onStatus(message)
         override fun writeGroups(message: OutboundGroupIterator?) = onGroups(message)
-        override fun writeOutbounds(message: OutboundGroupItemIterator?) {}
-        override fun initializeClashMode(modeList: dev.efah.nextbox.libbox.StringIterator?, currentMode: String?) {}
-        override fun updateClashMode(newMode: String?) {}
-        override fun writeConnectionEvents(events: ConnectionEvents?) {}
     }
 
     // ---------------------------------------------------------------- CommandServerHandler

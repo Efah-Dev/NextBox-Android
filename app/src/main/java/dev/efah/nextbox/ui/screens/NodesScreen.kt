@@ -54,7 +54,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -103,8 +102,25 @@ import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
 import dev.efah.nextbox.ui.TopBar
 import dev.efah.nextbox.ui.UsageBar
+import dev.efah.nextbox.ui.dragSelect
+import dev.efah.nextbox.ui.NbFab
+import dev.efah.nextbox.ui.rememberDragSelectState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonPrimitive
+
+/**
+ * Asks the nodes page to show a node (in its group) or a policy group (on
+ * the 分组代理 tab): scrolled to and lit up for a moment. Set it before
+ * switching to the page (the node card of the home page does).
+ */
+object NodesReveal {
+    data class Target(val node: Long = 0, val policy: Long = 0)
+
+    val request = MutableStateFlow<Target?>(null)
+}
 
 @Composable
 fun NodesScreen(
@@ -147,6 +163,10 @@ fun NodesScreen(
     // the nodes of a group test waiting for the "order afterwards?" answer
     val drag = rememberDragState()
     val list = rememberLazyListState()
+    // multi-select mode: long press a node and drag over others to pick them
+    val dragPick = rememberDragSelectState()
+    // what a reveal (NodesReveal) lights up for a moment: a node id, or "p" + a policy group id
+    var flash by remember { mutableStateOf<Any?>(null) }
     // the group chips: long press and drag to reorder them
     val chipDrag = rememberDragState()
     val chipList = rememberLazyListState()
@@ -168,6 +188,39 @@ fun NodesScreen(
     }
     // dragging works on the whole list only, not on search results or while picking
     val canDrag = query.isNullOrBlank() && picked == null
+
+    // the home page asked to show a node or a policy group (NodesReveal):
+    // its group (or the 分组代理 tab), scrolled to it, lit up for a moment
+    // (collected, not keyed on: clearing the request must not cancel its own handling)
+    LaunchedEffect(Unit) { NodesReveal.request.filterNotNull().collect { r ->
+        NodesReveal.request.value = null
+        picked = null
+        query = null
+        if (r.policy != 0L) {
+            showPolicies = true
+            Repo.loadPolicies()
+            val at = Repo.policies.value.indexOfFirst { it.id == r.policy }
+            if (at < 0) return@collect
+            list.animateScrollToItem((at - 1).coerceAtLeast(0))
+            flash = "p" + r.policy
+        } else {
+            showPolicies = false
+            val node = Repo.allProfiles().firstOrNull { it.id == r.node } ?: return@collect
+            if (node.groupId != Repo.state.value.currentGroupId) Repo.selectGroup(node.groupId)
+            // the group's nodes come a moment later
+            val nodes = kotlinx.coroutines.withTimeoutOrNull(3000) {
+                androidx.compose.runtime.snapshotFlow { profiles }.first { l -> l.any { it.id == r.node } }
+            } ?: return@collect
+            // the cards above the nodes: a subscription being added, the subscription's own
+            val before = (if (Repo.ADDING in Repo.updating.value) 1 else 0) +
+                (if (Repo.state.value.groups.firstOrNull { it.id == node.groupId }?.isSubscription == true) 1 else 0)
+            androidx.compose.runtime.withFrameNanos { } // the list has the new nodes
+            list.animateScrollToItem((before + nodes.indexOfFirst { it.id == r.node } - 2).coerceAtLeast(0))
+            flash = r.node
+        }
+        kotlinx.coroutines.delay(1600)
+        flash = null
+    } }
 
     // the group is sorted afterwards as the settings say (a single node is
     // never moved); the first test of a whole group asks once
@@ -335,24 +388,50 @@ fun NodesScreen(
                     )
                 }
             } else {
-                val shape = RoundedCornerShape(28.dp)
+                // a tap adds; a long press tests the nodes shown (and stops a test running)
+                val tipShown by dev.efah.nextbox.data.Prefs.fabTipShown.collectAsState()
+                var tip by remember { mutableStateOf(false) }
+                LaunchedEffect(tipShown) {
+                    if (tipShown) return@LaunchedEffect
+                    kotlinx.coroutines.delay(600)
+                    tip = true
+                    dev.efah.nextbox.data.Prefs.setFabTipShown()
+                    kotlinx.coroutines.delay(4000)
+                    tip = false
+                }
                 Row(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = LocalBottomInset.current + 6.dp)
-                        .height(56.dp)
-                        .shadow(10.dp, shape, ambientColor = c.accentStrong, spotColor = c.accentStrong)
-                        .glass(
-                            backdrop, radius = 28.dp, refraction = 10.dp,
-                            tint = c.accentStrong.copy(alpha = 0.78f), solid = c.accentStrong,
-                        )
-                        .clickable { sheet = true }
-                        .padding(start = 18.dp, end = 22.dp),
+                    Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = LocalBottomInset.current),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(NbIcons.Plus, null, tint = Color.White, modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(T("添加"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    AnimatedVisibility(tip, enter = fadeIn() + expandHorizontally(expandFrom = Alignment.End), exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.End)) {
+                        Text(
+                            T("长按可测速"), color = c.bg, fontSize = 12.5.sp, fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(end = 4.dp).clip(RoundedCornerShape(10.dp)).background(c.text.copy(alpha = 0.88f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                    NbFab(
+                        NbIcons.Plus, label = T("添加"), longLabel = T("测速当前列表"), busy = testing.isNotEmpty(),
+                        onClick = { sheet = true },
+                        onLongPress = {
+                            tip = false
+                            if (testing.isNotEmpty()) {
+                                Repo.cancelTest()
+                                toast(T("已停止测速"))
+                            } else {
+                                val ids = if (showPolicies) policies.flatMap { p -> p.nodes.map { it.id } }.distinct() else shown.map { it.id }
+                                if (ids.isEmpty()) {
+                                    toast(T("这里没有可以测速的节点"))
+                                } else {
+                                    toast(T("正在测速 %d 个节点", ids.size))
+                                    if (showPolicies) Repo.testLatency(ids) else testGroup(ids)
+                                }
+                            }
+                        },
+                    ) {
+                        shadow(10.dp, CircleShape, ambientColor = c.accentStrong, spotColor = c.accentStrong)
+                            .glass(backdrop, radius = 28.dp, refraction = 10.dp, tint = c.accentStrong.copy(alpha = 0.78f), solid = c.accentStrong)
+                    }
                 }
             }
         },
@@ -364,11 +443,15 @@ fun NodesScreen(
                 top = pad.calculateTopPadding() + 4.dp, bottom = pad.calculateBottomPadding() + 72.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().dragSelect(
+                dragPick, list, shown.map { it.id }, picked.orEmpty(), enabled = picked != null,
+            ) { picked = it },
         ) {
             if (showPolicies) {
                 items(policies, key = { "p" + it.id }) { p ->
                     val used = state.selectedPolicy == p.id
+                    val lit by animateColorAsState(if (flash == "p" + p.id) c.accent else Color.Transparent, tween(400), label = "plit")
+                    Box(Modifier.border(2.dp, lit, RoundedCornerShape(20.dp))) {
                     PolicyUseCard(
                         p, used, if (used) runningNode else 0L,
                         onUse = {
@@ -381,6 +464,7 @@ fun NodesScreen(
                         },
                         onPick = { id -> scope.launch { Repo.selectPolicyNode(p.id, id) } },
                     )
+                    }
                 }
                 item(key = "policy-hint") {
                     Text(
@@ -409,6 +493,12 @@ fun NodesScreen(
                             group, profiles.size, group.id in updating,
                             onRefresh = { Repo.updateInBackground(group.id) },
                             onLongClick = { subMenu = true },
+                            onSort = {
+                                scope.launch {
+                                    Repo.sortGroup(group.sortBy, dev.efah.nextbox.ui.Sorting.next(group.sortDir))
+                                        .onFailure { toast.error(it.message ?: T("保存失败")) }
+                                }
+                            },
                         )
                         NbMenu(subMenu, { subMenu = false }, offset = DpOffset(24.dp, 4.dp)) {
                             GroupMenuItems(group, { subMenu = false }) { groupAction(group, it) }
@@ -455,6 +545,7 @@ fun NodesScreen(
                         testing = p.id in testing,
                         picked = sel?.contains(p.id),
                         lifted = drag.key == p.id,
+                        flash = flash == p.id,
                         onClick = {
                             if (sel != null) {
                                 picked = if (p.id in sel) sel - p.id else sel + p.id
@@ -558,13 +649,16 @@ fun NodesScreen(
             listOf(
                 ChoiceOption("default", T("默认排序"), if (group?.isSubscription == true) T("订阅里的顺序") else T("添加的先后")),
                 ChoiceOption("latency", T("按延迟"), T("最快的在最上面")),
-                ChoiceOption("name", T("按名称"), ""),
+                ChoiceOption("name", T("按名称"), T("数字按大小排，日本2 在 日本10 前面")),
+                ChoiceOption("type", T("按协议"), T("同一种协议排在一起")),
                 ChoiceOption("region", T("按地区"), T("同一地区的排在一起")),
             ),
-            current = "", onDismiss = { dialog = null }, sub = T("也可以长按节点拖动排序"),
+            current = group?.takeIf { it.sortDir.isNotEmpty() }?.sortBy ?: "default",
+            onDismiss = { dialog = null }, sub = T("订阅卡片上的排序按钮可以切换方向；也可以长按节点拖动排序"),
         ) { by ->
             dialog = null
-            scope.launch { Repo.sortGroup(by).onFailure { toast.error(it.message ?: T("保存失败")) } }
+            val (key, dir) = if (by == "default") "" to "" else by to "asc"
+            scope.launch { Repo.sortGroup(key, dir).onFailure { toast.error(it.message ?: T("保存失败")) } }
         }
         "duplicates" -> DuplicatesSheet(onDismiss = { dialog = null })
         "delete-group" -> if (dg != null) {
@@ -634,7 +728,7 @@ private fun protocolTag(type: String): String = when (type) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SubscriptionCard(g: Group, count: Int, updating: Boolean, onRefresh: () -> Unit, onLongClick: () -> Unit) {
+private fun SubscriptionCard(g: Group, count: Int, updating: Boolean, onRefresh: () -> Unit, onLongClick: () -> Unit, onSort: () -> Unit) {
     val c = Nb.c
     NbCard(Modifier.clip(RoundedCornerShape(20.dp)).combinedClickable(onClick = {}, onLongClick = onLongClick), padding = PaddingValues(0.dp)) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -642,6 +736,14 @@ private fun SubscriptionCard(g: Group, count: Int, updating: Boolean, onRefresh:
                 Column(Modifier.weight(1f)) {
                     Text(T("%s · %d 个节点", g.name, count), style = NbType.bodyBold, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(if (updating) T("节点正在更新，请等待……") else fmtAgo(g.updatedAt), style = NbType.small, color = if (updating) c.accentInk else c.muted)
+                }
+                // once a sort was chosen (排列方式), its direction is one tap away
+                if (g.sortBy.isNotEmpty()) {
+                    dev.efah.nextbox.ui.SortChip(
+                        g.sortDir, dev.efah.nextbox.ui.Sorting.keyLabel(g.sortBy),
+                        dev.efah.nextbox.ui.Sorting.keyLabel(g.sortBy) + " · " + dev.efah.nextbox.ui.Sorting.dirLabel(g.sortDir),
+                        onSort, Modifier.padding(end = 8.dp),
+                    )
                 }
                 Box(
                     Modifier.size(40.dp).clip(CircleShape).background(c.accentSoft).clickable(enabled = !updating, onClick = onRefresh),
@@ -693,25 +795,45 @@ private fun NodeRow(
     lifted: Boolean,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)?,
+    /** Lit up for a moment (the home page asked to show this node). */
+    flash: Boolean = false,
 ) {
     val c = Nb.c
     val lit = picked ?: selected
+    val fade = tween<Color>(if (flash) 250 else 700)
     val bg by animateColorAsState(
-        if (lifted) c.card else if (lit) c.accentSoft.copy(alpha = if (c.dark) 0.6f else 0.55f) else c.card, label = "rowbg",
+        when {
+            lifted -> c.card
+            flash -> c.accentSoft.copy(alpha = 0.95f)
+            lit -> c.accentSoft.copy(alpha = if (c.dark) 0.6f else 0.55f)
+            else -> c.card
+        },
+        fade, label = "rowbg",
     )
-    val border by animateColorAsState(if (lifted || lit) c.accent.copy(alpha = 0.6f) else c.cardBorder, label = "rowb")
+    val border by animateColorAsState(if (flash) c.accent else if (lifted || lit) c.accent.copy(alpha = 0.6f) else c.cardBorder, fade, label = "rowb")
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 58.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(bg)
-            .border(if (lit || lifted) 1.5.dp else 1.dp, border, RoundedCornerShape(16.dp))
+            .border(if (lit || lifted || flash) 1.5.dp else 1.dp, border, RoundedCornerShape(16.dp))
             // with dragging on, the long press belongs to longPressDrag: an empty one here keeps it from being a tap
             .combinedClickable(onClick = onClick, onLongClick = onLongClick ?: {}, hapticFeedbackEnabled = onLongClick != null)
-            .padding(start = 14.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
+            .padding(start = 14.dp, end = 14.dp, top = 9.dp, bottom = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // multi-select: the tick box slides in on the left
+        androidx.compose.animation.AnimatedVisibility(picked != null, enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start), exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start)) {
+            val on = picked == true
+            Box(
+                Modifier.padding(end = 12.dp).size(22.dp).clip(CircleShape).background(if (on) c.accentStrong else Color.Transparent)
+                    .border(1.5.dp, if (on) c.accentStrong else c.muted, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (on) Icon(NbIcons.Check, T("已选中"), tint = Color.White, modifier = Modifier.size(14.dp))
+            }
+        }
         Column(Modifier.weight(1f)) {
             dev.efah.nextbox.ui.FlagText(
                 p.label, color = c.text, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -734,26 +856,11 @@ private fun NodeRow(
                 }
             }
         }
+        // the node in use shows by its colours (no mark taking room on the right)
         if (testing) {
-            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = c.accent)
+            CircularProgressIndicator(Modifier.padding(start = 8.dp).size(16.dp), strokeWidth = 2.dp, color = c.accent)
         } else {
-            LatencyText(p.latency)
-        }
-        // the check mark of the node in use, or the box of multi-select mode
-        Box(Modifier.width(34.dp), contentAlignment = Alignment.CenterEnd) {
-            androidx.compose.animation.AnimatedVisibility(picked != null, enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start), exit = fadeOut() + shrinkHorizontally()) {
-                val on = picked == true
-                Box(
-                    Modifier.size(22.dp).clip(CircleShape).background(if (on) c.accentStrong else Color.Transparent)
-                        .border(1.5.dp, if (on) c.accentStrong else c.muted, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (on) Icon(NbIcons.Check, T("已选中"), tint = Color.White, modifier = Modifier.size(14.dp))
-                }
-            }
-            if (picked == null && selected) {
-                Icon(NbIcons.Check, T("当前节点"), tint = c.accentInk, modifier = Modifier.size(20.dp).graphicsLayer { })
-            }
+            LatencyText(p.latency, Modifier.padding(start = 8.dp))
         }
     }
 }

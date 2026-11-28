@@ -16,7 +16,7 @@
 - **Clash conversion**: the groups of a subscription become policy groups, its rules become rule sets (one per target), its DNS settings DNS overrides; you tick what to take the first time (rules are off by default), and it follows every update. *Groups and rules of the subscription* in the group menu (long-press a group) chooses again
 - **Subscription DNS**: when a subscription names its provider's own DNS servers, the import offers them; they are used only for that subscription's nodes. Switch them per subscription in *Settings → Advanced → DNS → Subscription DNS*
 - **Import**: QR codes, the clipboard, share links opened from other apps (confirmed first); `clash://` and `sing-box://` links too
-- **Nodes**: form or JSON editing, search, multi-select delete, test and copying share links, QR sharing; remove duplicates; flags before node names, protocol and server address below them; long-press and drag to reorder, or sort by default order, latency, name or region; long-press a group for its menu, or long-press and drag it to reorder the groups
+- **Nodes**: form or JSON editing, search, multi-select delete, test and copying share links, QR sharing; remove duplicates; flags before node names, protocol and server address below them; long-press and drag to reorder, or sort by default order, latency, name, protocol or region (the subscription card switches the direction); long-press the add button to test the nodes listed; in multi-select mode, long-press and drag to tick several at once; tapping the current node on Home opens its group; long-press a group for its menu, or long-press and drag it to reorder the groups
 - **Chain proxies**: 2 to 8 nodes in turn; or long-press a node and pick *Connect through other nodes*
 - **Latency tests**: by URL (the default for new installs) or TCP, the same setting as in the Windows app; UDP protocols and chains always use the URL test. After testing a whole group the nodes go back to the order of the subscription, keep their order or are sorted by latency, asked once on the first test and changed later in *Settings → Test*
 - **Automatic node choice** (optional): if the selected node does not answer when connecting, the fastest working node of its group is used
@@ -24,12 +24,12 @@
 ### Routing
 
 - **Route modes**: global / rule / direct, as on Windows
-- **Route path**: every connection is checked from top to bottom. The first step (LAN) and the last (everything else) stay in place (in VPN mode, LAN and local addresses stay outside the VPN, as without it); ad blocking, bypass mainland China, rules and rule sets can be dragged into order; AI services, streaming and other sites are one tap away in a rule set's site categories, and steps that are off can be hidden
+- **Route path**: every connection is checked from top to bottom. The first step (LAN) and the last (everything else) stay in place (in VPN mode, LAN and local addresses stay outside the VPN, as without it); in rule mode, everything else can go direct or to a policy group; ad blocking, bypass mainland China, rules and rule sets are long-pressed and dragged into order, shown compact or detailed; AI services, streaming and other sites are one tap away in a rule set's site categories, and steps that are off can be hidden
 - **Rules**: sites (common services in one tap), apps (searchable, or type a package name), IPs and IP regions; rules can be named; an optional text mode
 - **Rule sets**: domains, IPs, apps, site categories, IP regions and online sing-box rule-sets or Clash rule providers (YAML / text) in one named set with one target
 - **Tester**: type an address or pick an app, and the path shows the step that catches it, and why
 - **Bypass mainland China**: built-in Chinese domain and IP rules, no download. Known foreign sites and sites on the mainland China list are not resolved; the rest are resolved with the remote DNS through the proxy (default, never poisoned) or the direct DNS, switched with the small tag on the home page
-- **Policy groups**: nodes picked by region, keywords or by hand, the fastest or a chosen one; you can connect through a policy group: Home shows the node it uses and the group's name before the exit IP, and traffic is still counted per node; an automatic group has its own test interval
+- **Policy groups**: nodes picked by region, keywords or by hand, the fastest or a chosen one; you can connect through a policy group: Home shows the node it uses and the group's name before the exit IP, and traffic is still counted per node; an automatic group has its own test interval and is tested again right after a network change; the node picker can test and sort by latency
 - **Proxy scope**: all apps, only the selected apps, or all but the selected apps
 
 ### Everyday use

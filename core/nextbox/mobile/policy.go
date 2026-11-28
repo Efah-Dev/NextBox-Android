@@ -213,19 +213,7 @@ func DeletePolicy(id int64) error {
 		return err
 	}
 	set := s.Settings()
-	target := store.PolicyTarget(id)
-	changed := false
-	for i := range set.Rules {
-		if set.Rules[i].Target == target {
-			set.Rules[i].Target, changed = store.TargetProxy, true
-		}
-	}
-	for i := range set.Scenes {
-		if set.Scenes[i].Target == target {
-			set.Scenes[i].Target, changed = store.TargetProxy, true
-		}
-	}
-	if changed {
+	if set.DropPolicy(id) {
 		return s.SaveSettings(set)
 	}
 	return nil

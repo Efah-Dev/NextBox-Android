@@ -6,7 +6,6 @@ import (
 	"nextbox/internal/i18n"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 
@@ -40,6 +39,9 @@ type Store struct {
 	locked     bool               // waiting for the password; nothing is saved meanwhile
 	sealed     vault.Envelope     // the locked file
 	key        *vault.PasswordKey // for EncryptPassword
+
+	// regionOf finds a node's region for SortByRegion (SetRegionFunc)
+	regionOf func(Profile) string
 }
 
 func Open(dir string) (*Store, error) {
@@ -410,6 +412,11 @@ func (s *Store) ReplaceGroupProfiles(groupID int64, list []Profile, keepOrder bo
 	} else {
 		g.ManualOrder = false
 	}
+	if g.SortDir != "" {
+		// a sorted group stays sorted: new nodes go where the sort puts them
+		s.sortLocked(g, fresh, g.SortBy, g.SortDir)
+		g.ManualOrder = true
+	}
 	for _, p := range old {
 		if p.ID == s.data.SelectedID {
 			s.data.SelectedID = 0
@@ -462,6 +469,7 @@ func (s *Store) ReorderProfiles(groupID int64, ids []int64) error {
 	if g.URL != "" {
 		g.ManualOrder = true
 	}
+	g.SortBy, g.SortDir = "", "" // the user's own order now
 	return s.saveDataLocked()
 }
 
@@ -556,67 +564,6 @@ func (s *Store) Flush() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.saveDataLocked()
-}
-
-func (s *Store) SortGroup(groupID int64, by string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	g := s.groupLocked(groupID)
-	if g != nil && g.URL != "" {
-		g.ManualOrder = by != "default"
-	}
-	var idx []int
-	var items []*Profile
-	for i, p := range s.data.Profiles {
-		if p.GroupID == groupID {
-			idx = append(idx, i)
-			items = append(items, p)
-		}
-	}
-	// "default": the order of the subscription as last downloaded, nodes
-	// added by hand after it in the order they were added
-	subPos := map[int64]int{}
-	if g != nil {
-		for i, id := range g.SubOrder {
-			subPos[id] = i
-		}
-	}
-	defaultKey := func(p *Profile) (int, int64) {
-		if i, ok := subPos[p.ID]; ok {
-			return 0, int64(i)
-		}
-		return 1, p.ID
-	}
-	sort.SliceStable(items, func(i, j int) bool {
-		a, b := items[i], items[j]
-		switch by {
-		case "default":
-			ga, ka := defaultKey(a)
-			gb, kb := defaultKey(b)
-			return ga < gb || ga == gb && ka < kb
-		case "latency":
-			return latencyKey(a.Latency) < latencyKey(b.Latency)
-		case "type":
-			return a.Type < b.Type
-		default:
-			return a.Name < b.Name
-		}
-	})
-	for k, i := range idx {
-		s.data.Profiles[i] = items[k]
-	}
-	return s.saveDataLocked()
-}
-
-func latencyKey(l int) int {
-	switch {
-	case l > 0:
-		return l
-	case l == 0:
-		return 1 << 30
-	default:
-		return 1<<30 + 1
-	}
 }
 
 func (s *Store) SelectedID() int64 {

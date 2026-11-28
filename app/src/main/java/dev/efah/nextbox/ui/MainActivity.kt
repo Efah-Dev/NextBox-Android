@@ -249,11 +249,19 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
         }
     }
 
-    /** Scanned codes, the clipboard and shared text: a subscription address is offered as one. */
+    /**
+     * Scanned codes, the clipboard and shared text: a subscription is added
+     * right away (named by its link or its server, else a name is asked);
+     * an address that may be an HTTP proxy asks first.
+     */
     fun import(text: String) {
         val what = Repo.classify(text)
         when (what.kind) {
-            "subscription" -> subDialog = what
+            "subscription" -> if (what.likelyProxy) subDialog = what else {
+                Repo.addAuto(what.url, what.name)
+                stack.clear()
+                tab = Tab.Nodes
+            }
             "nodes" -> importNodes(text)
             else -> toast(T("没有找到可以导入的节点或订阅"))
         }
@@ -467,9 +475,15 @@ private fun NextBoxApp(intents: MutableStateFlow<Intent?>) {
 
         subDialog?.let { sub -> SubscriptionDialog(sub, onDismiss = { subDialog = null }, onAsNode = { subDialog = null; importNodes(sub.url) }) { name ->
             subDialog = null
-            Repo.addInBackground(name, sub.url)
+            // no name typed: the subscription's own, else asked after downloading
+            if (name.isEmpty()) Repo.addAuto(sub.url, "") else Repo.addInBackground(name, sub.url)
             stack.clear()
             tab = Tab.Nodes
+        } }
+        val nameAsk by Repo.nameAsk.collectAsState()
+        nameAsk?.let { ask -> SubscriptionNameDialog(ask, onDismiss = { Repo.clearNameAsk() }) { name ->
+            Repo.clearNameAsk()
+            Repo.addInBackground(name, ask.url)
         } }
         clashAsk?.let { (id, info) -> dev.efah.nextbox.ui.screens.ClashImportDialog(id, info) { Repo.clashAnswered() } }
 
@@ -580,7 +594,28 @@ private fun GlassNavBar(tab: Tab, backdrop: Backdrop, onSelect: (Tab) -> Unit, m
     }
 }
 
-/** A subscription address found by the scanner, in the clipboard or in a shared link. */
+/** A subscription downloaded without a name of its own: what to call it. */
+@Composable
+private fun SubscriptionNameDialog(ask: Repo.NameAsk, onDismiss: () -> Unit, onAdd: (String) -> Unit) {
+    var name by remember { mutableStateOf(ask.suggest) }
+    NbAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(T("给这个订阅起个名字")) },
+        text = {
+            Column {
+                Text(T("订阅已经读取好了，但它没有提供名称。"), style = dev.efah.nextbox.ui.theme.NbType.small, color = Nb.c.muted)
+                dev.efah.nextbox.ui.NbField(
+                    name, { name = it }, singleLine = true, label = { Text(T("订阅名称")) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+            }
+        },
+        confirmButton = { NbButton(T("添加"), { onAdd(name.trim().ifEmpty { ask.suggest }) }) },
+        dismissButton = { NbButton(T("取消"), onDismiss, kind = BtnKind.Secondary) },
+    )
+}
+
+/** A subscription address that may be an HTTP proxy, or a link shared by another app. */
 @Composable
 private fun SubscriptionDialog(sub: dev.efah.nextbox.data.Classified, onDismiss: () -> Unit, onAsNode: () -> Unit, onAdd: (String) -> Unit) {
     val c = Nb.c
@@ -601,7 +636,7 @@ private fun SubscriptionDialog(sub: dev.efah.nextbox.data.Classified, onDismiss:
         Spacer(Modifier.height(16.dp))
         dev.efah.nextbox.ui.NbField(name, { name = it }, singleLine = true, label = { Text(T("订阅名称")) }, modifier = Modifier.fillMaxWidth())
         Text(
-            T("添加后马上下载节点，之后按设置自动更新。"), style = dev.efah.nextbox.ui.theme.NbType.small, color = c.muted,
+            T("名称可以留空：添加后用订阅自带的名称，没有再问你。"), style = dev.efah.nextbox.ui.theme.NbType.small, color = c.muted,
             modifier = Modifier.padding(top = 8.dp, start = 4.dp),
         )
         Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

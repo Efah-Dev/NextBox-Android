@@ -150,6 +150,63 @@ fun Modifier.dragHandle(state: DragState, key: Any, keys: List<Any>, gap: Dp = 0
 }
 
 /**
+ * Long press a row (of a plain column, not a lazy list) and drag it into
+ * another place, as [dragHandle] does with a handle: the whole row is the
+ * handle, and a tap stays the row's own click. keys is the list in its
+ * current order; onMove(from, to) moves one row by one place.
+ */
+@Composable
+fun Modifier.longPressReorder(state: DragState, key: Any, keys: List<Any>, gap: Dp = 0.dp, enabled: Boolean = true, onMove: (Int, Int) -> Unit): Modifier {
+    val order by rememberUpdatedState(keys)
+    val move by rememberUpdatedState(onMove)
+    val haptic = LocalHapticFeedback.current
+    return this.pointerInput(key, enabled) {
+        if (!enabled) return@pointerInput
+        // read before the row's click handling (Initial pass), as longPressDrag
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val ended = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                while (true) {
+                    val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed || change.isConsumed || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+                }
+                true
+            }
+            if (ended != null) return@awaitEachGesture
+            state.shifts.remove(key)
+            state.key = key
+            state.offset = 0f
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            val h = state.rowHeight + gap.toPx()
+            while (true) {
+                val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) {
+                    change.consume() // a long press is not also a click
+                    break
+                }
+                change.consume()
+                state.offset += change.position.y - change.previousPosition.y
+                val i = order.indexOf(key)
+                if (state.offset > h / 2 && i in 0 until order.size - 1) {
+                    state.shift(order[i + 1], h)
+                    move(i, i + 1)
+                    state.offset -= h
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                } else if (state.offset < -h / 2 && i > 0) {
+                    state.shift(order[i - 1], -h)
+                    move(i, i - 1)
+                    state.offset += h
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
+            }
+            if (state.offset != 0f) state.shift(key, state.offset)
+            state.key = null
+            state.offset = 0f
+        }
+    }
+}
+
+/**
  * Keeps a row above its neighbours while a part of it (the card with
  * dragRow) is dragged or settles, when dragRow is not on the row itself.
  */

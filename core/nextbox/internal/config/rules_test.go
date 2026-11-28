@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"nextbox/internal/ruleset"
 	"nextbox/internal/store"
@@ -52,10 +53,14 @@ func TestRulesAndPolicies(t *testing.T) {
 
 	b, _ := json.Marshal(cfg)
 	js := string(b)
-	for _, want := range []string{`"type":"urltest"`, `"interval":"60m"`, `"idle_timeout":"60m"`, `"tag":"reality #101"`, `"store_fakeip":true`, `"msftconnecttest.com"`} {
+	for _, want := range []string{`"type":"urltest"`, `"interval":"24h"`, `"idle_timeout":"24h"`, `"tag":"reality #101"`, `"store_fakeip":true`, `"msftconnecttest.com"`} {
 		if !strings.Contains(js, want) {
 			t.Errorf("config lacks %s", want)
 		}
+	}
+	// NextBox tests the automatic group itself, at the group's interval
+	if g := AutoTestGroups(in, cfg); len(g) != 1 || g[0].Tag != "日本 自动" || g[0].Every != time.Hour {
+		t.Errorf("AutoTestGroups = %+v", g)
 	}
 	if strings.Contains(js, "disabled.example") {
 		t.Error("disabled rule was used")

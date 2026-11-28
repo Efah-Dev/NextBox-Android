@@ -78,7 +78,7 @@ object Prefs {
         subHours.flow.value = sp.getInt(subHours.key, subHours.default)
         hideRecentsPref.flow.value = sp.getBoolean(hideRecentsPref.key, hideRecentsPref.default)
         autoUpdatePref.flow.value = sp.getBoolean(autoUpdatePref.key, autoUpdatePref.default)
-        listOf(textModePref, appModePref, autoConnectPref, autoSelectPref, autoSelectAllPref, autoSelectTimeoutPref, autoSelectWatchPref).forEach { load(it) }
+        listOf(textModePref, appModePref, autoConnectPref, autoSelectPref, autoSelectAllPref, autoSelectTimeoutPref, autoSelectWatchPref, fabTipPref, ruleCardsDetailedPref).forEach { load(it) }
     }
 
     /** First start of this version: derive the route scope from the core setting. */
@@ -180,6 +180,11 @@ object Prefs {
     val ruleTextMode: StateFlow<Boolean> = textModePref.flow.asStateFlow()
     fun setRuleTextMode(v: Boolean) = put(textModePref, v)
 
+    /** The rules page shows each step in full (title, two lines, target, switch) instead of one line. */
+    private val ruleCardsDetailedPref = Pref("rule_cards_detailed", false)
+    val ruleCardsDetailed: StateFlow<Boolean> = ruleCardsDetailedPref.flow.asStateFlow()
+    fun setRuleCardsDetailed(v: Boolean) = put(ruleCardsDetailedPref, v)
+
     /** Look for a newer release on GitHub when the app starts (off unless the user turns it on). */
     val autoUpdate: StateFlow<Boolean> = autoUpdatePref.flow.asStateFlow()
 
@@ -209,6 +214,13 @@ object Prefs {
     private val autoSelectAllPref = Pref("auto_select_all", false)
     private val autoSelectTimeoutPref = Pref("auto_select_timeout", 3000)
     private val autoSelectWatchPref = Pref("auto_select_watch", false)
+
+    // ---- added in 2.3.2 ----
+    private val fabTipPref = Pref("fab_tip_shown", false)
+
+    /** The nodes page told once that a long press on its add button tests the nodes. */
+    val fabTipShown: StateFlow<Boolean> = fabTipPref.flow.asStateFlow()
+    fun setFabTipShown() = put(fabTipPref, true)
 
     /** How the selected apps are used in the "selected apps" scope. */
     val perAppMode: StateFlow<String> = appModePref.flow.asStateFlow()

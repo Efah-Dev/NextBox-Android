@@ -77,8 +77,12 @@ type Group struct {
 	// hand (dragged or sorted), so that an update can ask before resetting it.
 	ManualOrder bool `json:"manualOrder,omitempty"`
 	// SubOrder lists the node ids in the order of the subscription as last
-	// updated, so that SortGroup("default") can return to it.
+	// updated, so that SortGroup can return to it.
 	SubOrder []int64 `json:"subOrder,omitempty"`
+	// SortBy and SortDir are how the nodes are sorted (see SortGroup): a
+	// SortBy* key, and SortAsc / SortDesc, or "" for the normal order.
+	SortBy  string `json:"sortBy,omitempty"`
+	SortDir string `json:"sortDir,omitempty"`
 	// Clash says which parts of a Clash subscription besides its nodes are
 	// taken over on every update; nil until the user was asked.
 	Clash *ClashImport `json:"clash,omitempty"`
@@ -178,6 +182,10 @@ type Settings struct {
 	// KindScene), so that the user decides what is checked first.
 	Rules  []Rule  `json:"rules"`
 	Scenes []Scene `json:"scenes"`
+	// FinalTarget is where traffic no step matched goes in rule mode
+	// (the last step, "everything else"): "" for the selected node,
+	// TargetDirect or a policy group (PolicyTarget). See Final.
+	FinalTarget string `json:"finalTarget,omitempty"`
 	// The rule lists of v1.2 and of NextBox for Android (one rule per line);
 	// converted into Rules when found, see migrateRules.
 	DirectRules   string `json:"directRules,omitempty"`
@@ -349,6 +357,9 @@ func (s *Settings) fillDefaults() {
 	}
 	if s.RouteMode != "rule" && s.RouteMode != "direct" {
 		s.RouteMode = "global"
+	}
+	if s.Final() == TargetProxy {
+		s.FinalTarget = ""
 	}
 	s.LightLevel = clamp(s.LightLevel, 0, 100)
 	s.DarkLevel = clamp(s.DarkLevel, 0, 100)

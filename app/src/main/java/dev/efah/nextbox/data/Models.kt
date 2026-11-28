@@ -30,6 +30,9 @@ data class Group(
     val updatedAt: Long = 0,
     val usage: SubUsage? = null,
     val default: Boolean = false,
+    /** How the nodes are sorted (store.SortGroup): a key, and "asc" / "desc", or "" for the normal order. */
+    val sortBy: String = "",
+    val sortDir: String = "",
     /** The parts of a Clash subscription taken over on updates; null until asked. */
     val clash: ClashImport? = null,
     /** The subscription's own DNS (订阅专属 DNS); null = the global one. */
@@ -219,6 +222,8 @@ data class Settings(
     /** How names are resolved for the IP steps ("bypass mainland China"): "remote" (the default) or "direct" (Settings.ResolveDNS in the core). */
     val bypassDns: String = "remote",
     val scenes: List<Scene> = emptyList(),
+    /** Where the last step ("everything else") sends traffic in rule mode: "" = the selected node, "direct" or "policy:<id>" (Settings.FinalTarget). */
+    val finalTarget: String = "",
     val remoteDns: String = "",
     val directDns: String = "",
     val enableIpv6: Boolean = false,

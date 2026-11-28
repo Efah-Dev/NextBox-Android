@@ -387,6 +387,10 @@ func UsedPolicies(s store.Settings) []int64 {
 			out = append(out, id)
 		}
 	}
+	// the last step, in rule mode
+	if id := store.TargetPolicy(s.Final()); id != 0 && s.RouteMode == "rule" && !seen[id] {
+		out = append(out, id)
+	}
 	return out
 }
 

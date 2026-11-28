@@ -57,7 +57,7 @@ var portableSettings = []string{
 
 // Settings that make up the routing rules (分流规则), as in the desktop app.
 var ruleSettings = []string{
-	"routeMode", "blockAds", "rules", "scenes", "ruleSetMirror", "bypassDns",
+	"routeMode", "blockAds", "rules", "scenes", "finalTarget", "ruleSetMirror", "bypassDns",
 	"routeView", "routeHideOff", // how the desktop page looks
 	"directRules", "proxyRules", "blockRules", // v1.2 and Android 1.0
 }
@@ -385,6 +385,10 @@ func mergeSettings(cur store.Settings, imported json.RawMessage, keys []string, 
 		if _, ok := in["rules"]; !ok {
 			out["rules"] = json.RawMessage("[]")
 		}
+		// so does its last step (a backup without one: the selected node)
+		if _, ok := in["finalTarget"]; !ok {
+			out["finalTarget"] = json.RawMessage(`""`)
+		}
 	}
 	b, _ = json.Marshal(out)
 	next := store.DefaultSettings()
@@ -408,12 +412,7 @@ func remapPolicies(s *store.Settings, m map[int64]int64) {
 		}
 		return store.TargetProxy
 	}
-	for i := range s.Rules {
-		s.Rules[i].Target = fix(s.Rules[i].Target)
-	}
-	for i := range s.Scenes {
-		s.Scenes[i].Target = fix(s.Scenes[i].Target)
-	}
+	s.MapTargets(fix)
 }
 
 // routeOrdered marks backups whose rules are checked in their stored order.

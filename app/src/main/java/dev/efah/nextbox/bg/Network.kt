@@ -85,6 +85,7 @@ object DefaultNetworkMonitor {
         registered = false
         defaultNetwork = null
         last = null
+        lost = false
     }
 
     fun setListener(l: InterfaceUpdateListener?) {
@@ -108,12 +109,24 @@ object DefaultNetworkMonitor {
     @Volatile
     var onSameInterfaceChange: (() -> Unit)? = null
 
+    /**
+     * Called when the phone is on another network than before: another
+     * network or interface, new addresses, or a network again after none.
+     * Not for the first report after start().
+     */
+    @Volatile
+    var onNetworkChange: (() -> Unit)? = null
+
+    /** Whether the network was lost since start(): the next one is a change. */
+    private var lost = false
+
     /** The network, interface and addresses last reported. */
     private var last: Triple<Network, String, List<String>>? = null
 
     private fun notifyListener(network: Network?) {
         val l = listener ?: return
         if (network == null) {
+            if (last != null) lost = true
             last = null
             l.updateDefaultInterface("", -1, false, false)
             return
@@ -133,6 +146,10 @@ object DefaultNetworkMonitor {
                 last = now
                 if (before != null && before.second == now.second && (before.first != now.first || before.third != now.third)) {
                     onSameInterfaceChange?.invoke()
+                }
+                if ((before != null && before != now) || (before == null && lost)) {
+                    lost = false
+                    onNetworkChange?.invoke()
                 }
                 return
             }

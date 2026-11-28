@@ -91,6 +91,16 @@ object Route {
         else -> r.target
     }
 
+    /** Where the last step ("everything else") sends traffic (store.Settings.Final): only rule mode has a choice. */
+    fun finalTarget(s: Settings, policies: List<dev.efah.nextbox.data.PolicyView>): String = when {
+        s.routeMode == "direct" -> "direct"
+        s.routeMode != "rule" -> "proxy"
+        s.finalTarget == "direct" -> "direct"
+        // a group that is gone leaves the node, as the core does
+        s.finalTarget.startsWith("policy:") && policies.any { "policy:${it.id}" == s.finalTarget } -> s.finalTarget
+        else -> "proxy"
+    }
+
     /** The steps the "hide steps that are off" switch hides: ad blocking and scenes while off. */
     fun hidden(s: Settings, r: Rule): Boolean =
         hiddenStep(r) || s.routeHideOff && ((r.kind == "ads" && !s.blockAds) || (r.kind == "scene" && !sceneOn(s, r.values.firstOrNull().orEmpty())))

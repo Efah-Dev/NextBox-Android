@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
@@ -55,6 +56,7 @@ import dev.efah.nextbox.ui.Segmented
 import dev.efah.nextbox.ui.T
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
+import dev.efah.nextbox.ui.KeyboardResizesWindow
 import dev.efah.nextbox.ui.WindowBlurBehind
 import kotlinx.coroutines.launch
 
@@ -70,6 +72,7 @@ fun NbSheet(onDismiss: () -> Unit, scroll: Boolean = true, content: @Composable 
         tonalElevation = 0.dp,
     ) {
         WindowBlurBehind()
+        KeyboardResizesWindow()
         Column(
             Modifier.fillMaxWidth().imePadding()
                 .let { if (scroll) it.verticalScroll(rememberScrollState()) else it }
@@ -78,6 +81,20 @@ fun NbSheet(onDismiss: () -> Unit, scroll: Boolean = true, content: @Composable 
         )
     }
 }
+
+/**
+ * For a list inside a bottom sheet: the scrolling and flinging the list does
+ * not use stays with it. Otherwise a fling past the list's top closed the
+ * sheet, and pulling past its end moved the sheet.
+ */
+private val keepInSheet = object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+    override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource) =
+        androidx.compose.ui.geometry.Offset(0f, available.y)
+    override suspend fun onPostFling(consumed: androidx.compose.ui.unit.Velocity, available: androidx.compose.ui.unit.Velocity) =
+        androidx.compose.ui.unit.Velocity(0f, available.y)
+}
+
+fun Modifier.staysInSheet(): Modifier = nestedScroll(keepInSheet)
 
 /**
  * The height of a list inside a sheet: a share of the screen, fixed. A list

@@ -233,7 +233,8 @@ func (s *Store) ImportData(raw []byte, replace bool) (map[int64]int64, error) {
 			existing[strings.TrimSpace(g.URL)] = g
 		}
 	}
-	matched := map[int64]bool{} // imported groups that are already here
+	matched := map[int64]bool{}     // imported groups that are already here
+	newGroups := map[int64]*Group{} // added groups by their new ID: the imported ones
 	for _, g := range in.Groups {
 		if have, ok := existing[strings.TrimSpace(g.URL)]; ok && g.URL != "" {
 			groupMap[g.ID] = have.ID
@@ -245,6 +246,7 @@ func (s *Store) ImportData(raw []byte, replace bool) (map[int64]int64, error) {
 		ng.Default = false
 		groupMap[g.ID] = ng.ID
 		s.data.Groups = append(s.data.Groups, &ng)
+		newGroups[ng.ID] = g
 	}
 	byName := map[string]int64{} // nodes of matched subscriptions
 	for _, p := range s.data.Profiles {
@@ -273,6 +275,17 @@ func (s *Store) ImportData(raw []byte, replace bool) (map[int64]int64, error) {
 			p.Chain[i] = profileMap[m] // 0 when lost: the chain shows as broken
 		}
 		s.data.Profiles = append(s.data.Profiles, p)
+	}
+	// the subscription order of the groups added (what their normal order is)
+	for _, g := range s.data.Groups {
+		if imported, ok := newGroups[g.ID]; ok {
+			g.SubOrder = nil
+			for _, id := range imported.SubOrder {
+				if n := profileMap[id]; n != 0 {
+					g.SubOrder = append(g.SubOrder, n)
+				}
+			}
+		}
 	}
 	for _, p := range in.Policies {
 		np := *p

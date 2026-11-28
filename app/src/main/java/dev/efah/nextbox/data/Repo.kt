@@ -43,6 +43,10 @@ object Repo {
     private val _testing = MutableStateFlow<Set<Long>>(emptySet())
     val testing: StateFlow<Set<Long>> = _testing.asStateFlow()
 
+    /** Latencies measured since the app started, of nodes in any group (the node lists only hold the current group). */
+    private val _latencies = MutableStateFlow<Map<Long, Int>>(emptyMap())
+    val latencies: StateFlow<Map<Long, Int>> = _latencies.asStateFlow()
+
     lateinit var ruleSetDir: String
         private set
 
@@ -227,6 +231,44 @@ object Repo {
         }
     }
 
+    /** A subscription that named itself nowhere, downloaded and waiting for a name (addAuto). */
+    data class NameAsk(val url: String, val suggest: String)
+
+    private val _nameAsk = MutableStateFlow<NameAsk?>(null)
+    val nameAsk: StateFlow<NameAsk?> = _nameAsk.asStateFlow()
+
+    fun clearNameAsk() {
+        _nameAsk.value = null
+    }
+
+    /**
+     * Adds a subscription from the clipboard, a scan or a link: named by the
+     * link ([name]), else by its server; with neither, it is downloaded and
+     * [nameAsk] asks for a name (adding it then uses that download).
+     */
+    fun addAuto(url: String, name: String) {
+        _updating.update { it + ADDING }
+        scope.launch {
+            try {
+                call { NbJson.decodeFromString<SubscriptionAdd>(Nbcore.addSubscriptionAuto(url, name, Box.subscriptionProxy())) }
+                    .onSuccess { r ->
+                        if (r.needName) {
+                            _nameAsk.value = NameAsk(url, r.suggest)
+                        } else {
+                            _notices.tryEmit(Notice(r.message, true))
+                            askClashOnce(_state.value.currentGroupId)
+                        }
+                    }
+                    .onFailure { _notices.tryEmit(Notice(T("获取订阅失败：") + (it.message ?: T("未知错误")), false)) }
+            } finally {
+                _updating.update { it - ADDING }
+            }
+        }
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class SubscriptionAdd(val message: String = "", val needName: Boolean = false, val suggest: String = "")
+
     /** Asks about a Clash subscription's other parts the first time only. */
     private suspend fun askClashOnce(groupId: Long) {
         clashPreview(groupId).getOrNull()?.takeIf { it.current == null }?.let { askClash(groupId, it) }
@@ -381,7 +423,8 @@ object Repo {
     }
 
     /** Sorts the current group by "latency", "name" or "region". */
-    suspend fun sortGroup(by: String) = call { Nbcore.sortGroup(_state.value.currentGroupId, by) }
+    /** Sorts the current group by a key in a direction ("" = the normal order), remembered on the group. */
+    suspend fun sortGroup(by: String, dir: String) = call { Nbcore.sortGroup(_state.value.currentGroupId, by, dir) }
 
     /** Puts the current group's nodes in the order the user dragged them into. */
     suspend fun reorderProfiles(ids: List<Long>) = call { Nbcore.reorderProfiles(_state.value.currentGroupId, ids.joinToString(",")) }
@@ -409,9 +452,10 @@ object Repo {
      * [sortBy] sorts the current group once the test is done: "latency", or
      * "default" for the order of the subscription (null keeps the order).
      */
-    fun testLatency(ids: List<Long>, sortBy: String? = null, mode: String? = null) {
+    fun testLatency(ids: List<Long>, sortBy: String? = null, mode: String? = null, among: List<Profile> = emptyList()) {
         if (ids.isEmpty()) return
-        val byId = _profiles.value.associateBy { it.id }
+        // among: nodes of other groups being tested (the node picker)
+        val byId = (among + _profiles.value).associateBy { it.id }
         val s = _state.value.settings
         val (urlIds, tcpIds) = if ((mode ?: s.testMode) == "url") {
             ids to emptyList()
@@ -422,6 +466,7 @@ object Repo {
         cancelled = false
         fun onResult(id: Long, latency: Int, message: String) {
             _testing.update { it - id }
+            _latencies.update { it + (id to latency) }
             _profiles.update { list -> list.map { if (it.id == id) it.copy(latency = latency, latencyError = message) else it } }
         }
         scope.launch {
@@ -447,7 +492,7 @@ object Repo {
             val stopped = cancelled
             cancelled = false
             _testing.value = emptySet()
-            if (sortBy != null && !stopped) runCatching { Nbcore.sortGroup(_state.value.currentGroupId, sortBy) }
+            if (sortBy != null && !stopped) runCatching { Nbcore.sortAfterTest(_state.value.currentGroupId, sortBy) }
             runCatching { refreshNow() }
         }
     }

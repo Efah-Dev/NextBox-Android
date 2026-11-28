@@ -63,7 +63,8 @@ fun DuplicatesSheet(onDismiss: () -> Unit) {
     // copies in a subscription come back with its next update when the kept node is elsewhere
     val comeBack = sets.orEmpty().any { d -> d.drop.any { groups[it.groupId]?.isSubscription == true && it.groupId != d.keep.groupId } }
 
-    NbSheet(onDismiss) {
+    // the list scrolls by itself (the rest fits): no second scroll around it
+    NbSheet(onDismiss, scroll = false) {
         Text(T("删除重复节点"), style = NbType.big, color = c.text, modifier = Modifier.padding(bottom = 10.dp))
         when {
             sets == null -> Text(T("正在查找…"), style = NbType.small, color = c.muted, modifier = Modifier.padding(vertical = 16.dp))
@@ -77,7 +78,7 @@ fun DuplicatesSheet(onDismiss: () -> Unit) {
                     style = NbType.small.copy(fontSize = 13.5.sp), color = c.text,
                 )
                 Box(Modifier.fillMaxWidth().padding(top = 12.dp).heightIn(max = sheetListHeight(0.45f, 420.dp))) {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyColumn(Modifier.staysInSheet(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(sets!!, key = { it.keep.id }) { d ->
                             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, c.line, RoundedCornerShape(14.dp))) {
                                 DupRow(d.keep, if (d.running) T("正在使用") else T("保留"), keep = true, group = groups[d.keep.groupId]?.displayName.orEmpty())

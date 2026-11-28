@@ -3,6 +3,7 @@ package nbcore
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"nextbox/internal/config"
 	"nextbox/internal/store"
@@ -47,8 +48,12 @@ func TestUsePolicy(t *testing.T) {
 			}
 		case rt.Tag:
 			found = true
-			if m["type"] != "urltest" || m["interval"] != "3m" {
+			// tested on NextBox's clock at the group's interval
+			if m["type"] != "urltest" || m["interval"] != "24h" {
 				t.Errorf("group: %v", m)
+			}
+			if g := autoGroups; len(g) != 1 || g[0].Tag != rt.Tag || g[0].Every != 3*time.Minute {
+				t.Errorf("auto test groups: %+v", g)
 			}
 			for _, member := range m["outbounds"].([]any) {
 				if rt.Nodes[member.(string)] == 0 {

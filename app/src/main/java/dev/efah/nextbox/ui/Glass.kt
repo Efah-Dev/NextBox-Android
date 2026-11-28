@@ -236,3 +236,25 @@ fun WindowBlurBehind() {
         onDispose {}
     }
 }
+
+/**
+ * Makes the window of the dialog or bottom sheet this is called in give way
+ * to the keyboard: its content gets the keyboard's insets (imePadding) or,
+ * on older systems, the window shrinks. Some systems leave a dialog's
+ * window as it is by default, and the keyboard then covers its text fields.
+ */
+@Composable
+fun KeyboardResizesWindow() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        var v: Any? = view
+        var window: android.view.Window? = null
+        while (v is View && window == null) {
+            window = (v as? DialogWindowProvider)?.window
+            v = v.parent
+        }
+        @Suppress("DEPRECATION")
+        window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        onDispose {}
+    }
+}

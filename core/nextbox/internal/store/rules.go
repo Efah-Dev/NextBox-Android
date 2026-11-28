@@ -101,6 +101,51 @@ func TargetPolicy(target string) int64 {
 	return 0
 }
 
+// MapTargets passes every target of the routing (rules, scenes and the
+// last step, "everything else") through fix; it reports whether one changed.
+func (s *Settings) MapTargets(fix func(string) string) bool {
+	changed := false
+	set := func(t *string) {
+		if n := fix(*t); n != *t {
+			*t, changed = n, true
+		}
+	}
+	for i := range s.Rules {
+		set(&s.Rules[i].Target)
+	}
+	for i := range s.Scenes {
+		set(&s.Scenes[i].Target)
+	}
+	if s.FinalTarget != "" {
+		set(&s.FinalTarget)
+		if s.FinalTarget == TargetProxy {
+			s.FinalTarget = ""
+		}
+	}
+	return changed
+}
+
+// DropPolicy sends what went to the policy group id to the selected node
+// (the group was deleted); it reports whether anything used it.
+func (s *Settings) DropPolicy(id int64) bool {
+	target := PolicyTarget(id)
+	return s.MapTargets(func(t string) string {
+		if t == target {
+			return TargetProxy
+		}
+		return t
+	})
+}
+
+// Final is where the last step ("everything else") sends traffic in rule
+// mode: TargetProxy, TargetDirect or a policy group.
+func (s Settings) Final() string {
+	if s.FinalTarget == TargetDirect || TargetPolicy(s.FinalTarget) != 0 {
+		return s.FinalTarget
+	}
+	return TargetProxy
+}
+
 // Scene is a ready-made set of rules that can be switched on as a whole (see
 // config.SceneDefs for what each one matches).
 type Scene struct {

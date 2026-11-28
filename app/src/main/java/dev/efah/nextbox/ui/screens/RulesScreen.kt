@@ -1,5 +1,6 @@
 package dev.efah.nextbox.ui.screens
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -62,7 +63,7 @@ import dev.efah.nextbox.data.Settings
 import dev.efah.nextbox.ui.BarIcon
 import dev.efah.nextbox.ui.BtnKind
 import dev.efah.nextbox.ui.dragAbove
-import dev.efah.nextbox.ui.dragHandle
+import dev.efah.nextbox.ui.longPressReorder
 import dev.efah.nextbox.ui.dragRow
 import dev.efah.nextbox.ui.GlassScreen
 import dev.efah.nextbox.ui.LocalBottomInset
@@ -100,6 +101,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
     val state by Repo.state.collectAsState()
     val policies by Repo.policies.collectAsState()
     val textMode by Prefs.ruleTextMode.collectAsState()
+    val detailed by Prefs.ruleCardsDetailed.collectAsState()
     val routeScope by Prefs.routeScope.collectAsState()
     val appMode by Prefs.perAppMode.collectAsState()
     val apps by Prefs.perAppList.collectAsState()
@@ -123,6 +125,8 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
     var adding by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(-1) }
     var sceneSheet by remember { mutableStateOf<String?>(null) }
+    var finalSheet by remember { mutableStateOf(false) }
+    var adsSheet by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
 
     fun save(next: List<Rule>) = scope.launch { Repo.saveRules(next).onFailure { toast.error(it.message ?: T("保存失败")) } }
@@ -175,6 +179,18 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
             if (textMode) {
                 RulesText(s, policies)
             } else {
+                // the route's length, and how much each step shows
+                Row(Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        T("路由路径 · 共 %d 步", rules.count { !Route.hidden(s, it) } + 2),
+                        style = NbType.small.copy(fontSize = 13.sp), color = c.muted, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Segmented(
+                        listOf(T("简约"), T("详细")), if (detailed) 1 else 0, onSelect = { Prefs.setRuleCardsDetailed(it == 1) },
+                        modifier = Modifier.width(132.dp), height = 30.dp,
+                    )
+                }
                 // where connections come from
                 val start = when {
                     routeScope != Prefs.SCOPE_APPS -> T("手机上所有应用")
@@ -195,7 +211,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
 
                 // 1: LAN, fixed
                 StepCard(
-                    number = 1, active = true, last = false, fixed = true,
+                    number = 1, active = true, last = false, fixed = true, detailed = detailed,
                     title = T("局域网和本机地址"), tag = null, sub = T("192.168.x.x、10.x.x.x、127.0.0.1 等"),
                     exit = T("直连"), exitTarget = "direct",
                 )
@@ -210,7 +226,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                     val key = keys[i]
                     val on = Route.active(s, r)
                     val target = Route.target(s, r)
-                    val handle = Modifier.dragHandle(drag, key, shownKeys, gap = 6.dp) { from, to ->
+                    val handle = Modifier.longPressReorder(drag, key, shownKeys, gap = 6.dp) { from, to ->
                         local = Route.move(local ?: s.rules, (local ?: s.rules).indices.filter { !Route.hidden(s, (local ?: s.rules)[it]) }, from, to)
                     }
                     // only the card moves: the numbers and the line stay where they are
@@ -218,17 +234,18 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                     Box(Modifier.dragAbove(drag, key)) {
                         when {
                             r.kind == "ads" -> StepCard(
-                                number = k + 2, active = on, last = false, handle = handle, cardModifier = card,
+                                number = k + 2, active = on, last = false, reorder = handle, cardModifier = card, detailed = detailed,
                                 title = T("屏蔽广告"), tag = T("内置"),
                                 sub = if (s.blockAds) T("常见的广告和跟踪域名") else T("已关闭"),
                                 exit = T("屏蔽"), exitTarget = "block",
                                 checked = s.blockAds,
                                 onToggle = { v -> scope.launch { Repo.updateSettings(buildJsonObject { put("blockAds", v) }) } },
+                                onClick = { adsSheet = true },
                             )
                             r.kind == "scene" -> {
                                 val id = r.values.firstOrNull().orEmpty()
                                 StepCard(
-                                    number = k + 2, active = on, last = false, handle = handle, cardModifier = card,
+                                    number = k + 2, active = on, last = false, reorder = handle, cardModifier = card, detailed = detailed,
                                     title = Route.sceneTitle(id), tag = T("内置"),
                                     sub = when {
                                         !Route.sceneOn(s, id) -> T("已关闭")
@@ -242,7 +259,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                                 )
                             }
                             else -> StepCard(
-                                number = k + 2, active = on, last = false, handle = handle, cardModifier = card,
+                                number = k + 2, active = on, last = false, reorder = handle, cardModifier = card, detailed = detailed,
                                 title = Route.title(r, appLabel), tag = if (r.isSet) T("规则集") else null,
                                 sub = when {
                                     r.kind == "process" -> T("电脑程序，只在 Windows 版生效")
@@ -259,12 +276,14 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                     }
                 } }
 
-                // last: everything else, fixed
-                val finalTarget = if (s.routeMode == "direct") "direct" else "proxy"
+                // last: everything else, fixed; in rule mode it goes where the user says
+                val finalTarget = Route.finalTarget(s, policies)
                 StepCard(
-                    number = shown.size + 2, active = true, last = true, fixed = true,
+                    number = shown.size + 2, active = true, last = true, fixed = true, detailed = detailed,
                     title = T("其余流量"), tag = null, sub = T("上面都没有命中的"),
                     exit = exitLabel(finalTarget), exitTarget = finalTarget,
+                    onExitClick = if (s.routeMode == "rule") ({ finalSheet = true }) else null,
+                    onClick = if (s.routeMode == "rule") ({ finalSheet = true }) else null,
                 )
 
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -272,7 +291,7 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
                     NbButton(T("添加规则集"), { onEditSet(-1) }, Modifier.weight(1f), kind = BtnKind.Secondary, icon = NbIcons.Archive)
                 }
                 Text(
-                    T("按顺序逐步匹配，命中即按该步出站。按住左侧手柄拖动调整顺序。"),
+                    T("按顺序逐步匹配，命中即按该步出站。长按卡片拖动调整顺序。"),
                     style = NbType.small, color = c.muted, modifier = Modifier.padding(start = 4.dp, top = 10.dp),
                 )
             }
@@ -321,8 +340,36 @@ fun RulesScreen(onClose: () -> Unit, onTest: () -> Unit, onPerApp: () -> Unit, o
         NbSheet(onDismiss = { sceneSheet = null }) {
             Text(Route.sceneTitle(id), style = NbType.big, color = c.text)
             Text(Route.sceneDesc(id), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 2.dp, bottom = 14.dp))
+            EnabledCard(T("开启"), Route.sceneOn(s, id)) { v ->
+                scope.launch { Repo.saveRules(s.rules, s.scenes.map { if (it.id == id) it.copy(enabled = v) else it }) }
+            }
+            Spacer(Modifier.height(14.dp))
             // always direct; what can be chosen is how names are resolved
             ResolveDnsChoice(s.bypassDns)
+        }
+    }
+    if (adsSheet) {
+        NbSheet(onDismiss = { adsSheet = false }) {
+            Text(T("屏蔽广告"), style = NbType.big, color = c.text)
+            Text(T("常见的广告和跟踪域名"), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 2.dp, bottom = 14.dp))
+            EnabledCard(T("开启"), s.blockAds) { v -> scope.launch { Repo.updateSettings(buildJsonObject { put("blockAds", v) }) } }
+        }
+    }
+    if (finalSheet) {
+        NbSheet(onDismiss = { finalSheet = false }) {
+            Text(T("其余流量走哪里"), style = NbType.big, color = c.text)
+            Text(
+                T("上面的步骤都没有命中的流量。只让部分网站走节点时，可以选「直连」。"),
+                style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 2.dp, bottom = 14.dp),
+            )
+            // no blocking: it would cut the phone off everything not listed above
+            TargetChips(Route.finalTarget(s, policies), policies, withBlock = false) { t ->
+                finalSheet = false
+                scope.launch {
+                    Repo.updateSettings(buildJsonObject { put("finalTarget", if (t == "proxy") "" else t) })
+                        .onFailure { toast.error(it.message ?: T("保存失败")) }
+                }
+            }
         }
     }
     if (confirmReset) {
@@ -407,7 +454,13 @@ private fun Rail(first: Boolean = false, last: Boolean = false, dot: @Composable
     Spacer(Modifier.width(10.dp))
 }
 
-/** One step of the route: its number, a drag handle, what it is, where it goes, and its switch. */
+/**
+ * One step of the route, in two lines and the exit under them, so that long
+ * names and lists show: its number on the path; the title and the switch;
+ * what it matches (up to two lines); where it goes. [reorder] makes the card
+ * draggable (a long press, see longPressReorder); a tap is [onClick].
+ * [onExitClick] makes the exit a button of its own (the last step).
+ */
 @Composable
 fun StepCard(
     number: Int,
@@ -419,11 +472,14 @@ fun StepCard(
     exit: String,
     exitTarget: String,
     fixed: Boolean = false,
-    handle: Modifier? = null,
+    reorder: Modifier? = null,
     checked: Boolean = false,
     onToggle: ((Boolean) -> Unit)? = null,
     onClick: (() -> Unit)? = null,
+    onExitClick: (() -> Unit)? = null,
     highlight: Boolean = false,
+    /** Every detail (two lines, the exit below, the switch) instead of one line; the switch is then in the step's sheet. */
+    detailed: Boolean = true,
     /** On the card only (see dragRow): the dot and the line stay in place. */
     cardModifier: Modifier = Modifier,
 ) {
@@ -445,44 +501,78 @@ fun StepCard(
             }
         }
         NbCard(
-            Modifier.weight(1f).padding(bottom = 6.dp).then(cardModifier).alpha(if (active || highlight) 1f else 0.7f),
+            Modifier.weight(1f).padding(bottom = 6.dp).then(cardModifier).then(reorder ?: Modifier).alpha(if (active || highlight) 1f else 0.7f)
+                .animateContentSize(androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow)),
             onClick = onClick,
-            padding = PaddingValues(start = if (handle != null) 2.dp else 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+            // the title row is centred on the dot (DotTop + DotSize / 2 from the top)
+            padding = PaddingValues(start = 14.dp, end = if (detailed) 8.dp else 10.dp, top = 10.dp, bottom = 10.dp),
             radius = 16.dp,
             color = if (highlight) bg else if (active) c.card else c.card.copy(alpha = 0.5f),
             border = if (highlight) fg else c.cardBorder,
         ) {
-            Row(Modifier.heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
-                when {
-                    handle != null -> Box(handle.size(width = 30.dp, height = 44.dp), contentAlignment = Alignment.Center) {
-                        Icon(NbIcons.Grip, T("拖动调整顺序"), tint = c.muted, modifier = Modifier.size(16.dp))
-                    }
-                    fixed -> Unit
-                }
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (tag != null) {
-                            Text(
-                                tag, color = c.accentInk, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(end = 5.dp).clip(RoundedCornerShape(6.dp)).background(c.accentSoft).padding(horizontal = 5.dp, vertical = 1.dp),
-                            )
-                        }
-                        Text(title, style = NbType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium), color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    Text(sub, style = NbType.small.copy(fontSize = 11.5.sp), color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (detailed) {
+                Row(Modifier.heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
+                    StepTitle(tag, title, Modifier.weight(1f))
+                    if (onToggle != null) dev.efah.nextbox.ui.NbSwitch(checked, onToggle, Modifier.padding(start = 6.dp), scale = 0.8f)
                 }
                 Text(
-                    exit, color = if (active || highlight) fg else c.muted, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 6.dp).widthIn(max = 110.dp).clip(RoundedCornerShape(8.dp))
-                        .background(if (active || highlight) bg else c.line.copy(alpha = 0.4f)).padding(horizontal = 8.dp, vertical = 4.dp),
+                    sub, style = NbType.small.copy(fontSize = 12.sp, lineHeight = 17.sp), color = c.muted, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = 6.dp),
                 )
-                when {
-                    onToggle != null -> dev.efah.nextbox.ui.NbSwitch(checked, onToggle, Modifier.padding(start = 4.dp), scale = 0.8f)
-                    else -> Spacer(Modifier.width(8.dp))
+                ExitPill(exit, active || highlight, bg, fg, onExitClick, Modifier.padding(top = 8.dp))
+            } else {
+                // one line: what it is (and what it matches) on the left, where it goes on the right
+                Row(Modifier.heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        StepTitle(tag, title)
+                        Text(sub, style = NbType.small.copy(fontSize = 11.5.sp), color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    ExitPill(exit, active || highlight, bg, fg, onExitClick, Modifier.padding(start = 8.dp).widthIn(max = 104.dp), arrow = false)
                 }
             }
         }
+    }
+}
+
+/** A step's tag ("内置", "规则集") and title, on one line. */
+@Composable
+private fun StepTitle(tag: String?, title: String, modifier: Modifier = Modifier) {
+    val c = Nb.c
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (tag != null) {
+            Text(
+                tag, color = c.accentInk, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(end = 6.dp).clip(RoundedCornerShape(6.dp)).background(c.accentSoft).padding(horizontal = 5.dp, vertical = 1.dp),
+            )
+        }
+        Text(title, style = NbType.body.copy(fontSize = 14.5.sp, fontWeight = FontWeight.Medium), color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Where a step sends traffic; a button of its own with [onClick] (the last step). */
+@Composable
+private fun ExitPill(exit: String, lit: Boolean, bg: Color, fg: Color, onClick: (() -> Unit)?, modifier: Modifier = Modifier, arrow: Boolean = true) {
+    val c = Nb.c
+    Row(
+        modifier.clip(RoundedCornerShape(8.dp))
+            .background(if (lit) bg else c.line.copy(alpha = 0.4f))
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+            .padding(start = 8.dp, end = if (onClick != null) 4.dp else 8.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (arrow) "→ $exit" else exit, color = if (lit) fg else c.muted, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+        )
+        if (onClick != null) Icon(NbIcons.ChevronDown, null, tint = fg, modifier = Modifier.padding(start = 2.dp).size(16.dp))
+    }
+}
+
+/** A switch in a card of its own, at the top of a step's sheet. */
+@Composable
+fun EnabledCard(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    NbCard(padding = PaddingValues(0.dp), radius = 16.dp) {
+        dev.efah.nextbox.ui.SwitchRow(label, null, checked, onChange)
     }
 }
 
@@ -502,6 +592,7 @@ private fun RuleEditSheet(index: Int, onDismiss: () -> Unit) {
     var regions by remember { mutableStateOf(if (rule.kind == "geoip") rule.values.toSet() else emptySet()) }
     var apps by remember { mutableStateOf(if (rule.kind == "package") rule.values.toSet() else emptySet()) }
     var picking by remember { mutableStateOf(false) }
+    var enabled by remember { mutableStateOf(!rule.disabled) }
     val installed by produceState<List<AppItem>>(emptyList()) { value = InstalledApps.load(ctx) }
 
     fun values(): List<String> = when (rule.kind) {
@@ -519,6 +610,10 @@ private fun RuleEditSheet(index: Int, onDismiss: () -> Unit) {
     NbSheet(onDismiss) {
         Text(T("编辑规则"), style = NbType.big, color = c.text)
         Text(Route.kindLabel(rule.kind), style = NbType.small, color = c.muted, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+        if (rule.kind != "process") {
+            EnabledCard(T("启用这条规则"), enabled) { enabled = it }
+            Spacer(Modifier.height(12.dp))
+        }
         NbField(
             name, { name = it }, singleLine = true,
             label = { Text(T("名称（可选）")) },
@@ -549,7 +644,7 @@ private fun RuleEditSheet(index: Int, onDismiss: () -> Unit) {
                     val v = values().map { RuleUi.normalize(rule.kind, it) }.filter { it.isNotEmpty() }.distinct()
                     if (v.isEmpty() && rule.kind != "process") { toast.error(T("还没填内容")); return@NbButton }
                     val next = state.settings.rules.toMutableList()
-                    if (index < next.size) next[index] = rule.copy(name = name.trim(), values = if (rule.kind == "process") rule.values else v, target = target)
+                    if (index < next.size) next[index] = rule.copy(name = name.trim(), values = if (rule.kind == "process") rule.values else v, target = target, disabled = !enabled)
                     save(next, T("已保存"))
                 }, Modifier.weight(2f).height(48.dp))
         }
@@ -598,12 +693,12 @@ fun AppIcon(pkg: String, apps: List<AppItem>, size: Dp) {
 /** Direct, proxy, block and the policy groups as chips. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TargetChips(selected: String, policies: List<PolicyView>, onPick: (String) -> Unit) {
+fun TargetChips(selected: String, policies: List<PolicyView>, withBlock: Boolean = true, onPick: (String) -> Unit) {
     val c = Nb.c
     val options = buildList {
         add("direct")
         add("proxy")
-        add("block")
+        if (withBlock) add("block")
         policies.forEach { add("policy:${it.id}") }
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

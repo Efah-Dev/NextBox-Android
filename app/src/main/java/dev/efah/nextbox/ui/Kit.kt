@@ -63,6 +63,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import dev.efah.nextbox.ui.theme.Nb
 import dev.efah.nextbox.ui.theme.NbType
 import kotlinx.coroutines.delay
@@ -222,6 +227,10 @@ fun NbSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: 
  * A dialog: title, content, and its buttons side by side at the bottom
  * (each as wide as the other; pass [NbButton]s). With glass effects on, the
  * background is blurred.
+ *
+ * The keyboard never covers it: the dialog's window spans the screen and
+ * the card is centred in the space above the keyboard (some systems do not
+ * move a dialog's window up for the keyboard by themselves).
  */
 @Composable
 fun NbAlertDialog(
@@ -233,13 +242,24 @@ fun NbAlertDialog(
 ) {
     val c = Nb.c
     val maxH = (LocalConfiguration.current.screenHeightDp * 0.86f).dp
-    Dialog(onDismissRequest = onDismissRequest) {
+    Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         WindowBlurBehind()
+        KeyboardResizesWindow()
+        val outside = remember { MutableInteractionSource() }
+        Box(
+            Modifier.fillMaxSize()
+                // a tap beside the card closes the dialog, as before
+                .clickable(outside, indication = null, onClick = onDismissRequest)
+                .systemBarsPadding().imePadding().padding(horizontal = 24.dp, vertical = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
         Surface(
             shape = RoundedCornerShape(26.dp),
             color = if (LocalGlass.current) c.card.copy(alpha = if (c.dark) 0.9f else 0.94f) else c.card,
             border = BorderStroke(1.dp, c.cardBorder),
-            modifier = Modifier.fillMaxWidth().heightIn(max = maxH),
+            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(max = maxH)
+                // taps on the card stay on it
+                .clickable(remember { MutableInteractionSource() }, indication = null) {},
         ) {
             Column(Modifier.padding(start = 22.dp, end = 22.dp, top = 22.dp, bottom = 18.dp)) {
                 if (title != null) {
@@ -256,6 +276,7 @@ fun NbAlertDialog(
                     Box(Modifier.weight(1f), propagateMinConstraints = true) { confirmButton() }
                 }
             }
+        }
         }
     }
 }
